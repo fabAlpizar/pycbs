@@ -5,11 +5,10 @@ import os
 from multiprocessing import cpu_count
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import concurrent.futures
-from functools import lru_cache
 from tqdm import tqdm
 
 # -------------------------
-# Defaults (igual que en tu antiguo code)
+# Defaults
 # -------------------------
 DEFAULTS = {
     'init_parameters': [0.96654, 103.93761],
@@ -265,7 +264,7 @@ def run_optimization(config_dict=None, output_file=None):
     optimization_history = []
 
     print("=" * 60)
-    print("OPTIMIZACIÓN CBS GEOMÉTRICA-PySCF (desde run_optimization)")
+    print("OPTIMIZACIÓN CBS GEOMÉTRICA-PySCF")
     print("=" * 60)
     print(f"Configuración inicial:")
     print(f"  r(OH) = {current_params[0]:.5f} Å")
