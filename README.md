@@ -11,9 +11,9 @@
 
 # pyCBS
 
-> Add a short description here!
+> pyCBS: A tool to perform Complete Basis Set calculations 
 
-A longer description of your project goes here...
+
 
 ## Installation
 
