@@ -431,24 +431,10 @@ def main() -> None:
                 }, EHF=None, dc=None, energy=final_energy)
             except Exception:
                 pass
-
-            # print a compact table summary to terminal
-            if history:
-                print("\n" + "=" * 60)
-                print("OPTIMIZER CYCLE HISTORY (brief)")
-                print("=" * 60)
-                print(f"{'Cycle':>5} {'r(OH)[Å]':>12} {'HOH[°]':>12} {'Energy[Ha]':>18}")
-                for step in history:
-                    cyc = step.get("cycle")
-                    p = step.get("parameters", [None, None])
-                    en = step.get("energy", None)
-                    print(f"{cyc:5d} {p[0]:12.8f} {p[1]:12.8f} {en:18.10f}")
-                print("=" * 60)
-                if converged:
-                    print("Optimizer converged.")
-                print(f"Final optimized geometry: r(OH)={final_params[0]:.8f} Å  HOH={final_params[1]:.8f}°")
-                print(f"Final CBS energy = {final_energy:.10f} Ha")
     # Process remaining sections
+    print('='*60)
+    print(" CALCULATIONS STATUS ")
+    print('='*60)
     calculation_counter = 0
     for section_name in config.sections():
         if section_name.upper() == "OPTIMIZATION":
@@ -473,6 +459,7 @@ def main() -> None:
             logging.getLogger(__name__).exception("Error processing section %s: %s", section_name, e)
 
         calculation_counter += 1
+
         print(f"Calculation {calculation_counter} done.")
 
     # final summary
@@ -485,7 +472,10 @@ def main() -> None:
         abs_path = output_file.resolve()
     except Exception:
         abs_path = output_file
+    print('='*60)
     print(f"\nResults saved to: {abs_path}")
+
+    print('=' * 60)
 
 
 if __name__ == "__main__":
