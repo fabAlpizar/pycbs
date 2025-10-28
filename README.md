@@ -13,59 +13,67 @@
 
 > pyCBS: A tool to perform Complete Basis Set calculations 
 
+# Documentation 
+
+# Official Paper
+
+## Features
+
+- Perform CBS extrapolations for energy and geometry.
+- Supports HF, MP2, and CCSD(T) methods.
+- Automates multi-basis calculations.
+- Saves all intermediate outputs in an organized directory structure.
+- Compatible with PySCF for reliable quantum chemistry calculations.
+- Easy to extend with additional basis sets or methods.
+
 
 
 ## Installation
 
 In order to set up the necessary environment:
 
-1. review and uncomment what you need in `environment.yml` and create an environment `pyCBS` with the help of [conda]:
+
+1. Create a conda environment for pyCBS:
    ```
-   conda env create -f environment.yml
+   conda create -n pyCBS python=3.10
    ```
-2. activate the new environment with:
+>**_Note:_** You can change the Python version if needed
+2. Activate the new environment with:
    ```
    conda activate pyCBS
    ```
+3. Clone this repo into the environment:
+   ```
+   git clone https://github.com/fabAlpizar/pyCBS
+   cd pyCBS
+   ```
+4. Review and uncomment what you need in `environment.yml` and create an environment `pyCBS` with the help of [conda]:
+   ```
+   conda env update -f environment.yml
+   ```
+   _(or if you didn't create the environment yet:)_
+   ```
+   conda env create -f environment.yml
+
+   ```
+   
+
 
 > **_NOTE:_**  The conda environment will have pyCBS installed in editable mode.
 > Some changes, e.g. in `setup.cfg`, might require you to run `pip install -e .` again.
 
 
-Optional and needed only once after `git clone`:
-
-3. install several [pre-commit] git hooks with:
-   ```bash
-   pre-commit install
-   # You might also want to run `pre-commit autoupdate`
-   ```
-   and checkout the configuration under `.pre-commit-config.yaml`.
-   The `-n, --no-verify` flag of `git commit` can be used to deactivate pre-commit hooks temporarily.
-
-4. install [nbstripout] git hooks to remove the output cells of committed notebooks with:
-   ```bash
-   nbstripout --install --attributes notebooks/.gitattributes
-   ```
-   This is useful to avoid large diffs due to plots in your notebooks.
-   A simple `nbstripout --uninstall` will revert these changes.
 
 
-Then take a look into the `scripts` and `notebooks` folders.
 
-## Dependency Management & Reproducibility
+# 📬 Contact
 
-1. Always keep your abstract (unpinned) dependencies updated in `environment.yml` and eventually
-   in `setup.cfg` if you want to ship and install your package via `pip` later on.
-2. Create concrete dependencies as `environment.lock.yml` for the exact reproduction of your
-   environment with:
-   ```bash
-   conda env export -n pyCBS -f environment.lock.yml
-   ```
-   For multi-OS development, consider using `--no-builds` during the export.
-3. Update your current environment with respect to a new `environment.lock.yml` using:
-   ```bash
-   conda env update -f environment.lock.yml --prune
-   ```
+For questions, feature requests, or bug reports, please open an issue at:
+👉 https://github.com/fabAlpizar/pyCBS/issues
+
+
+
+
 ## Project Organization
 
 ```
