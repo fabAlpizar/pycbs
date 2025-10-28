@@ -1,61 +1,31 @@
 name: pyCBS
 channels:
-  - defaults
   - conda-forge
-  - pytorch
-  # - fastai
+  - defaults
+
 dependencies:
-  - python>=3.6
+  - python=3.10
   - pip
-  # BASICS
+
+  # basics
   - numpy
   - scipy
   - pandas
   - tqdm
   - click
   - ipython
-  - pyscf
-  - argparse
-  # VISUALIZATION
-  #- matplotlib
-  #- ipympl  # interactive matplotlib plots
-  #- seaborn
-  # - altair
-  # - yellowbrick
-  # ML, STATS & DEEP LEARNING
-  # - statsmodels
-  # - scikit-learn
-  # - sktime
-  # - tslearn
-  # - xgboost
-  # - catboost
-  # - lightgbm
-  # - pytorch
-  # - fastai  # activate fastai channel above!
-  # - tensorflow
-  # - keras
-  # - spacy
-  # OTHER TOOLS
-  # - optuna
-  # - dask
-  # - snakeviz
-  - pip:
-     - -e .  # install git checkout of pyCBS in editable mode
-     # add here only pip-packages that are not available in conda/conda-forge! E.g.:
-     # - icecream
-     # - jax
-     # - numpyro
-     # - funsor
-     # - neptune-client
-     # - neptune-contrib
+  - pyscf         # conda-forge provides pyscf builds
+  # argparse is part of stdlib — remove it
 
-  # DEVELOPMENT ONLY PACKAGES (could also be kept in a separate environment file)
+  # development/test (optional; consider a separate env for dev)
   - jupyterlab
   - pytest
   - pytest-cov
   - tox
-  - pre_commit
-  - nbdime
+  - pre-commit
   - nbstripout
   - sphinx
-  - recommonmark
+  - nbdime
+
+  - pip:
+    - -e .        # install package in editable mode
