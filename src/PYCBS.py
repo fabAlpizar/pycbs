@@ -2,15 +2,17 @@
 """
 PYCBS.py - Improved entrypoint for pyCBS
 
-Features:
+Features included in this "ready to paste" version:
  - argparse CLI
- - logging instead of prints
+ - logging (optional verbosity levels)
  - reads OPTIMIZATION block from INI file and builds opt_params dict
- - will call optimization.run_optimization(opt_params, output_file) if available
- - preserves existing USTE1/USTE2/USPE/TENSORIAL behavior
- - writes outputs via existing writer module
- - prints a simple message when each calculation is done and final results path
+ - calls optimization.run_optimization(opt_params, output_file) if requested
+ - preserves USTE1/USTE2/USPE/TENSORIAL behavior
+ - detailed results are written to results file via writer (unchanged)
+ - terminal output is minimal: prints "Calculation N done." per job and final results path
+ - PySCF/other verbose outputs suppressed while running optimizer (using context manager)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -20,13 +22,14 @@ import logging
 import platform
 import sys
 import time
+from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 # local imports (existing modules in your project)
 import writer
 
-# extrapolation modules
+# extrapolation modules (try to import; keep None if not found)
 try:
     import USTE1
 except Exception as e:
@@ -50,6 +53,7 @@ try:
 except Exception as e:
     TP = None
     logging.getLogger(__name__).debug("tensorial_properties1 not available: %s", e)
+
 
 # ---------------------
 # Defaults for optimizer (kept in one place)
@@ -110,7 +114,7 @@ def setup_logging(verbosity: int = 0, logfile: Optional[Path] = None) -> None:
 
 def read_config(input_path: Path) -> configparser.ConfigParser:
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str  # preserve case of keys (so METHOD is preserved if user wants)
+    cfg.optionxform = str  # preserve case of keys
     cfg.read(input_path)
     return cfg
 
@@ -175,7 +179,11 @@ def gather_optimization_params(section: configparser.SectionProxy) -> dict:
 
 def write_run_repro_header(output_file: Path) -> None:
     """Append reproducibility header to results file (timestamp, platform, python, versions)."""
-    import pyscf
+    try:
+        import pyscf  # optional
+        pyscf_version = getattr(pyscf, "__version__", "unknown")
+    except Exception:
+        pyscf_version = "unknown"
     with output_file.open("a") as f:
         f.write("\n" + "=" * 70 + "\n")
         f.write("pyCBS run metadata\n")
@@ -183,11 +191,26 @@ def write_run_repro_header(output_file: Path) -> None:
         f.write(f"Timestamp: {time.asctime()}\n")
         f.write(f"Platform: {platform.platform()}\n")
         f.write(f"Python: {platform.python_version()}\n")
-        try:
-            f.write(f"PySCF: {pyscf.__version__}\n")
-        except Exception:
-            f.write("PySCF: unknown\n")
+        f.write(f"PySCF: {pyscf_version}\n")
         f.write("\n")
+
+
+# ---------------------
+# Context manager to silence stdout/stderr (used to suppress PySCF runtime chatter)
+# ---------------------
+@contextmanager
+def silence_output():
+    """
+    Temporarily redirect stdout and stderr to os.devnull.
+    Use this around calls that are noisy (e.g., PySCF heavy calculations).
+    """
+    try:
+        with open(sys.devnull, "w") as devnull:
+            with redirect_stdout(devnull), redirect_stderr(devnull):
+                yield
+    except Exception:
+        # If anything goes wrong, yield control anyway (don't break program)
+        yield
 
 
 # ---------------------
@@ -345,38 +368,37 @@ def run_tensorial(section: configparser.SectionProxy, output_file: Path, calc_na
 # Main orchestration
 # ---------------------
 def main() -> None:
-    print(
+    BANNER = r"""
+                             $$$$$$\  $$$$$$$\   $$$$$$\  
+                            $$  __$$\ $$  __$$\ $$  __$$\ 
+        $$$$$$\  $$\   $$\ $$ /  \__|$$ |  $$ |$$ /  \__|
+        $$  __$$\ $$ |  $$ |$$ |      $$$$$$$\ |\$$$$$$\  
+        $$ /  $$ |$$ |  $$ |$$ |      $$  __$$\  \____$$\  
+        $$ |  $$ |$$ |  $$ |$$ |  $$\ $$ |  $$ |$$\   $$ |
+        $$$$$$$  |\$$$$$$$ |\$$$$$$  |$$$$$$$  |\$$$$$$  |
+        $$  ____/  \____$$ | \______/ \_______/  \______/ 
+        $$ |      $$\   $$ |                              
+        $$ |      \$$$$$$  |                              
+        \__|       \______/                               
+    """
 
-        """
-                                     $$$$$$\  $$$$$$$\   $$$$$$\  
-                                    $$  __$$\ $$  __$$\ $$  __$$\ 
-                $$$$$$\  $$\   $$\ $$ /  \__|$$ |  $$ |$$ /  \__|
-                $$  __$$\ $$ |  $$ |$$ |      $$$$$$$\ |\$$$$$$\  
-                $$ /  $$ |$$ |  $$ |$$ |      $$  __$$\  \____$$\  
-                $$ |  $$ |$$ |  $$ |$$ |  $$\ $$ |  $$ |$$\   $$ |
-                $$$$$$$  |\$$$$$$$ |\$$$$$$  |$$$$$$$  |\$$$$$$  |
-                $$  ____/  \____$$ | \______/ \_______/  \______/ 
-                $$ |      $$\   $$ |                              
-                $$ |      \$$$$$$  |                              
-                \__|       \______/                               
+    INFO = """
+    *******************************************************
+    *               Alberto Guerra-Barroso,               *
+    *              Fabio J. Delgado-Alpízar               *
+    *    Lab of Computational and Theoretical Chemistry   *
+    *      Faculty of Chemistry, University of Havana     *
+    *                                                     *
+    *                        and                          *
+    *                                                     *
+    *              Antonio J. C. Varandas                 *
+    *    Department of Chemistry, and Chemistry Centre    *
+    *                University of Coimbra                *
+    *******************************************************
+    """
 
-
-
-             *******************************************************
-             *               Alberto Guerra-Barroso,               *
-             *              Fabio J. Delgado-Alpízar               *
-             *    Lab of Computational and Theoretical Chemistry   *
-             *      Faculty of Chemistry,University of Havana      *
-             *                                                     *
-             *                        and                          *
-             *                                                     *
-             *              Antonio J. C. Varandas                 *
-             *    Department of Chemistry, and Chemistry Centre    *
-             *                University of Coimbra                *                    
-             *******************************************************
-        """
-
-    )
+    print(BANNER)
+    print(INFO)
 
     parser = build_cli()
     args = parser.parse_args()
@@ -425,14 +447,16 @@ def main() -> None:
         except Exception as e:
             log.error("Could not import optimization module: %s", e)
             log.error(
-                "Make sure optimization.py is in the same package or PYTHONPATH and defines run_optimization(...)")
+                "Make sure optimization.py is in the same package or PYTHONPATH and defines run_optimization(...)"
+            )
         else:
-            # prefer a dedicated API: run_optimization(opt_params, output_file=str(output_file))
             run_opt = getattr(optimization, "run_optimization", None)
             if callable(run_opt):
                 try:
                     log.info("Calling optimization.run_optimization(...)")
-                    run_opt(opt_params, output_file=str(output_file))
+                    # suppress PySCF stdout/stderr while the optimizer runs
+                    with silence_output():
+                        run_opt(opt_params, output_file=str(output_file))
                     log.info("Optimization finished.")
                 except Exception as e:
                     log.exception("Error while running optimization: %s", e)
@@ -441,7 +465,8 @@ def main() -> None:
                 if hasattr(optimization, "main") and callable(getattr(optimization, "main")):
                     log.warning("optimization.run_optimization not found; calling optimization.main() as fallback.")
                     try:
-                        optimization.main()  # type: ignore
+                        with silence_output():
+                            optimization.main()  # type: ignore
                     except Exception as e:
                         log.exception("Error running optimization.main(): %s", e)
                 else:
@@ -454,11 +479,11 @@ def main() -> None:
                     )
 
     # Process other sections (jobs)
+    calculation_counter = 0
     for section_name in config.sections():
         if section_name.upper() == "OPTIMIZATION":
             continue  # already handled
 
-        log.info("Processing %s ...", section_name)
         section = config[section_name]
         scheme = section.get("scheme", "").upper()
 
@@ -472,15 +497,17 @@ def main() -> None:
             elif scheme == "TENSORIAL":
                 run_tensorial(section, output_file, section_name)
             else:
-                log.error("Unknown scheme '%s' in section %s; skipping.", scheme, section_name)
+                # minimal terminal message for unknown scheme
+                print(f"⚠️  Unknown scheme '{scheme}' in section [{section_name}] — skipping.")
+                continue
         except Exception as e:
             log.exception("Error processing section %s: %s", section_name, e)
 
-        # Simple message when each calculation is finished
-        print(f"{section_name} done.")
-        log.info("Done %s", section_name)
+        calculation_counter += 1
+        # Minimal terminal feedback per your request:
+        print(f"Calculation {calculation_counter} done.")
 
-    # final summary with writer
+    # final summary with writer (keeps detailed info in results file)
     try:
         writer.write_summary_table(str(output_file))
     except Exception:
@@ -491,7 +518,7 @@ def main() -> None:
         abs_path = output_file.resolve()
     except Exception:
         abs_path = output_file
-    print(f"Results saved to: {abs_path}")
+    print(f"\nResults saved to: {abs_path}")
     log.info("All calculations completed. Results saved to: %s", output_file)
 
 
