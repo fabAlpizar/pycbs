@@ -14,10 +14,12 @@ dependencies:
   - tqdm
   - click
   - ipython
+  - pyscf
+  - argparse
   # VISUALIZATION
-  - matplotlib
-  - ipympl  # interactive matplotlib plots
-  - seaborn
+  #- matplotlib
+  #- ipympl  # interactive matplotlib plots
+  #- seaborn
   # - altair
   # - yellowbrick
   # ML, STATS & DEEP LEARNING
