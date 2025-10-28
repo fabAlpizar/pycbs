@@ -9,6 +9,7 @@ Features:
  - will call optimization.run_optimization(opt_params, output_file) if available
  - preserves existing USTE1/USTE2/USPE/TENSORIAL behavior
  - writes outputs via existing writer module
+ - prints a simple message when each calculation is done and final results path
 """
 from __future__ import annotations
 
@@ -49,7 +50,6 @@ try:
 except Exception as e:
     TP = None
     logging.getLogger(__name__).debug("tensorial_properties1 not available: %s", e)
-
 
 # ---------------------
 # Defaults for optimizer (kept in one place)
@@ -345,7 +345,6 @@ def run_tensorial(section: configparser.SectionProxy, output_file: Path, calc_na
 # Main orchestration
 # ---------------------
 def main() -> None:
-
     print(
 
         """
@@ -360,9 +359,9 @@ def main() -> None:
                 $$ |      $$\   $$ |                              
                 $$ |      \$$$$$$  |                              
                 \__|       \______/                               
-                
-                
-                
+
+
+
              *******************************************************
              *               Alberto Guerra-Barroso,               *
              *              Fabio J. Delgado-Alpízar               *
@@ -377,12 +376,7 @@ def main() -> None:
              *******************************************************
         """
 
-
-
-
     )
-
-
 
     parser = build_cli()
     args = parser.parse_args()
@@ -430,7 +424,8 @@ def main() -> None:
             import optimization  # type: ignore
         except Exception as e:
             log.error("Could not import optimization module: %s", e)
-            log.error("Make sure optimization.py is in the same package or PYTHONPATH and defines run_optimization(...)")
+            log.error(
+                "Make sure optimization.py is in the same package or PYTHONPATH and defines run_optimization(...)")
         else:
             # prefer a dedicated API: run_optimization(opt_params, output_file=str(output_file))
             run_opt = getattr(optimization, "run_optimization", None)
@@ -481,6 +476,8 @@ def main() -> None:
         except Exception as e:
             log.exception("Error processing section %s: %s", section_name, e)
 
+        # Simple message when each calculation is finished
+        print(f"{section_name} done.")
         log.info("Done %s", section_name)
 
     # final summary with writer
@@ -489,6 +486,12 @@ def main() -> None:
     except Exception:
         log.exception("Failed to write summary table using writer")
 
+    # final simple message with absolute path to results
+    try:
+        abs_path = output_file.resolve()
+    except Exception:
+        abs_path = output_file
+    print(f"Results saved to: {abs_path}")
     log.info("All calculations completed. Results saved to: %s", output_file)
 
 
