@@ -2,17 +2,9 @@
 """
 PYCBS.py - Improved entrypoint for pyCBS
 
-Features included in this "ready to paste" version:
- - argparse CLI
- - logging (optional verbosity levels)
- - reads OPTIMIZATION block from INI file and builds opt_params dict
- - calls optimization.run_optimization(opt_params, output_file) if requested
- - preserves USTE1/USTE2/USPE/TENSORIAL behavior
- - detailed results are written to results file via writer (unchanged)
- - terminal output is minimal: prints "Calculation N done." per job and final results path
- - PySCF/other verbose outputs suppressed while running optimizer (using context manager)
+Minimal terminal output, writes full results (including optimization cycle history)
+into results.out via writer.
 """
-
 from __future__ import annotations
 
 import argparse
@@ -26,10 +18,9 @@ from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-# local imports (existing modules in your project)
 import writer
 
-# extrapolation modules (try to import; keep None if not found)
+# extrapolation modules
 try:
     import USTE1
 except Exception as e:
@@ -55,10 +46,7 @@ except Exception as e:
     logging.getLogger(__name__).debug("tensorial_properties1 not available: %s", e)
 
 
-# ---------------------
-# Defaults for optimizer (kept in one place)
-# ---------------------
-OPT_DEFAULTS: Dict[str, Any] = {
+OPT_DEFAULTS = {
     "init_parameters": [0.96654, 103.93761],
     "geo_init": ["r1", "teta"],
     "basis_sets": ["cc-pvtz", "cc-pvqz"],
@@ -72,13 +60,10 @@ OPT_DEFAULTS: Dict[str, Any] = {
     "energy_criterion": 1e-8,
     "fac_mult": 0.05,
     "cut": 0.75,
-    "workers": None,  # default: let optimization module choose based on cpu_count()
+    "workers": None,
 }
 
 
-# ---------------------
-# Utility functions
-# ---------------------
 def build_cli() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="pyCBS", description="pyCBS: Complete Basis Set extrapolation tool")
     p.add_argument("-i", "--input", type=Path, default=Path("inputfile.inp"),
@@ -92,9 +77,6 @@ def build_cli() -> argparse.ArgumentParser:
 
 
 def setup_logging(verbosity: int = 0, logfile: Optional[Path] = None) -> None:
-    """
-    Configure logging. verbosity: 0 -> WARNING, 1 -> INFO, 2+ -> DEBUG
-    """
     level = logging.WARNING
     if verbosity >= 2:
         level = logging.DEBUG
@@ -114,7 +96,7 @@ def setup_logging(verbosity: int = 0, logfile: Optional[Path] = None) -> None:
 
 def read_config(input_path: Path) -> configparser.ConfigParser:
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str  # preserve case of keys
+    cfg.optionxform = str
     cfg.read(input_path)
     return cfg
 
@@ -133,13 +115,7 @@ def parse_list_of_str(txt: str) -> list[str]:
 
 
 def gather_optimization_params(section: configparser.SectionProxy) -> dict:
-    """
-    Read OPTIMIZATION section and produce an opt_params dict with defaults filled in.
-    Only keys present in OPT_DEFAULTS and recognized ones will be accepted.
-    """
-    params = dict(OPT_DEFAULTS)  # start from defaults
-
-    # Acceptable keys and their parsing functions
+    params = dict(OPT_DEFAULTS)
     key_parsers = {
         "init_parameters": parse_list_of_floats,
         "basis_sets": parse_list_of_str,
@@ -155,7 +131,6 @@ def gather_optimization_params(section: configparser.SectionProxy) -> dict:
         "cut": float,
         "workers": int,
     }
-
     for key, parser in key_parsers.items():
         if key in section:
             try:
@@ -163,59 +138,29 @@ def gather_optimization_params(section: configparser.SectionProxy) -> dict:
             except Exception as e:
                 logging.warning("Could not parse optimization param '%s' value '%s': %s. Using default %s",
                                 key, section.get(key), e, params.get(key))
-    # final normalization for some fields
+    # normalize
     if isinstance(params.get("init_parameters"), list) and len(params["init_parameters"]) >= 2:
         params["init_parameters"] = [float(params["init_parameters"][0]), float(params["init_parameters"][1])]
     else:
         params["init_parameters"] = list(OPT_DEFAULTS["init_parameters"])
-
     if isinstance(params.get("basis_sets"), list) and len(params["basis_sets"]) >= 2:
         params["basis_sets"] = [params["basis_sets"][0], params["basis_sets"][1]]
     else:
         params["basis_sets"] = list(OPT_DEFAULTS["basis_sets"])
-
     return params
 
 
-def write_run_repro_header(output_file: Path) -> None:
-    """Append reproducibility header to results file (timestamp, platform, python, versions)."""
-    try:
-        import pyscf  # optional
-        pyscf_version = getattr(pyscf, "__version__", "unknown")
-    except Exception:
-        pyscf_version = "unknown"
-    with output_file.open("a") as f:
-        f.write("\n" + "=" * 70 + "\n")
-        f.write("pyCBS run metadata\n")
-        f.write("=" * 70 + "\n")
-        f.write(f"Timestamp: {time.asctime()}\n")
-        f.write(f"Platform: {platform.platform()}\n")
-        f.write(f"Python: {platform.python_version()}\n")
-        f.write(f"PySCF: {pyscf_version}\n")
-        f.write("\n")
-
-
-# ---------------------
-# Context manager to silence stdout/stderr (used to suppress PySCF runtime chatter)
-# ---------------------
+from contextlib import redirect_stdout, redirect_stderr
 @contextmanager
 def silence_output():
-    """
-    Temporarily redirect stdout and stderr to os.devnull.
-    Use this around calls that are noisy (e.g., PySCF heavy calculations).
-    """
     try:
         with open(sys.devnull, "w") as devnull:
             with redirect_stdout(devnull), redirect_stderr(devnull):
                 yield
     except Exception:
-        # If anything goes wrong, yield control anyway (don't break program)
         yield
 
 
-# ---------------------
-# Runners for the extrapolation schemes (unchanged semantics, just logging + checks)
-# ---------------------
 def run_uste1(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
     if USTE1 is None:
         logging.error("USTE1 module not found; skipping %s", calc_name)
@@ -364,9 +309,6 @@ def run_tensorial(section: configparser.SectionProxy, output_file: Path, calc_na
     writer.write_result(str(output_file), "TENSORIAL", result_data, zeta_HF, zeta_cor, zeta)
 
 
-# ---------------------
-# Main orchestration
-# ---------------------
 def main() -> None:
     BANNER = r"""
                              $$$$$$\  $$$$$$$\   $$$$$$\  
@@ -403,7 +345,6 @@ def main() -> None:
     parser = build_cli()
     args = parser.parse_args()
 
-    # Setup logging: also write a small log file
     setup_logging(args.verbose, logfile=Path("pycbs.log"))
     log = logging.getLogger(__name__)
 
@@ -414,24 +355,31 @@ def main() -> None:
         log.error("Input file '%s' does not exist.", input_path)
         sys.exit(1)
 
-    # read config
     config = read_config(input_path)
 
     # prepare output file and header via writer
-    output_file.write_text("")  # clear previous results
+    output_file.write_text("")
     writer.write_header(str(output_file))
-    write_run_repro_header(output_file)
+    # add reproducibility metadata
+    try:
+        import pyscf
+        pyscf_version = getattr(pyscf, "__version__", "unknown")
+    except Exception:
+        pyscf_version = "unknown"
+    with output_file.open("a") as f:
+        f.write("\nRun metadata:\n")
+        f.write(f"  Platform: {platform.platform()}\n")
+        f.write(f"  Python: {platform.python_version()}\n")
+        f.write(f"  PySCF: {pyscf_version}\n\n")
 
-    # read OPTIMIZATION section (if present)
+    # read OPTIMIZATION section
     opt_enabled = False
     opt_params: Dict[str, Any] = {}
-
     if config.has_section("OPTIMIZATION"):
         sec = config["OPTIMIZATION"]
         opt_enabled = parse_bool(sec.get("optimization", "False"))
         opt_params = gather_optimization_params(sec)
         log.info("OPTIMIZATION section detected: enabled=%s", opt_enabled)
-        log.debug("Parsed optimization params: %s", json.dumps(opt_params, indent=2, default=str))
     else:
         log.debug("No OPTIMIZATION section in input file; optimizer not requested.")
 
@@ -439,50 +387,72 @@ def main() -> None:
     if args.workers is not None:
         opt_params["workers"] = args.workers
 
-    # If optimizer requested and not disabled by CLI -- attempt to call optimization.run_optimization(...)
+    # call optimizer (if requested)
+    optimizer_result = None
     if opt_enabled and not args.no_opt:
-        log.info("Optimization requested in input file — launching optimizer...")
+        log.info("Optimization requested — launching optimizer...")
         try:
-            import optimization  # type: ignore
+            import optimization as optmod  # type: ignore
         except Exception as e:
             log.error("Could not import optimization module: %s", e)
-            log.error(
-                "Make sure optimization.py is in the same package or PYTHONPATH and defines run_optimization(...)"
-            )
         else:
-            run_opt = getattr(optimization, "run_optimization", None)
+            run_opt = getattr(optmod, "run_optimization", None)
             if callable(run_opt):
                 try:
-                    log.info("Calling optimization.run_optimization(...)")
-                    # suppress PySCF stdout/stderr while the optimizer runs
+                    log.info("Running optimizer (PySCF output suppressed)...")
+                    # suppress PySCF chatter while optimizer runs
                     with silence_output():
-                        run_opt(opt_params, output_file=str(output_file))
-                    log.info("Optimization finished.")
+                        optimizer_result = run_opt(opt_params, output_file=str(output_file))
+                    log.info("Optimizer finished.")
                 except Exception as e:
-                    log.exception("Error while running optimization: %s", e)
+                    log.exception("Error while running optimizer: %s", e)
             else:
-                # fallback: if module provides a 'main' function, call it (least likely)
-                if hasattr(optimization, "main") and callable(getattr(optimization, "main")):
-                    log.warning("optimization.run_optimization not found; calling optimization.main() as fallback.")
-                    try:
-                        with silence_output():
-                            optimization.main()  # type: ignore
-                    except Exception as e:
-                        log.exception("Error running optimization.main(): %s", e)
-                else:
-                    log.error(
-                        "optimization.run_optimization(opt_params, output_file) not found in optimization module.\n"
-                        "Please add a wrapper function with this signature to optimization.py, for example:\n\n"
-                        "def run_optimization(opt_params: dict, output_file: str = 'results.out') -> dict:\n"
-                        "    # merge defaults, run the optimizer using passed parameters, write results\n"
-                        "    return {'status': 'ok'}\n"
-                    )
+                log.error("optimization.run_optimization(...) not found in optimization module.")
 
-    # Process other sections (jobs)
+        # If optimizer returned the history, write it to the results file using writer
+        if isinstance(optimizer_result, dict):
+            history = optimizer_result.get("history")
+            final_params = optimizer_result.get("parameters")
+            final_energy = optimizer_result.get("energy")
+            converged = optimizer_result.get("converged", False)
+
+            if history:
+                try:
+                    writer.write_optimization_summary(str(output_file), history)
+                except Exception as e:
+                    log.exception("Failed writing optimization summary to results: %s", e)
+
+            # write final optimization block (keeps compatibility with writer.write_result)
+            try:
+                writer.write_result(str(output_file), "OPTIMIZATION", {
+                    "method": opt_params.get("METHOD", OPT_DEFAULTS["METHOD"]),
+                    "basis_sets": ",".join(opt_params.get("basis_sets", OPT_DEFAULTS["basis_sets"])),
+                    "init_parameters": ",".join(map(str, opt_params.get("init_parameters", OPT_DEFAULTS["init_parameters"])))
+                }, EHF=None, dc=None, energy=final_energy)
+            except Exception:
+                pass
+
+            # print a compact table summary to terminal
+            if history:
+                print("\n" + "=" * 60)
+                print("OPTIMIZER CYCLE HISTORY (brief)")
+                print("=" * 60)
+                print(f"{'Cycle':>5} {'r(OH)[Å]':>12} {'HOH[°]':>12} {'Energy[Ha]':>18}")
+                for step in history:
+                    cyc = step.get("cycle")
+                    p = step.get("parameters", [None, None])
+                    en = step.get("energy", None)
+                    print(f"{cyc:5d} {p[0]:12.8f} {p[1]:12.8f} {en:18.10f}")
+                print("=" * 60)
+                if converged:
+                    print("Optimizer converged.")
+                print(f"Final optimized geometry: r(OH)={final_params[0]:.8f} Å  HOH={final_params[1]:.8f}°")
+                print(f"Final CBS energy = {final_energy:.10f} Ha")
+    # Process remaining sections
     calculation_counter = 0
     for section_name in config.sections():
         if section_name.upper() == "OPTIMIZATION":
-            continue  # already handled
+            continue
 
         section = config[section_name]
         scheme = section.get("scheme", "").upper()
@@ -497,29 +467,25 @@ def main() -> None:
             elif scheme == "TENSORIAL":
                 run_tensorial(section, output_file, section_name)
             else:
-                # minimal terminal message for unknown scheme
                 print(f"⚠️  Unknown scheme '{scheme}' in section [{section_name}] — skipping.")
                 continue
         except Exception as e:
-            log.exception("Error processing section %s: %s", section_name, e)
+            logging.getLogger(__name__).exception("Error processing section %s: %s", section_name, e)
 
         calculation_counter += 1
-        # Minimal terminal feedback per your request:
         print(f"Calculation {calculation_counter} done.")
 
-    # final summary with writer (keeps detailed info in results file)
+    # final summary
     try:
         writer.write_summary_table(str(output_file))
     except Exception:
-        log.exception("Failed to write summary table using writer")
+        logging.getLogger(__name__).exception("Failed to write summary table using writer")
 
-    # final simple message with absolute path to results
     try:
         abs_path = output_file.resolve()
     except Exception:
         abs_path = output_file
     print(f"\nResults saved to: {abs_path}")
-    log.info("All calculations completed. Results saved to: %s", output_file)
 
 
 if __name__ == "__main__":
