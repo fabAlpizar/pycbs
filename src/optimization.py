@@ -237,7 +237,7 @@ def run_optimization(config_dict=None, output_file=None):
 
     # compact banner
     print("=" * 60)
-    print("OPTIMIZATION: CBS GEOMETRIC OPTIMIZER (PySCF)")
+    print("OPTIMIZATION: CBS GEOMETRIC OPTIMIZER")
     print("=" * 60)
     print(f"Initial: r(OH)={current_params[0]:.5f} Å  HOH={current_params[1]:.5f}°  Method={METHOD}")
     print("=" * 60)
@@ -302,27 +302,6 @@ def run_optimization(config_dict=None, output_file=None):
     print(f"  final CBS energy = {final_energy:.10f} Ha")
     print("=" * 60)
 
-    # write history to results file if requested
-    if output_file:
-        try:
-            import writer as _writer
-            _writer.write_optimization_summary(str(output_file), optimization_history)
-            # write compact OPTIMIZATION entry as result as well
-            _writer.write_result(str(output_file), "OPTIMIZATION", {
-                "method": METHOD,
-                "basis_sets": ",".join(basis_sets),
-                "init_parameters": ",".join(map(str, init_parameters))
-            }, EHF=None, dc=None, energy=final_energy)
-        except Exception:
-            # if writer fails, fallback to append plain text
-            try:
-                with open(output_file, "a") as f:
-                    f.write("\nOPTIMIZATION (summary):\n")
-                    for step in optimization_history:
-                        f.write(f"Cycle {step['cycle']}: r={step['parameters'][0]:.8f}, theta={step['parameters'][1]:.8f}, E={step['energy']:.10f}\n")
-                    f.write(f"\nFinal: r={current_params[0]:.8f}, theta={current_params[1]:.8f}, E={final_energy:.10f}\n")
-            except Exception:
-                pass
 
     return {
         'parameters': current_params.copy(),
