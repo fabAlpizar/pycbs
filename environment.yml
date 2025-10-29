@@ -14,8 +14,7 @@ dependencies:
   - tqdm
   - click
   - ipython
-  - pyscf         # conda-forge provides pyscf builds
-  # argparse is part of stdlib — remove it
+  - pyscf
 
   # development/test (optional; consider a separate env for dev)
   - jupyterlab
@@ -29,3 +28,4 @@ dependencies:
 
   - pip:
     - -e .        # install package in editable mode
+    - basis-set-exchange
