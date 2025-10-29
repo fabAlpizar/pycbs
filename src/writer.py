@@ -70,6 +70,13 @@ def write_scheme_citations(file, scheme):
 
 
 def write_result(filename, scheme, data, EHF=None, dc=None, energy=None):
+    """
+    Write a detailed result block into the results file.
+
+    - If EHF and dc are provided (not None), print Hartree-Fock (CBS), Dynamic Correlation,
+      and Total CBS Energy.
+    - Otherwise, print a single CBS Extrapolated Energy line (existing behavior).
+    """
     global RESULTS_SUMMARY
     with open(filename, "a") as f:
         f.write("\n" + "=" * 70 + "\n")
@@ -83,18 +90,39 @@ def write_result(filename, scheme, data, EHF=None, dc=None, energy=None):
         f.write("-" * 70 + "\n")
         f.write("Extrapolation Results:\n")
         f.write("-" * 70 + "\n")
-        if scheme in ["USTE1", "USTE2"]:
-            f.write(f"{'Hartree-Fock (CBS):':>25} {EHF:.10f}\n")
-            f.write(f"{'Dynamic Correlation:':>25} {dc:.10f}\n")
-            f.write(f"{'Total CBS Energy:':>25} {energy:.10f}\n")
+
+        # If both EHF and dc were provided, print the detailed breakdown
+        if (EHF is not None) and (dc is not None):
+            try:
+                f.write(f"{'Hartree-Fock (CBS):':>25} {float(EHF):.10f}\n")
+            except Exception:
+                f.write(f"{'Hartree-Fock (CBS):':>25} {EHF}\n")
+            try:
+                f.write(f"{'Dynamic Correlation:':>25} {float(dc):.10f}\n")
+            except Exception:
+                f.write(f"{'Dynamic Correlation:':>25} {dc}\n")
+            try:
+                f.write(f"{'Total CBS Energy:':>25} {float(energy):.10f}\n")
+            except Exception:
+                f.write(f"{'Total CBS Energy:':>25} {energy}\n")
+            has_components = True
         else:
-            f.write(f"{'CBS Extrapolated Energy:':>25} {energy:.10f}\n")
+            # Fallback / existing behaviour for items without HF/dc components
+            try:
+                f.write(f"{'CBS Extrapolated Energy:':>25} {float(energy):.10f}\n")
+            except Exception:
+                f.write(f"{'CBS Extrapolated Energy:':>25} {energy}\n")
+            has_components = False
+
         f.write("=" * 70 + "\n\n")
+
+    # Store a record for the final summary table. Include a flag whether HF/dc components are present.
     RESULTS_SUMMARY.append({
         'scheme': scheme,
         'energy': energy,
         'EHF': EHF,
-        'dc': dc
+        'dc': dc,
+        'has_components': has_components
     })
 
 
@@ -114,11 +142,32 @@ def write_optimization_summary(filename, history):
             params = step.get('parameters', [None, None])
             energy = step.get('energy', 0.0)
             df = step.get('displacement_factor', 0.0)
-            f.write(f"{cyc:5d} {params[0]:12.8f} {params[1]:12.8f} {energy:18.10f} {df:12.6f}\n")
+            # protect against numpy arrays or Nones
+            try:
+                p0 = float(params[0])
+            except Exception:
+                p0 = 0.0
+            try:
+                p1 = float(params[1])
+            except Exception:
+                p1 = 0.0
+            try:
+                en = float(energy)
+            except Exception:
+                en = 0.0
+            try:
+                dff = float(df)
+            except Exception:
+                dff = 0.0
+            f.write(f"{cyc:5d} {p0:12.8f} {p1:12.8f} {en:18.10f} {dff:12.6f}\n")
         f.write("\n" + "=" * 70 + "\n\n")
 
 
 def write_summary_table(filename):
+    """
+    Write the summary table. Rows that have has_components=True show HF & Dynamic Corr columns;
+    others show only the total energy (but columns preserve alignment).
+    """
     global RESULTS_SUMMARY
     if not RESULTS_SUMMARY:
         return
@@ -126,11 +175,28 @@ def write_summary_table(filename):
         f.write("\n" + "=" * 70 + "\n")
         f.write("                      SUMMARY OF RESULTS\n")
         f.write("=" * 70 + "\n\n")
-        f.write(f"{'Scheme':<10}{'HF (CBS)':>20}{'Dynamic Corr.':>20}{'Total Energy':>20}\n")
+        # Header (we always print the three columns for clarity)
+        f.write(f"{'Scheme':<20}{'HF (CBS)':>18}{'Dynamic Corr.':>18}{'Total Energy':>18}\n")
         f.write("-" * 70 + "\n")
         for item in RESULTS_SUMMARY:
-            if item['scheme'] in ["USTE1", "USTE2"]:
-                f.write(f"{item['scheme']:<10}{item['EHF']:>20.10f}{item['dc']:>20.10f}{item['energy']:>20.10f}\n")
+            scheme = item.get('scheme', '')
+            energy = item.get('energy', None)
+            EHF = item.get('EHF', None)
+            dc = item.get('dc', None)
+            has_components = item.get('has_components', False)
+
+            if has_components:
+                # print HF, DC and Total energy if available
+                try:
+                    f.write(f"{scheme:<20}{float(EHF):18.10f}{float(dc):18.10f}{float(energy):18.10f}\n")
+                except Exception:
+                    # fallback with simple str formatting if floats fail
+                    f.write(f"{scheme:<20}{str(EHF):>18}{str(dc):>18}{str(energy):>18}\n")
             else:
-                f.write(f"{item['scheme']:<10}{'':>20}{'':>20}{item['energy']:>20.10f}\n")
+                # fill HF and DC columns with blanks, print only total energy
+                try:
+                    f.write(f"{scheme:<20}{'':18}{'':18}{float(energy):18.10f}\n")
+                except Exception:
+                    f.write(f"{scheme:<20}{'':18}{'':18}{str(energy):>18}\n")
+
         f.write("\n" + "=" * 70 + "\n")
