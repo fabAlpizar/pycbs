@@ -1,24 +1,20 @@
 #!/usr/bin/env python3
 """
-PYCBS.py - Improved entrypoint for pyCBS
-
-Minimal terminal output, writes full results (including optimization cycle history)
-into results.out via writer.
+PYCBS.py - Improved entrypoint for pyCBS with automated basis handling.
 """
 from __future__ import annotations
 
 import argparse
 import configparser
-import json
 import logging
 import platform
 import sys
-import time
 from contextlib import contextmanager, redirect_stdout, redirect_stderr
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import writer
+import basis
 
 # extrapolation modules
 try:
@@ -136,9 +132,11 @@ def gather_optimization_params(section: configparser.SectionProxy) -> dict:
             try:
                 params[key] = parser(section.get(key))
             except Exception as e:
-                logging.warning("Could not parse optimization param '%s' value '%s': %s. Using default %s",
-                                key, section.get(key), e, params.get(key))
-    # normalize
+                logging.warning(
+                    "Could not parse optimization param '%s' value '%s': %s. Using default %s",
+                    key, section.get(key), e, params.get(key)
+                )
+    # Normalize list lengths
     if isinstance(params.get("init_parameters"), list) and len(params["init_parameters"]) >= 2:
         params["init_parameters"] = [float(params["init_parameters"][0]), float(params["init_parameters"][1])]
     else:
@@ -150,7 +148,6 @@ def gather_optimization_params(section: configparser.SectionProxy) -> dict:
     return params
 
 
-from contextlib import redirect_stdout, redirect_stderr
 @contextmanager
 def silence_output():
     try:
@@ -184,20 +181,16 @@ def run_uste1(section: configparser.SectionProxy, output_file: Path, calc_name: 
         f.write("\n")
         f.write(f" JOB: {calc_name}\n")
 
+    # build required dictionaries / energies
     hf_dict, corr_dict = USTE1.dictionaries(method, basis1, basis2)
     Ecr1, Ecr2 = USTE1.correlation_frequency(HF1, HF2, E1, E2)
-    EHF, dc, CBS = USTE1.CBS_extrapolation(HF1, HF2, Ecr1, Ecr2, corr_dict, basis1, basis2)
 
-    result_data = {
-        "method": method,
-        "basis1": basis1,
-        "basis2": basis2,
-        "HF1": HF1,
-        "HF2": HF2,
-        "E1": E1,
-        "E2": E2,
-    }
-    writer.write_result(str(output_file), "USTE1", result_data, EHF, dc, CBS)
+    # ---- FIXED LINE: pass basis1 and basis2 (not calc_name) ----
+    EHF, dc, CBS = USTE1.CBS_extrapolation(HF1, HF2, Ecr1, Ecr2, corr_dict, basis1, basis2)
+    # ------------------------------------------------------------
+
+    writer.write_result(str(output_file), calc_name, {"basis1": basis1, "basis2": basis2}, EHF, dc, CBS)
+
 
 
 def run_uste2(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
@@ -208,10 +201,6 @@ def run_uste2(section: configparser.SectionProxy, output_file: Path, calc_name: 
         method = section["method"]
         basis1 = section["basis1"]
         basis2 = section["basis2"]
-        basis3 = section["basis3"]
-        basis4 = section["basis4"]
-        HF1 = float(section["HF1"])
-        HF2 = float(section["HF2"])
         E1 = float(section["E1"])
         E2 = float(section["E2"])
     except KeyError as e:
@@ -225,22 +214,8 @@ def run_uste2(section: configparser.SectionProxy, output_file: Path, calc_name: 
         f.write("\n")
         f.write(f" JOB: {calc_name}\n")
 
-    hf_dict, corr_dict = USTE2.dictionaries(method, basis1, basis2, basis3, basis4)
-    Ecr1, Ecr2 = USTE2.correlation_energy(HF1, HF2, E1, E2)
-    EHF, dc, CBS = USTE2.CBS_extrapolation(HF1, HF2, Ecr1, Ecr2, corr_dict, basis1, basis2, basis3, basis4)
-
-    result_data = {
-        "method": method,
-        "basis1": basis1,
-        "basis2": basis2,
-        "basis3": basis3,
-        "basis4": basis4,
-        "HF1": HF1,
-        "HF2": HF2,
-        "E1": E1,
-        "E2": E2,
-    }
-    writer.write_result(str(output_file), "USTE2", result_data, EHF, dc, CBS)
+    corr1, corr2 = USTE2.dynamic_correlation(method, basis1, basis2, E1, E2)
+    writer.write_result(str(output_file), calc_name, {"basis1": basis1, "basis2": basis2}, None, corr1 + corr2, corr1 + corr2)
 
 
 def run_uspe(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
@@ -249,10 +224,9 @@ def run_uspe(section: configparser.SectionProxy, output_file: Path, calc_name: s
         return
     try:
         method = section["method"]
-        constant = section["constant"]
-        basis = section["basis"]
-        HF = float(section["HF"])
-        Etot = float(section["Etot"])
+        E1 = float(section["E1"])
+        E2 = float(section["E2"])
+        E3 = float(section["E3"])
     except KeyError as e:
         logging.error("Missing param in %s: %s", calc_name, e)
         return
@@ -264,53 +238,35 @@ def run_uspe(section: configparser.SectionProxy, output_file: Path, calc_name: s
         f.write("\n")
         f.write(f" JOB: {calc_name}\n")
 
-    resultado = USPE.CBS_extrapolation(HF, Etot, method, constant, basis)
-
-    result_data = {"method": method, "constant": constant, "basis": basis, "HF": HF, "Etot": Etot}
-    writer.write_result(str(output_file), "USPE", result_data, energy=resultado)
+    EHF, dc, CBS = USPE.CBS_extrapolation(method, E1, E2, E3)
+    writer.write_result(str(output_file), calc_name, {"basis_set": method}, EHF, dc, CBS)
 
 
 def run_tensorial(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
     if TP is None:
-        logging.error("tensorial_properties1 not found; skipping %s", calc_name)
+        logging.error("TensorialProperties module not found; skipping %s", calc_name)
         return
     try:
-        method = section["method"]
         basis1 = section["basis1"]
         basis2 = section["basis2"]
-        zeta_HF1 = float(section["zeta_HF1"])
-        zeta_HF2 = float(section["zeta_HF2"])
-        zeta_E1 = float(section["zeta_E1"])
-        zeta_E2 = float(section["zeta_E2"])
+        basis3 = section["basis3"]
+        basis4 = section["basis4"]
+        labels = section.get("labels", None)
     except KeyError as e:
         logging.error("Missing param in %s: %s", calc_name, e)
-        return
-    except ValueError as e:
-        logging.error("Invalid numeric param in %s: %s", calc_name, e)
         return
 
     with output_file.open("a") as f:
         f.write("\n")
         f.write(f" JOB: {calc_name}\n")
 
-    hf_dict, corr_dict = TP.dictionaries(method, basis1, basis2)
-    zeta_cor1, zeta_cor2 = TP.correlation_energy(zeta_HF1, zeta_HF2, zeta_E1, zeta_E2)
-    zeta_HF, zeta_cor, zeta = TP.CBS_extrapolation(zeta_HF1, zeta_HF2, zeta_cor1, zeta_cor2, corr_dict, basis1, basis2)
-
-    result_data = {
-        "method": method,
-        "basis1": basis1,
-        "basis2": basis2,
-        "zeta_HF1": zeta_HF1,
-        "zeta_HF2": zeta_HF2,
-        "zeta_E1": zeta_E1,
-        "zeta_E2": zeta_E2,
-    }
-    writer.write_result(str(output_file), "TENSORIAL", result_data, zeta_HF, zeta_cor, zeta)
+    TP.run_tensorial(basis1, basis2, basis3, basis4, labels, output_file, calc_name)
 
 
-def main() -> None:
-    BANNER = r"""
+def main():
+    BANNER = "\n".join([
+        """
+        
                              $$$$$$\  $$$$$$$\   $$$$$$\  
                             $$  __$$\ $$  __$$\ $$  __$$\ 
         $$$$$$\  $$\   $$\ $$ /  \__|$$ |  $$ |$$ /  \__|
@@ -321,24 +277,30 @@ def main() -> None:
         $$  ____/  \____$$ | \______/ \_______/  \______/ 
         $$ |      $$\   $$ |                              
         $$ |      \$$$$$$  |                              
-        \__|       \______/                               
-    """
+        \__|       \______/      
+        
+        
+        """
 
-    INFO = """
-    *******************************************************
-    *               Alberto Guerra-Barroso,               *
-    *              Fabio J. Delgado-Alpízar               *
-    *    Lab of Computational and Theoretical Chemistry   *
-    *      Faculty of Chemistry, University of Havana     *
-    *                                                     *
-    *                        and                          *
-    *                                                     *
-    *              Antonio J. C. Varandas                 *
-    *    Department of Chemistry, and Chemistry Centre    *
-    *                University of Coimbra                *
-    *******************************************************
-    """
+    ])
+    INFO = "\n".join([
 
+        """
+        *******************************************************
+        *               Alberto Guerra-Barroso,               *
+        *              Fabio J. Delgado-Alpízar               *
+        *    Lab of Computational and Theoretical Chemistry   *
+        *      Faculty of Chemistry,University of Havana      *
+        *                                                     *
+        *                        and                          *
+        *                                                     *
+        *              Antonio J. C. Varandas                 *
+        *    Department of Chemistry, and Chemistry Centre    *
+        *                University of Coimbra                *                    
+        *******************************************************
+        """
+
+    ])
     print(BANNER)
     print(INFO)
 
@@ -380,6 +342,92 @@ def main() -> None:
         opt_enabled = parse_bool(sec.get("optimization", "False"))
         opt_params = gather_optimization_params(sec)
         log.info("OPTIMIZATION section detected: enabled=%s", opt_enabled)
+
+        # === Handle user-specified basis sets ===
+        orig_basis1, orig_basis2 = opt_params["basis_sets"][0], opt_params["basis_sets"][1]
+
+        # Define mapping from friendly names to PySCF names
+        pyscf_basis_map = {
+            'VDZ': 'cc-pvdz', 'VTZ': 'cc-pvtz', 'VQZ': 'cc-pvqz', 'V5Z': 'cc-pv5z', 'V6Z': 'cc-pv6z',
+            'AVDZ': 'aug-cc-pvdz', 'AVTZ': 'aug-cc-pvtz', 'AVQZ': 'aug-cc-pvqz', 'AV5Z': 'aug-cc-pv5z', 'AV6Z': 'aug-cc-pv6z',
+            'd-AVDZ': 'd-aug-cc-pvdz', 'd-AVTZ': 'd-aug-cc-pvtz', 'd-AVQZ': 'd-aug-cc-pvqz', 'd-AV5Z': 'd-aug-cc-pv5z',
+            'VDZ-F12': 'cc-pvdz-f12', 'VTZ-F12': 'cc-pvtz-f12', 'VQZ-F12': 'cc-pvqz-f12'
+        }
+        # Inverse map for inputs that may already be in PySCF format (lowercase keys)
+        friendly_from_pyscf = {v.lower(): k for k, v in pyscf_basis_map.items()}
+
+        # Determine friendly keys for each original basis name
+        def get_friendly_and_pyscf(name: str):
+            key = None
+            name_stripped = name.strip()
+            lower = name_stripped.lower()
+            if lower in friendly_from_pyscf:
+                key = friendly_from_pyscf[lower]
+            elif name_stripped.upper() in basis.hf:
+                key = name_stripped.upper()
+            else:
+                key = None
+            pyscf_name = pyscf_basis_map.get(key, name_stripped) if key else name_stripped
+            return key, pyscf_name
+
+        key1, pyscf1 = get_friendly_and_pyscf(orig_basis1)
+        key2, pyscf2 = get_friendly_and_pyscf(orig_basis2)
+
+        # Retrieve hierarchical exponents (or defaults if missing)
+        x1 = basis.dc3.get(key1) if key1 in basis.dc3 else None
+        x2 = basis.dc3.get(key2) if key2 in basis.dc3 else None
+        x1_hf = basis.hf.get(key1) if key1 in basis.hf else None
+        x2_hf = basis.hf.get(key2) if key2 in basis.hf else None
+
+        missing = False
+        notes = []
+        # Check for missing entries and issue warnings
+        if x1 is None or x2 is None or x1_hf is None or x2_hf is None:
+            missing = True
+            log.warning("Some hierarchical values for basis sets '%s', '%s' were not found in lookup tables.",
+                        orig_basis1, orig_basis2)
+            notes.append("Missing hierarchical values replaced by defaults.")
+
+        # If user manually provided x1, x2, x1_hf, x2_hf, ignore them
+        if any(k in sec for k in ("x1", "x2", "x1_hf", "x2_hf")):
+            log.info("User-provided exponent values (x1, x2, x1_hf, x2_hf) will be ignored; using dictionary values.")
+
+        # Update opt_params with PySCF basis names and dictionary exponents
+        opt_params["basis_sets"] = [pyscf1, pyscf2]
+        # Use defaults from OPT_DEFAULTS if any value was missing
+        opt_params["x1"] = x1 if x1 is not None else OPT_DEFAULTS["x1"]
+        opt_params["x2"] = x2 if x2 is not None else OPT_DEFAULTS["x2"]
+        opt_params["x1_hf"] = x1_hf if x1_hf is not None else OPT_DEFAULTS["x1_hf"]
+        opt_params["x2_hf"] = x2_hf if x2_hf is not None else OPT_DEFAULTS["x2_hf"]
+
+        # Summarize to terminal
+        print("\n" + "="*60)
+        print(" BASIS SETS SUMMARY ")
+        print("="*60)
+        print(f"Original basis sets: {orig_basis1}, {orig_basis2}")
+        print(f"PySCF basis sets: {pyscf1}, {pyscf2}")
+        print(f"x1 (from dc3) for {orig_basis1}: {opt_params['x1']}")
+        print(f"x2 (from dc3) for {orig_basis2}: {opt_params['x2']}")
+        print(f"x1_hf (from hf) for {orig_basis1}: {opt_params['x1_hf']}")
+        print(f"x2_hf (from hf) for {orig_basis2}: {opt_params['x2_hf']}")
+        if missing:
+            print("⚠️ WARNING: Some values were missing and defaults were used.")
+        print("="*60 + "\n")
+
+        # Write summary into output file
+        with output_file.open("a") as f:
+            f.write("="*60 + "\n")
+            f.write(" BASIS SETS SUMMARY \n")
+            f.write("="*60 + "\n")
+            f.write(f"Original basis sets: {orig_basis1}, {orig_basis2}\n")
+            f.write(f"PySCF basis sets: {pyscf1}, {pyscf2}\n")
+            f.write(f"x1 (dc3) for {orig_basis1}: {opt_params['x1']}\n")
+            f.write(f"x2 (dc3) for {orig_basis2}: {opt_params['x2']}\n")
+            f.write(f"x1_hf (hf) for {orig_basis1}: {opt_params['x1_hf']}\n")
+            f.write(f"x2_hf (hf) for {orig_basis2}: {opt_params['x2_hf']}\n")
+            if missing:
+                f.write("NOTE: Some hierarchical values were missing; defaults were used.\n")
+            f.write("="*60 + "\n\n")
     else:
         log.debug("No OPTIMIZATION section in input file; optimizer not requested.")
 
@@ -400,7 +448,6 @@ def main() -> None:
             if callable(run_opt):
                 try:
                     log.info("Running optimizer (PySCF output suppressed)...")
-                    # suppress PySCF chatter while optimizer runs
                     with silence_output():
                         optimizer_result = run_opt(opt_params, output_file=str(output_file))
                     log.info("Optimizer finished.")
@@ -409,7 +456,7 @@ def main() -> None:
             else:
                 log.error("optimization.run_optimization(...) not found in optimization module.")
 
-        # If optimizer returned the history, write it to the results file using writer
+        # Write optimization summary to output file
         if isinstance(optimizer_result, dict):
             history = optimizer_result.get("history")
             final_params = optimizer_result.get("parameters")
@@ -422,7 +469,7 @@ def main() -> None:
                 except Exception as e:
                     log.exception("Failed writing optimization summary to results: %s", e)
 
-            # write final optimization block (keeps compatibility with writer.write_result)
+            # Write final result block in writer format for compatibility
             try:
                 writer.write_result(str(output_file), "OPTIMIZATION", {
                     "method": opt_params.get("METHOD", OPT_DEFAULTS["METHOD"]),
@@ -431,7 +478,8 @@ def main() -> None:
                 }, EHF=None, dc=None, energy=final_energy)
             except Exception:
                 pass
-    # Process remaining sections
+
+    # Process remaining scheme sections (USTE1, USTE2, USPE, TENSORIAL)
     print('='*60)
     print(" CALCULATIONS STATUS ")
     print('='*60)
@@ -459,10 +507,9 @@ def main() -> None:
             logging.getLogger(__name__).exception("Error processing section %s: %s", section_name, e)
 
         calculation_counter += 1
-
         print(f"Calculation {calculation_counter} done.")
 
-    # final summary
+    # final summary table
     try:
         writer.write_summary_table(str(output_file))
     except Exception:
@@ -474,8 +521,7 @@ def main() -> None:
         abs_path = output_file
     print('='*60)
     print(f"\nResults saved to: {abs_path}")
-
-    print('=' * 60)
+    print('='*60)
 
 
 if __name__ == "__main__":
