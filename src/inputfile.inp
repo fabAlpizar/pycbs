@@ -1,0 +1,111 @@
+# pyCBS input file
+[Calculation1]
+scheme = USTE1
+method = MP2
+basis1 = VDZ
+basis2 = VTZ
+HF1 = -78.59958733
+HF2 = -78.62321616
+E1 = -78.87185782
+E2 = -78.95918649
+
+[Calculation2]
+scheme = USTE1
+method = MP2
+basis1 = VDZ
+basis2 = VTZ
+HF1 = -79.23491656 
+HF2 = -79.25988532
+E1 = -79.53686865
+E2 = -79.62988995
+
+[Calculation3]
+scheme = USTE1
+method = MP2
+basis1 = VDZ
+basis2 = VTZ
+HF1 = -117.63645000  
+HF2 = -117.67049230  
+E1 = -118.051348
+E2 = -118.1801621
+
+[Calculation4]
+scheme = USTE1
+method = MP2
+basis1 = VDZ
+basis2 = VTZ
+HF1 = -117.56798090 
+HF2 = -117.60429500
+E1 = -117.9911766
+E2 = -118.1228369
+
+[Calculation5]
+scheme = USTE1
+method = MP2
+basis1 = VDZ
+basis2 = VTZ
+HF1 = -193.97377210
+HF2 = -194.02706250
+E1 = -194.6513742
+E2 = -194.8527869
+
+[Calculation6]
+scheme = USTE1
+method = MP2+CCSD(T)
+basis1 = AVDZ
+basis2 = AVTZ
+HF1 = -78.60251520 
+HF2 = -78.60251520
+E1 = -78.88569021
+E2 = -78.94325465
+
+[Calculation7]
+scheme = USTE1
+method = MP2+CCSD(T)
+basis1 = AVDZ
+basis2 = AVTZ
+HF1 = -79.23726993
+HF2 = -79.26032990
+E1 = -79.55062455
+E2 = -79.63536045
+
+[Calculation8]
+scheme = USTE1
+method = MP2+CCSD(T)
+basis1 = AVDZ
+basis2 = AVTZ
+HF1 = -117.64092090
+HF2 = -117.67132780
+E1 = -118.0720693 
+E2 = -118.1884559
+
+[Calculation9]
+scheme = USTE1
+method = MP2+CCSD(T)
+basis1 = AVDZ
+basis2 = AVTZ
+HF1 = -117.57354730
+HF2 = -117.60550570
+E1 = -118.0154041  
+E2 = -118.1319596
+
+[Calculation10]
+scheme = USTE1
+method = MP2+CCSD(T)
+basis1 = AVDZ
+basis2 = AVTZ
+HF1 = -193.98055150 
+HF2 = -194.02873540
+E1 = -194.6837249
+E2 = -194.866366
+
+[OPTIMIZATION]
+optimization = True
+init_parameters = 0.96654,103.93761
+basis_sets = VDZ, VTZ
+METHOD = CCSD(T)
+beta = 1.62
+maxcycle = 20
+energy_criterion = 1e-8
+fac_mult = 0.05
+cut = 0.75
