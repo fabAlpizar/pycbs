@@ -77,7 +77,6 @@ For questions, feature requests, or bug reports, please open an issue at:
 
 
 
-```
 
 <!-- pyscaffold-notes -->
 
