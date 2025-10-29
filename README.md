@@ -10,6 +10,9 @@
 -->
 
 
+<p align="">
+  <img src="./images/img.png" width="110" alt="pycbs logo">
+</p>
 
 # pyCBS
 
