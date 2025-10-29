@@ -11,7 +11,7 @@
 
 
 <p align="">
-  <img src="./images/img.png" width="110" alt="pycbs logo">
+  <img src="images/img.png" width="110" alt="pycbs logo">
 </p>
 
 # pyCBS
@@ -38,29 +38,24 @@
 In order to set up the necessary environment:
 
 
-1. Create a conda environment for pyCBS:
-   ```
-   conda create -n pyCBS python=3.10
-   ```
->**_Note:_** You can change the Python version if needed
-2. Activate the new environment with:
-   ```
-   conda activate pyCBS
-   ```
-3. Clone this repo into the environment:
+1. Clone this repository:
    ```
    git clone https://github.com/fabAlpizar/pyCBS
    cd pyCBS
    ```
-4. Review and uncomment what you need in `environment.yml` and create an environment `pyCBS` with the help of [conda]:
-   ```
-   conda env update -f environment.yml
-   ```
-   _(or if you didn't create the environment yet:)_
+2. Create the new environment with:
    ```
    conda env create -f environment.yml
-
    ```
+3. Activate the new environment with: 
+   ```
+   conda activate pyCBS
+   ```
+4. (Optional) If you modify code or configuration files and want changes to take effect, reinstall in editable mode:
+   ```
+   pip install -e.
+   ```
+   
    
 
 
