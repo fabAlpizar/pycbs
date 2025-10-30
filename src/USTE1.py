@@ -22,31 +22,31 @@ def dictionaries(metodo, basis1, basis2):
 
     return hf, dic_correlacion
 
-# Correlation frequency calculation function
-def correlation_frequency(HF1, HF2, F1, F2):
+# Correlation energy calculation function
+def correlation_energy(HF1, HF2, E1, E2):
     """Calculate the correlation energy."""
-    correlation_frequency1 = F1 - HF1
-    correlation_frequency2 = F2 - HF2
-    return correlation_frequency1, correlation_frequency2
+    correlation_energy1 = E1 - HF1
+    correlation_energy2 = E2 - HF2
+    return correlation_energy1, correlation_energy2
 
-# Hartree-Fock extrapolation function 
-def hartree_fock_frequency(HF1, HF2, basis1, basis2):
+# Hartree-Fock extrapolation function
+def hartree_fock_energy(HF1, HF2, basis1, basis2):
     """Calculate the static correlation."""
     EHF = (HF1 * math.exp(2.284 * hf[basis1]) - HF2 * math.exp(2.284 * hf[basis2])) / \
           (math.exp(2.284 * hf[basis1]) - math.exp(2.284 * hf[basis2]))
     return EHF
 
 # Dynamic correlation calculation function
-def dynamic_correlation_frequency(Fcr1, Fcr2, dic_correlacion, basis1, basis2):
+def dynamic_correlation_energy(Ecr1, Ecr2, dic_correlacion, basis1, basis2):
     """Calculate the dynamic correlation."""
-    dc = Fcr2 + ((dic_correlacion[basis2] ** (-3)) / ((dic_correlacion[basis1] ** (-3)) - (dic_correlacion[basis2] ** (-3)))) * (Fcr2 - Fcr1)
+    dc = Ecr2 + ((dic_correlacion[basis2] ** (-3)) / ((dic_correlacion[basis1] ** (-3)) - (dic_correlacion[basis2] ** (-3)))) * (Ecr2 - Ecr1)
     return dc
 
 # CBS extrapolation calculation function
-def CBS_extrapolation(HF1, HF2, Fcr1, Fcr2, dic_correlacion, basis1, basis2):
+def CBS_extrapolation(HF1, HF2, Ecr1, Ecr2, dic_correlacion, basis1, basis2):
     """Calculate the CBS extrapolation energy."""
-    EHF = hartree_fock_frequency(HF1, HF2, basis1, basis2)
-    dc = dynamic_correlation_frequency(Fcr1, Fcr2, dic_correlacion, basis1, basis2)
+    EHF = hartree_fock_energy(HF1, HF2, basis1, basis2)
+    dc = dynamic_correlation_energy(Ecr1, Ecr2, dic_correlacion, basis1, basis2)
     CBS = EHF + dc
     return EHF, dc, CBS
 
