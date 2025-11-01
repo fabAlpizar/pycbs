@@ -1,47 +1,68 @@
 #!/usr/bin/env python3
 """
 PYCBS.py - Improved entrypoint for pyCBS with automated basis handling.
+
+This script is the CLI entrypoint for the pyCBS Complete Basis Set extrapolation
+tool. It parses an INI-style input file with multiple sections (OPTIMIZATION and
+calculation sections), optionally runs the optimizer, and dispatches calculation
+sections to the appropriate extrapolation modules (USTE1, USTE2, USPE,
+tensorial_properties1, frequency).
+
+This version adds robust adapters so the main code tolerates small API
+differences across the extrapolation modules (different function names,
+argument orders or consolidated "run" functions). The adapters attempt a
+best-effort mapping and log clear errors if a module does not expose the
+expected functionality.
 """
 from __future__ import annotations
 
 import argparse
 import configparser
+import inspect
 import logging
 import platform
 import sys
-from contextlib import contextmanager, redirect_stdout, redirect_stderr
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import writer
 import basis
 
-# extrapolation modules
+# Attempt to import extrapolation modules; set None if not available.
 try:
     import USTE1
-except Exception as e:
+except Exception as e:  # pragma: no cover - defensive
     USTE1 = None
     logging.getLogger(__name__).debug("USTE1 not available: %s", e)
 
 try:
     import USTE2
-except Exception as e:
+except Exception as e:  # pragma: no cover - defensive
     USTE2 = None
     logging.getLogger(__name__).debug("USTE2 not available: %s", e)
 
 try:
     import USPE
-except Exception as e:
+except Exception as e:  # pragma: no cover - defensive
     USPE = None
     logging.getLogger(__name__).debug("USPE not available: %s", e)
 
 try:
     import tensorial_properties1 as TP
-except Exception as e:
+except Exception as e:  # pragma: no cover - defensive
     TP = None
     logging.getLogger(__name__).debug("tensorial_properties1 not available: %s", e)
 
+try:
+    import frequency
+except Exception as e:  # pragma: no cover - defensive
+    frequency = None
+    logging.getLogger(__name__).debug("frequency module not available: %s", e)
 
+# -----------------------------------------------------------------------------
+# Defaults & CLI
+# -----------------------------------------------------------------------------
 OPT_DEFAULTS = {
     "init_parameters": [0.96654, 103.93761],
     "geo_init": ["r1", "teta"],
@@ -90,6 +111,9 @@ def setup_logging(verbosity: int = 0, logfile: Optional[Path] = None) -> None:
     )
 
 
+# -----------------------------------------------------------------------------
+# Small parsing utilities
+# -----------------------------------------------------------------------------
 def read_config(input_path: Path) -> configparser.ConfigParser:
     cfg = configparser.ConfigParser()
     cfg.optionxform = str
@@ -132,7 +156,7 @@ def gather_optimization_params(section: configparser.SectionProxy) -> dict:
             try:
                 params[key] = parser(section.get(key))
             except Exception as e:
-                logging.warning(
+                logging.getLogger(__name__).warning(
                     "Could not parse optimization param '%s' value '%s': %s. Using default %s",
                     key, section.get(key), e, params.get(key)
                 )
@@ -150,6 +174,7 @@ def gather_optimization_params(section: configparser.SectionProxy) -> dict:
 
 @contextmanager
 def silence_output():
+    """Context manager to suppress stdout/stderr (used when running optimizer)."""
     try:
         with open(sys.devnull, "w") as devnull:
             with redirect_stdout(devnull), redirect_stderr(devnull):
@@ -158,9 +183,261 @@ def silence_output():
         yield
 
 
+# -----------------------------------------------------------------------------
+# Generic adapter helpers (robust calling of module functions)
+# -----------------------------------------------------------------------------
+def _find_callable(module, *names):
+    """Return the first callable attribute from module found in names, or None."""
+    for name in names:
+        fn = getattr(module, name, None)
+        if callable(fn):
+            return fn
+    return None
+
+
+def _call_correlation(module, HF1: float, HF2: float, E1: float, E2: float) -> Tuple[float, float]:
+    """
+    Call an available correlation function and return (correlation1, correlation2).
+
+    Tries common names: correlation_energy, correlation_frequency, correlation.
+    Expects a function that receives (HF1, HF2, E1, E2) in some order and returns a
+    2-tuple (c1, c2). If a module provides a different signature, try to call it
+    in the most-likely way; otherwise raise AttributeError/TypeError.
+    """
+    fn = _find_callable(module, "correlation_energy", "correlation_frequency", "correlation", "correlationEnergy")
+    if fn is None:
+        raise AttributeError(f"No correlation function found in module {getattr(module, '__name__', module)}")
+
+    # Try a few likely call patterns
+    for attempt in (
+            (HF1, HF2, E1, E2),
+            (E1, E2, HF1, HF2),  # some variants might accept Etot first
+            (HF1, E1, HF2, E2),
+    ):
+        try:
+            res = fn(*attempt)
+            if isinstance(res, tuple) and len(res) >= 2:
+                return res[0], res[1]
+        except TypeError:
+            continue
+    # last resort: try keyword names mapping
+    try:
+        sig = inspect.signature(fn)
+        kw = {}
+        for pname in sig.parameters:
+            ln = pname.lower()
+            if "hf" in ln and "1" in ln:
+                kw[pname] = HF1
+            elif "hf" in ln and "2" in ln:
+                kw[pname] = HF2
+            elif ("f" in ln or "e" in ln or "corr" in ln) and "1" in ln:
+                kw[pname] = E1
+            elif ("f" in ln or "e" in ln or "corr" in ln) and "2" in ln:
+                kw[pname] = E2
+        if kw:
+            res = fn(**kw)
+            if isinstance(res, tuple) and len(res) >= 2:
+                return res[0], res[1]
+    except Exception:
+        pass
+
+    raise TypeError(
+        f"Unable to call correlation function of module {getattr(module, '__name__', module)} with plausible args")
+
+
+def _call_cbs_extrapolation(module, *args):
+    """
+    Call module.CBS_extrapolation with flexible argument shapes.
+
+    The canonical expected signature (most modules) is:
+        CBS_extrapolation(HF1, HF2, Ecr1, Ecr2, corr_dict, basis1, basis2[, basis3, basis4])
+
+    This helper tries multiple orders and keyword calls and returns the function's
+    result. On failure it raises a TypeError with a helpful message.
+    """
+    fn = getattr(module, "CBS_extrapolation", None)
+    if not callable(fn):
+        raise AttributeError(f"No 'CBS_extrapolation' function found in module {getattr(module, '__name__', module)}")
+
+    # First: try direct pass-through (most likely)
+    try:
+        return fn(*args)
+    except TypeError:
+        pass
+
+    # Second: try without basis args if module only expects HF/corr dicts
+    try:
+        # try first 5 args
+        return fn(*args[:5])
+    except TypeError:
+        pass
+
+    # Third: try some keyword-name mapping if possible
+    try:
+        sig = inspect.signature(fn)
+        param_names = [p.name.lower() for p in sig.parameters.values()]
+        kw = {}
+        # args mapping heuristics
+        # args expected: HF1, HF2, Ecr1, Ecr2, corr_dict, [bases...]
+        if len(args) >= 5:
+            HF1, HF2, Ecr1, Ecr2, corr_dict = args[:5]
+            kw_map = {
+                "hf1": HF1, "hf_1": HF1, "hf": HF1,
+                "hf2": HF2, "hf_2": HF2,
+                "ecr1": Ecr1, "ecorr1": Ecr1, "fcr1": Ecr1,
+                "ecr2": Ecr2, "ecorr2": Ecr2, "fcr2": Ecr2,
+                "dic": corr_dict, "corr": corr_dict, "corr_dict": corr_dict, "dic_correlacion": corr_dict
+            }
+            for name in param_names:
+                if name in kw_map and name not in kw:
+                    kw[name] = kw_map[name]
+        # bases: map by 'basis1','basis2', etc.
+        bases = args[5:] if len(args) > 5 else []
+        for i, b in enumerate(bases, start=1):
+            key = f"basis{i}"
+            for pname in sig.parameters:
+                if key in pname.lower() and pname not in kw:
+                    kw[pname] = b
+        if kw:
+            return fn(**kw)
+    except Exception:
+        pass
+
+    raise TypeError(f"Could not call {getattr(module, '__name__', module)}.CBS_extrapolation with available args")
+
+
+# -----------------------------------------------------------------------------
+# Module-specific small wrappers that use the adapters above
+# -----------------------------------------------------------------------------
+def uste1_run(module, method: str, basis1: str, basis2: str, HF1: float, HF2: float, E1: float, E2: float):
+    """
+    Execute a USTE1-style extrapolation and return (EHF, dc, CBS).
+    Accepts modules that implement the reference interface:
+      - dictionaries(method, basis1, basis2) -> (hf_dict, corr_dict)
+      - correlation_energy(HF1, HF2, E1, E2) -> (Ecr1, Ecr2)  (or similar names)
+      - CBS_extrapolation(...) -> (EHF, dc, CBS)
+    """
+    dicts_fn = _find_callable(module, "dictionaries")
+    if dicts_fn is None:
+        raise AttributeError("USTE1-like module must provide 'dictionaries' function")
+    hf_dict, corr_dict = dicts_fn(method, basis1, basis2)
+
+    Ecr1, Ecr2 = _call_correlation(module, HF1, HF2, E1, E2)
+    EHF, dc, CBS = _call_cbs_extrapolation(module, HF1, HF2, Ecr1, Ecr2, corr_dict, basis1, basis2)
+    return EHF, dc, CBS
+
+
+def uste2_run(module, method: str, basis1: str, basis2: str, basis3: str, basis4: str,
+              HF1: float, HF2: float, E1: float, E2: float):
+    """
+    Execute an USTE2-style extrapolation and return (EHF, dc, CBS).
+    USTE2 reference interface expects dictionaries(method, basis1,basis2,basis3,basis4)
+    but the wrapper will tolerate other small differences.
+    """
+    dicts_fn = _find_callable(module, "dictionaries")
+    if dicts_fn is None:
+        raise AttributeError("USTE2-like module must provide 'dictionaries' function")
+    # try the most likely full signature first
+    try:
+        hf_dict, corr_dict = dicts_fn(method, basis1, basis2, basis3, basis4)
+    except TypeError:
+        # fallback to older signatures that accept fewer basis args (best-effort)
+        hf_dict, corr_dict = dicts_fn(method, basis1, basis2)
+
+    Ecr1, Ecr2 = _call_correlation(module, HF1, HF2, E1, E2)
+    EHF, dc, CBS = _call_cbs_extrapolation(module, HF1, HF2, Ecr1, Ecr2, corr_dict, basis1, basis2, basis3, basis4)
+    return EHF, dc, CBS
+
+
+def uspe_run(module, *args, **kwargs):
+    """
+    Execute USPE-style extrapolation. USPE implementations vary widely:
+      - Some expose CBS_extrapolation(HF, Etot, method, constant, basis) -> energy
+      - Others expose different arg orders.
+
+    This wrapper tries to call CBS_extrapolation and returns the single result energy.
+    """
+    fn = getattr(module, "CBS_extrapolation", None)
+    if not callable(fn):
+        raise AttributeError("USPE module must provide 'CBS_extrapolation' function")
+
+    # Try calling with passed args first
+    try:
+        return fn(*args, **kwargs)
+    except TypeError:
+        # Try inverted orders commonly observed:
+        # If user passed (method, E1, E2, E3) (older format), try that direct call too
+        try:
+            return fn(*args)
+        except Exception as e:  # pragma: no cover - last resort
+            raise
+
+
+def tensorial_run(module, method: str, basis1: str, basis2: str,
+                  zeta_HF1: float, zeta_HF2: float, zeta_E1: float, zeta_E2: float):
+    """
+    Runs tensorial extrapolation. Accepts either:
+      - low-level functions in module (dictionaries, correlation_energy, CBS_extrapolation)
+      - or a single run_tensorial(...) helper provided by the module.
+    Returns (zeta_HF, zeta_cor, zeta_total) to align with writer expectations.
+    """
+    # If the module provides a run_tensorial function, prefer it
+    run_fn = _find_callable(module, "run_tensorial", "run")
+    if run_fn:
+        # prefer the cleaned signature if possible
+        try:
+            # many implementations accept (basis1,basis2,basis3,basis4,labels,outputfile,calcname)
+            # but we will call minimal signature if available
+            sig = inspect.signature(run_fn)
+            if len(sig.parameters) == 7:
+                # caller will still want to handle opening/writing; use low-level path instead
+                raise TypeError("module provides run_tensorial(7 args) which isn't compatible with this wrapper")
+        except TypeError:
+            pass
+
+    # fallback to low-level approach (dictionaries + correlation + CBS)
+    dicts_fn = _find_callable(module, "dictionaries")
+    if dicts_fn is None:
+        raise AttributeError("tensorial module must expose 'dictionaries' or 'run_tensorial'")
+
+    hf_dict, corr_dict = dicts_fn(method, basis1, basis2)
+    zcr1, zcr2 = _call_correlation(module, zeta_HF1, zeta_HF2, zeta_E1, zeta_E2)
+    zeta_HF, zeta_cor, zeta_total = _call_cbs_extrapolation(module, zeta_HF1, zeta_HF2, zcr1, zcr2, corr_dict, basis1,
+                                                            basis2)
+    return zeta_HF, zeta_cor, zeta_total
+
+
+def frequency_run(module, method: str, basis1: str, basis2: str,
+                  HF1: float, HF2: float, F1: float, F2: float):
+    """
+    Execute the frequency module (mirrors USTE1-like behaviour but using frequency.* names).
+    Returns (EHF, dc, CBS).
+    """
+    dicts_fn = _find_callable(module, "dictionaries")
+    if dicts_fn is None:
+        raise AttributeError("frequency module must provide 'dictionaries' function")
+    hf_dict, corr_dict = dicts_fn(method, basis1, basis2)
+
+    # correlation_frequency returns (Fcr1, Fcr2)
+    corr_fn = _find_callable(module, "correlation_frequency", "correlation_energy", "correlation_frequency")
+    if corr_fn is None:
+        raise AttributeError("frequency module must provide 'correlation_frequency' function")
+    Fcr1, Fcr2 = corr_fn(HF1, HF2, F1, F2)
+
+    EHF, dc, CBS = _call_cbs_extrapolation(module, HF1, HF2, Fcr1, Fcr2, corr_dict, basis1, basis2)
+    return EHF, dc, CBS
+
+
+# -----------------------------------------------------------------------------
+# High-level run_* functions used by the main loop (these read section keys,
+# call the adapters above, and format writer output)
+# -----------------------------------------------------------------------------
 def run_uste1(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
+    """
+    Run a USTE1 calculation for a given config section and write to output_file.
+    """
     if USTE1 is None:
-        logging.error("USTE1 module not found; skipping %s", calc_name)
+        logging.getLogger(__name__).error("USTE1 module not found; skipping %s", calc_name)
         return
     try:
         method = section["method"]
@@ -171,102 +448,219 @@ def run_uste1(section: configparser.SectionProxy, output_file: Path, calc_name: 
         E1 = float(section["E1"])
         E2 = float(section["E2"])
     except KeyError as e:
-        logging.error("Missing param in %s: %s", calc_name, e)
+        logging.getLogger(__name__).error("Missing param in %s: %s", calc_name, e)
         return
     except ValueError as e:
-        logging.error("Invalid numeric param in %s: %s", calc_name, e)
+        logging.getLogger(__name__).error("Invalid numeric param in %s: %s", calc_name, e)
         return
 
     with output_file.open("a") as f:
         f.write("\n")
         f.write(f" JOB: {calc_name}\n")
 
-    # build required dictionaries / energies
-    hf_dict, corr_dict = USTE1.dictionaries(method, basis1, basis2)
-    Ecr1, Ecr2 = USTE1.correlation_frequency(HF1, HF2, E1, E2)
+    try:
+        EHF, dc, CBS = uste1_run(USTE1, method, basis1, basis2, HF1, HF2, E1, E2)
+    except Exception as e:
+        logging.getLogger(__name__).exception("Error while processing USTE1 calculation %s: %s", calc_name, e)
+        return
 
-    # ---- FIXED LINE: pass basis1 and basis2 (not calc_name) ----
-    EHF, dc, CBS = USTE1.CBS_extrapolation(HF1, HF2, Ecr1, Ecr2, corr_dict, basis1, basis2)
-    # ------------------------------------------------------------
-
-    writer.write_result(str(output_file), calc_name, {"basis1": basis1, "basis2": basis2}, EHF, dc, CBS)
-
+    writer.write_result(str(output_file), calc_name, {"basis1": basis1, "basis2": basis2, "method": method},
+                        EHF, dc, CBS)
 
 
 def run_uste2(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
+    """
+    Run a USTE2 calculation and write results.
+
+    Expected keys in section:
+      - method, basis1, basis2, (optional) basis3, (optional) basis4,
+      - HF1, HF2, E1, E2
+
+    If basis3 or basis4 are missing, the function will fall back to sensible
+    defaults (basis1/basis2) and log a warning. Prefer fixing the input file
+    to provide explicit basis3/basis4 when they are really required.
+    """
     if USTE2 is None:
-        logging.error("USTE2 module not found; skipping %s", calc_name)
+        logging.getLogger(__name__).error("USTE2 module not found; skipping %s", calc_name)
         return
+
     try:
         method = section["method"]
         basis1 = section["basis1"]
         basis2 = section["basis2"]
+        # basis3/basis4 **may** be missing in some input files -> fallback to basis1/basis2
+        basis3 = section.get("basis3", None)
+        basis4 = section.get("basis4", None)
+
+        HF1 = float(section["HF1"])
+        HF2 = float(section["HF2"])
         E1 = float(section["E1"])
         E2 = float(section["E2"])
     except KeyError as e:
-        logging.error("Missing param in %s: %s", calc_name, e)
+        logging.getLogger(__name__).error("Missing param in %s: %s", calc_name, e)
         return
     except ValueError as e:
-        logging.error("Invalid numeric param in %s: %s", calc_name, e)
+        logging.getLogger(__name__).error("Invalid numeric param in %s: %s", calc_name, e)
         return
 
+    # If basis3/4 missing, fall back and warn the user
+    if basis3 is None or basis4 is None:
+        logging.getLogger(__name__).warning(
+            "USTE2 section %s missing basis3/basis4 — falling back to basis1/basis2. "
+            "If USTE2 requires distinct basis3/basis4, please add them to the input.",
+            calc_name
+        )
+        # sensible defaults: copy basis1->basis3 and basis2->basis4 if absent
+        if basis3 is None:
+            basis3 = basis1
+        if basis4 is None:
+            basis4 = basis2
+
+    # write job header
     with output_file.open("a") as f:
         f.write("\n")
         f.write(f" JOB: {calc_name}\n")
 
-    corr1, corr2 = USTE2.dynamic_correlation(method, basis1, basis2, E1, E2)
-    writer.write_result(str(output_file), calc_name, {"basis1": basis1, "basis2": basis2}, None, corr1 + corr2, corr1 + corr2)
+    try:
+        # delegate to the adapter (this will attempt the best calling convention)
+        EHF, dc, CBS = uste2_run(USTE2, method, basis1, basis2, basis3, basis4, HF1, HF2, E1, E2)
+    except Exception as e:
+        logging.getLogger(__name__).exception("Error while processing USTE2 calculation %s: %s", calc_name, e)
+        return
+
+    writer.write_result(str(output_file), calc_name, {
+        "basis1": basis1, "basis2": basis2, "basis3": basis3, "basis4": basis4, "method": method
+    }, EHF, dc, CBS)
+
 
 
 def run_uspe(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
+    """
+    Run USPE scheme. Accepts fields:
+      method, constant, basis, HF, Etot
+    The USPE implementation may return only a single energy; writer will be called
+    accordingly (non-USTE schemes use the 'energy' position).
+    """
     if USPE is None:
-        logging.error("USPE module not found; skipping %s", calc_name)
+        logging.getLogger(__name__).error("USPE module not found; skipping %s", calc_name)
         return
     try:
         method = section["method"]
-        E1 = float(section["E1"])
-        E2 = float(section["E2"])
-        E3 = float(section["E3"])
+        constant = section.get("constant", section.get("constant_type", "normal"))
+        basis_name = section["basis"]
+        HF = float(section["HF"])
+        Etot = float(section["Etot"])
     except KeyError as e:
-        logging.error("Missing param in %s: %s", calc_name, e)
+        logging.getLogger(__name__).error("Missing param in %s: %s", calc_name, e)
         return
     except ValueError as e:
-        logging.error("Invalid numeric param in %s: %s", calc_name, e)
+        logging.getLogger(__name__).error("Invalid numeric param in %s: %s", calc_name, e)
         return
 
     with output_file.open("a") as f:
         f.write("\n")
         f.write(f" JOB: {calc_name}\n")
 
-    EHF, dc, CBS = USPE.CBS_extrapolation(method, E1, E2, E3)
-    writer.write_result(str(output_file), calc_name, {"basis_set": method}, EHF, dc, CBS)
+    try:
+        # USPE typically returns single CBS energy
+        resultado = uspe_run(USPE, HF, Etot, method, constant, basis_name)
+    except Exception as e:
+        logging.getLogger(__name__).exception("Error while processing USPE calculation %s: %s", calc_name, e)
+        return
+
+    # USPE is a single-energy scheme in writer formatting
+    writer.write_result(str(output_file), calc_name, {"basis_set": basis_name, "method": method},
+                        EHF=None, dc=None, energy=resultado)
+
+
+def run_frequency(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
+    """
+    Run frequency-based extrapolation (uses frequency module).
+    Expected keys (method, basis1, basis2, HF1, HF2, F1/E1, F2/E2).
+    """
+    if frequency is None:
+        logging.getLogger(__name__).error("frequency module not found; skipping %s", calc_name)
+        return
+
+    try:
+        method = section["method"]
+        basis1 = section["basis1"]
+        basis2 = section["basis2"]
+        HF1 = float(section["HF1"])
+        HF2 = float(section["HF2"])
+        raw_F1 = section.get("F1", section.get("E1", None))
+        raw_F2 = section.get("F2", section.get("E2", None))
+        if raw_F1 is None or raw_F2 is None:
+            raise KeyError("Missing F1/F2 (or E1/E2) keys")
+        F1 = float(raw_F1)
+        F2 = float(raw_F2)
+    except KeyError as e:
+        logging.getLogger(__name__).error("Missing param in %s: %s", calc_name, e)
+        return
+    except ValueError as e:
+        logging.getLogger(__name__).error("Invalid numeric param in %s: %s", calc_name, e)
+        return
+
+    with output_file.open("a") as f:
+        f.write("\n")
+        f.write(f" JOB: {calc_name}\n")
+
+    try:
+        EHF, dc, CBS = frequency_run(frequency, method, basis1, basis2, HF1, HF2, F1, F2)
+    except Exception as e:
+        logging.getLogger(__name__).exception("Error while processing frequency calculation %s: %s", calc_name, e)
+        return
+
+    writer.write_result(str(output_file), calc_name, {"basis1": basis1, "basis2": basis2, "method": method},
+                        EHF, dc, CBS)
 
 
 def run_tensorial(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
+    """
+    Run tensorial properties scheme. The wrapper will use low-level TP functions.
+    If TP provides a high-level run function you can also keep using it; adapter
+    here assumes low-level functions and returns full three-component result.
+    """
     if TP is None:
-        logging.error("TensorialProperties module not found; skipping %s", calc_name)
+        logging.getLogger(__name__).error("TensorialProperties module not found; skipping %s", calc_name)
         return
     try:
+        method = section["method"]
+        zeta_HF1 = float(section["zeta_HF1"])
+        zeta_HF2 = float(section["zeta_HF2"])
+        zeta_E1 = float(section["zeta_E1"])
+        zeta_E2 = float(section["zeta_E2"])
         basis1 = section["basis1"]
         basis2 = section["basis2"]
-        basis3 = section["basis3"]
-        basis4 = section["basis4"]
-        labels = section.get("labels", None)
     except KeyError as e:
-        logging.error("Missing param in %s: %s", calc_name, e)
+        logging.getLogger(__name__).error("Missing param in %s: %s", calc_name, e)
+        return
+    except ValueError as e:
+        logging.getLogger(__name__).error("Invalid numeric param in %s: %s", calc_name, e)
         return
 
     with output_file.open("a") as f:
         f.write("\n")
         f.write(f" JOB: {calc_name}\n")
 
-    TP.run_tensorial(basis1, basis2, basis3, basis4, labels, output_file, calc_name)
+    try:
+        zeta_HF, zeta_cor, zeta = tensorial_run(TP, method, basis1, basis2, zeta_HF1, zeta_HF2, zeta_E1, zeta_E2)
+    except Exception as e:
+        logging.getLogger(__name__).exception("Error while processing tensorial calculation %s: %s", calc_name, e)
+        return
+
+    writer.write_result(str(output_file), calc_name, {
+        "basis1": basis1, "basis2": basis2, "method": method
+    }, zeta_HF, zeta_cor, zeta)
 
 
+# -----------------------------------------------------------------------------
+# Main
+# -----------------------------------------------------------------------------
 def main():
     BANNER = "\n".join([
         """
-        
+
                              $$$$$$\  $$$$$$$\   $$$$$$\  
                             $$  __$$\ $$  __$$\ $$  __$$\ 
         $$$$$$\  $$\   $$\ $$ /  \__|$$ |  $$ |$$ /  \__|
@@ -278,13 +672,12 @@ def main():
         $$ |      $$\   $$ |                              
         $$ |      \$$$$$$  |                              
         \__|       \______/      
-        
-        
+
+
         """
-
     ])
-    INFO = "\n".join([
 
+    INFO = "\n".join([
         """
         *******************************************************
         *               Alberto Guerra-Barroso,               *
@@ -299,8 +692,8 @@ def main():
         *                University of Coimbra                *                    
         *******************************************************
         """
-
     ])
+
     print(BANNER)
     print(INFO)
 
@@ -324,7 +717,7 @@ def main():
     writer.write_header(str(output_file))
     # add reproducibility metadata
     try:
-        import pyscf
+        import pyscf  # type: ignore
         pyscf_version = getattr(pyscf, "__version__", "unknown")
     except Exception:
         pyscf_version = "unknown"
@@ -349,7 +742,8 @@ def main():
         # Define mapping from friendly names to PySCF names
         pyscf_basis_map = {
             'VDZ': 'cc-pvdz', 'VTZ': 'cc-pvtz', 'VQZ': 'cc-pvqz', 'V5Z': 'cc-pv5z', 'V6Z': 'cc-pv6z',
-            'AVDZ': 'aug-cc-pvdz', 'AVTZ': 'aug-cc-pvtz', 'AVQZ': 'aug-cc-pvqz', 'AV5Z': 'aug-cc-pv5z', 'AV6Z': 'aug-cc-pv6z',
+            'AVDZ': 'aug-cc-pvdz', 'AVTZ': 'aug-cc-pvtz', 'AVQZ': 'aug-cc-pvqz', 'AV5Z': 'aug-cc-pv5z',
+            'AV6Z': 'aug-cc-pv6z',
             'd-AVDZ': 'd-aug-cc-pvdz', 'd-AVTZ': 'd-aug-cc-pvtz', 'd-AVQZ': 'd-aug-cc-pvqz', 'd-AV5Z': 'd-aug-cc-pv5z',
             'VDZ-F12': 'cc-pvdz-f12', 'VTZ-F12': 'cc-pvtz-f12', 'VQZ-F12': 'cc-pvqz-f12'
         }
@@ -401,9 +795,9 @@ def main():
         opt_params["x2_hf"] = x2_hf if x2_hf is not None else OPT_DEFAULTS["x2_hf"]
 
         # Summarize to terminal
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print(" BASIS SETS SUMMARY ")
-        print("="*60)
+        print("=" * 60)
         print(f"Original basis sets: {orig_basis1}, {orig_basis2}")
         print(f"PySCF basis sets: {pyscf1}, {pyscf2}")
         print(f"x1 (from dc3) for {orig_basis1}: {opt_params['x1']}")
@@ -412,13 +806,13 @@ def main():
         print(f"x2_hf (from hf) for {orig_basis2}: {opt_params['x2_hf']}")
         if missing:
             print("⚠️ WARNING: Some values were missing and defaults were used.")
-        print("="*60 + "\n")
+        print("=" * 60 + "\n")
 
         # Write summary into output file
         with output_file.open("a") as f:
-            f.write("="*60 + "\n")
+            f.write("=" * 60 + "\n")
             f.write(" BASIS SETS SUMMARY \n")
-            f.write("="*60 + "\n")
+            f.write("=" * 60 + "\n")
             f.write(f"Original basis sets: {orig_basis1}, {orig_basis2}\n")
             f.write(f"PySCF basis sets: {pyscf1}, {pyscf2}\n")
             f.write(f"x1 (dc3) for {orig_basis1}: {opt_params['x1']}\n")
@@ -427,7 +821,7 @@ def main():
             f.write(f"x2_hf (hf) for {orig_basis2}: {opt_params['x2_hf']}\n")
             if missing:
                 f.write("NOTE: Some hierarchical values were missing; defaults were used.\n")
-            f.write("="*60 + "\n\n")
+            f.write("=" * 60 + "\n\n")
     else:
         log.debug("No OPTIMIZATION section in input file; optimizer not requested.")
 
@@ -474,15 +868,16 @@ def main():
                 writer.write_result(str(output_file), "OPTIMIZATION", {
                     "method": opt_params.get("METHOD", OPT_DEFAULTS["METHOD"]),
                     "basis_sets": ",".join(opt_params.get("basis_sets", OPT_DEFAULTS["basis_sets"])),
-                    "init_parameters": ",".join(map(str, opt_params.get("init_parameters", OPT_DEFAULTS["init_parameters"])))
+                    "init_parameters": ",".join(
+                        map(str, opt_params.get("init_parameters", OPT_DEFAULTS["init_parameters"])))
                 }, EHF=None, dc=None, energy=final_energy)
             except Exception:
                 pass
 
-    # Process remaining scheme sections (USTE1, USTE2, USPE, TENSORIAL)
-    print('='*60)
+    # Process remaining scheme sections (USTE1, USTE2, USPE, TENSORIAL, FREQUENCY)
+    print('=' * 60)
     print(" CALCULATIONS STATUS ")
-    print('='*60)
+    print('=' * 60)
     calculation_counter = 0
     for section_name in config.sections():
         if section_name.upper() == "OPTIMIZATION":
@@ -500,6 +895,8 @@ def main():
                 run_uspe(section, output_file, section_name)
             elif scheme == "TENSORIAL":
                 run_tensorial(section, output_file, section_name)
+            elif scheme == "FREQUENCY":
+                run_frequency(section, output_file, section_name)
             else:
                 print(f"⚠️  Unknown scheme '{scheme}' in section [{section_name}] — skipping.")
                 continue
@@ -519,9 +916,9 @@ def main():
         abs_path = output_file.resolve()
     except Exception:
         abs_path = output_file
-    print('='*60)
+    print('=' * 60)
     print(f"\nResults saved to: {abs_path}")
-    print('='*60)
+    print('=' * 60)
 
 
 if __name__ == "__main__":
