@@ -1,0 +1,71 @@
+[OPTIMIZATION]
+# enable optimizer (true/false), initial parameters (comma separated),
+# basis_sets (comma separated friendly names or PySCF names), and other options
+optimization = True
+init_parameters = 0.96654, 103.93761
+basis_sets = VDZ, VTZ
+METHOD = CCSD(T)
+# optional: user-provided exponents will be IGNORED by your main (it uses dictionaries)
+# workers can be overridden on CLI; this just demonstrates format
+workers = 4
+maxcycle = 30
+energy_criterion = 1e-8
+
+# --- USTE1 (two-basis extrapolation) ---
+[Calculation_uste1_example]
+scheme = USTE1
+method = CCSD(T)
+basis1 = VDZ
+basis2 = VTZ
+HF1 = -78.9          ; hartree-fock energy for basis1
+HF2 = -78.95         ; hartree-fock energy for basis2
+E1  = -79.05         ; total energy (basis1) used to compute correlation (E - HF)
+E2  = -79.06         ; total energy (basis2)
+
+# --- USTE2 (four-basis flavor). basis3/basis4 are OPTIONAL in the robust script:
+# if present USTE2 will use them; otherwise the wrapper falls back to basis1/basis2.
+[Calculation_uste2_example]
+scheme = USTE2
+method = MP2+CCSD(T)
+basis1 = VDZ
+basis2 = VTZ
+# optional additional bases used by some USTE2 implementations:
+basis3 = VQZ
+basis4 = V5Z
+HF1 = -78.9
+HF2 = -78.95
+E1  = -79.00
+E2  = -79.02
+
+# --- USPE (single-energy style) ---
+[Calculation_uspe_example]
+scheme = USPE
+method = CCSD(T)
+constant = normal         ; 'normal' or 'augmented' (wrapper accepts 'constant' or 'constant_type')
+basis = VQZ
+HF = -118.1
+Etot = -118.25
+
+# --- FREQUENCY (uses frequency module; accepts F1/F2 or E1/E2 synonyms) ---
+[Calculation_frequency_example]
+scheme = FREQUENCY
+method = CCSD(T)
+basis1 = AVDZ
+basis2 = AVTZ
+HF1 = -79.0
+HF2 = -79.05
+# frequency module accepts F1/F2; your wrapper also accepts E1/E2 as synonyms
+F1 = -79.02
+F2 = -79.04
+
+# --- TENSORIAL (zeta-based inputs) ---
+[Calculation_tensorial_example]
+scheme = TENSORIAL
+method = CCSD(T)
+basis1 = VDZ
+basis2 = VTZ
+zeta_HF1 = -78.9
+zeta_HF2 = -78.95
+zeta_E1  = -79.02
+zeta_E2  = -79.04
+labels = polarizability, hyperpolarizability    ; optional free text used by TP.run_tensorial if applicable
