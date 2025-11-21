@@ -194,6 +194,106 @@ def _find_callable(module, *names):
             return fn
     return None
 
+def _compute_dynamic_correlation_with_provider(provider,
+                                               corr_dict,
+                                               basis1: str, basis2: str,
+                                               Ecr1: float, Ecr2: float) -> float:
+    """
+    Given a provider module (USTE1/USTE2/USPE-like), try to compute the dynamic
+    correlation 'dc' in a robust way.
+
+    Strategy (in order):
+      1. If provider exposes dynamic_correlation_energy(...), try calling it with
+         common argument orders (Ecr1, Ecr2, corr_dict, basis1, basis2) and fallbacks.
+      2. If not available or calling fails, fall back to the built-in inverse-cubic
+         formula (the one you provided) using values in corr_dict for basis exponents
+         (corr_dict[basis] is expected to hold the hierarchical exponent).
+    Returns:
+      dc (float) on success, else raises a TypeError.
+    """
+    # 1) Try provider.dynamic_correlation_energy if present
+    dyn_fn = _find_callable(provider, "dynamic_correlation_energy", "dynamic_corr", "dynamic_correlation")
+    if dyn_fn is not None:
+        # Try a few calling patterns
+        attempts = [
+            (Ecr1, Ecr2, corr_dict, basis1, basis2),
+            (Ecr1, Ecr2, basis1, basis2, corr_dict),
+            (corr_dict, basis1, basis2, Ecr1, Ecr2),
+            (Ecr1, Ecr2),  # maybe provider only needs the two Ecrs and uses its internal corr_dict
+        ]
+        for args in attempts:
+            try:
+                res = dyn_fn(*args)
+                # allow either direct float return or tuple containing the dc
+                if isinstance(res, tuple):
+                    # if returns (dc, ...) take first
+                    return float(res[0])
+                else:
+                    return float(res)
+            except TypeError:
+                continue
+            except Exception:
+                # provider function raised; continue trying other patterns
+                continue
+
+    # 2) Fallback: use inverse-cubic formula if corr_dict contains numeric exponents
+    try:
+        # attempt to find the exponent-like entries for basis1/basis2
+        a1 = float(corr_dict.get(basis1, corr_dict.get(basis1.lower())))
+        a2 = float(corr_dict.get(basis2, corr_dict.get(basis2.lower())))
+        # inverse-cubic formula: dc = Ecr2 + (b2^-3 / (b1^-3 - b2^-3)) * (Ecr2 - Ecr1)
+        denom = (a1 ** -3) - (a2 ** -3)
+        if denom == 0:
+            raise ZeroDivisionError("denominator zero in inverse-cubic fallback")
+        dc = Ecr2 + ((a2 ** -3) / denom) * (Ecr2 - Ecr1)
+        return float(dc)
+    except Exception as e:
+        raise TypeError("Unable to compute dynamic correlation with provider or fallback: " + str(e))
+
+
+def _call_correlation_single(module, HF: float, Etot: float) -> float:
+    """
+    Call a provider correlation function that computes a single correlation contribution,
+    e.g. USPE-style correlation_energy(HF, Etot) -> Ecr (float).
+    Tries common names and argument orders; raises TypeError if not possible.
+    """
+    fn = _find_callable(module, "correlation_energy", "correlation", "correlation_uspe", "correlationEnergy")
+    if fn is None:
+        raise AttributeError(f"No single-value correlation function found in module {getattr(module, '__name__', module)}")
+
+    # Try a few likely call patterns
+    attempts = [
+        (HF, Etot),
+        (Etot, HF),
+    ]
+    for args in attempts:
+        try:
+            res = fn(*args)
+            return float(res)
+        except TypeError:
+            continue
+        except Exception:
+            # provider function raised; try other patterns
+            continue
+
+    # try keyword mapping if signature available
+    try:
+        sig = inspect.signature(fn)
+        kw = {}
+        for pname in sig.parameters:
+            ln = pname.lower()
+            if "hf" in ln:
+                kw[pname] = HF
+            elif "tot" in ln or "etot" in ln or "e" == ln or "energy" in ln:
+                kw[pname] = Etot
+        if kw:
+            res = fn(**kw)
+            return float(res)
+    except Exception:
+        pass
+
+    raise TypeError(f"Unable to call single-value correlation function of module {getattr(module,'__name__',module)} with plausible args")
+
 
 def _call_correlation(module, HF1: float, HF2: float, E1: float, E2: float) -> Tuple[float, float]:
     """
@@ -458,14 +558,18 @@ def run_uste1(section: configparser.SectionProxy, output_file: Path, calc_name: 
         f.write("\n")
         f.write(f" JOB: {calc_name}\n")
 
+    # after successful computation...
     try:
         EHF, dc, CBS = uste1_run(USTE1, method, basis1, basis2, HF1, HF2, E1, E2)
     except Exception as e:
         logging.getLogger(__name__).exception("Error while processing USTE1 calculation %s: %s", calc_name, e)
         return
 
-    writer.write_result(str(output_file), calc_name, {"basis1": basis1, "basis2": basis2, "method": method},
+    # Use user-provided scheme name (fallback to calc_name); show in UPPERCASE for clarity
+    scheme_label = section.get("scheme", calc_name).strip().upper()
+    writer.write_result(str(output_file), scheme_label, {"basis1": basis1, "basis2": basis2, "method": method},
                         EHF, dc, CBS)
+
 
 
 def run_uste2(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
@@ -522,15 +626,16 @@ def run_uste2(section: configparser.SectionProxy, output_file: Path, calc_name: 
         f.write(f" JOB: {calc_name}\n")
 
     try:
-        # delegate to the adapter (this will attempt the best calling convention)
         EHF, dc, CBS = uste2_run(USTE2, method, basis1, basis2, basis3, basis4, HF1, HF2, E1, E2)
     except Exception as e:
         logging.getLogger(__name__).exception("Error while processing USTE2 calculation %s: %s", calc_name, e)
         return
 
-    writer.write_result(str(output_file), calc_name, {
+    scheme_label = section.get("scheme", calc_name).strip().upper()
+    writer.write_result(str(output_file), scheme_label, {
         "basis1": basis1, "basis2": basis2, "basis3": basis3, "basis4": basis4, "method": method
     }, EHF, dc, CBS)
+
 
 
 
@@ -562,15 +667,15 @@ def run_uspe(section: configparser.SectionProxy, output_file: Path, calc_name: s
         f.write(f" JOB: {calc_name}\n")
 
     try:
-        # USPE typically returns single CBS energy
         resultado = uspe_run(USPE, HF, Etot, method, constant, basis_name)
     except Exception as e:
         logging.getLogger(__name__).exception("Error while processing USPE calculation %s: %s", calc_name, e)
         return
 
-    # USPE is a single-energy scheme in writer formatting
-    writer.write_result(str(output_file), calc_name, {"basis_set": basis_name, "method": method},
+    scheme_label = section.get("scheme", calc_name).strip().upper()
+    writer.write_result(str(output_file), scheme_label, {"basis_set": basis_name, "method": method},
                         EHF=None, dc=None, energy=resultado)
+
 
 
 def run_frequency(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
@@ -605,53 +710,198 @@ def run_frequency(section: configparser.SectionProxy, output_file: Path, calc_na
         f.write("\n")
         f.write(f" JOB: {calc_name}\n")
 
+    # CORRECT: call frequency_run (previously this incorrectly called tensorial_run)
     try:
         EHF, dc, CBS = frequency_run(frequency, method, basis1, basis2, HF1, HF2, F1, F2)
     except Exception as e:
         logging.getLogger(__name__).exception("Error while processing frequency calculation %s: %s", calc_name, e)
         return
 
-    writer.write_result(str(output_file), calc_name, {"basis1": basis1, "basis2": basis2, "method": method},
-                        EHF, dc, CBS)
+    scheme_label = section.get("scheme", calc_name).strip().upper()
+    writer.write_result(str(output_file), scheme_label, {
+        "basis1": basis1, "basis2": basis2, "method": method
+    }, EHF, dc, CBS)
 
 
-def run_tensorial(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
+
+
+# ---------- Place into PYCBS.py (replace existing run_tensorial) ----------
+def _run_tensorial_legacy(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
     """
-    Run tensorial properties scheme. The wrapper will use low-level TP functions.
-    If TP provides a high-level run function you can also keep using it; adapter
-    here assumes low-level functions and returns full three-component result.
+    Legacy in-main implementation of tensorial handling. Keeps tolerant key parsing
+    and supports both USTE (two-point) and USPE (single-point) dynamic-correlation
+    providers. This is used only as a fallback when TP.run_tensorial_from_section
+    is unavailable or fails.
     """
-    if TP is None:
-        logging.getLogger(__name__).error("TensorialProperties module not found; skipping %s", calc_name)
-        return
+    # TP must exist (checked by caller), but provider modules may be None
+    # read common inputs
     try:
         method = section["method"]
-        zeta_HF1 = float(section["zeta_HF1"])
-        zeta_HF2 = float(section["zeta_HF2"])
-        zeta_E1 = float(section["zeta_E1"])
-        zeta_E2 = float(section["zeta_E2"])
         basis1 = section["basis1"]
-        basis2 = section["basis2"]
+        basis2 = section.get("basis2", None)  # optional for single-point USPE
     except KeyError as e:
         logging.getLogger(__name__).error("Missing param in %s: %s", calc_name, e)
         return
+
+    # provider selection (USTE or USPE)
+    dc_scheme = section.get("dc_scheme", section.get("dc", "USTE1")).strip().upper()
+    provider = None
+    if dc_scheme.startswith("USTE"):
+        provider = USTE1
+    elif dc_scheme.startswith("USPE"):
+        provider = USPE
+
+    # If provider requested but not available, we'll try to use TP functions where possible.
+    if provider is None and dc_scheme.startswith("USPE"):
+        logging.getLogger(__name__).info("USPE provider not found; will attempt TP-only USPE flow.")
+
+    # Branch: USPE (single-point)
+    if dc_scheme.startswith("USPE"):
+        raw_hf = section.get("zeta_HF1", section.get("zeta_HF", None))
+        raw_e  = section.get("zeta_E1",  section.get("zeta_E", None))
+        if (raw_hf is None) or (raw_e is None):
+            logging.getLogger(__name__).error("USPE-style tensorial requires 'zeta_HF1' (or 'zeta_HF') and 'zeta_E1' (or 'zeta_E') keys for %s", calc_name)
+            return
+        try:
+            zeta_HF = float(raw_hf)
+            zeta_E  = float(raw_e)
+        except ValueError as e:
+            logging.getLogger(__name__).error("Invalid numeric param in %s: %s", calc_name, e)
+            return
+
+        # first try TP.USPE-style CBS_extrapolation if available
+        try:
+            zeta_total = _call_cbs_extrapolation(TP, zeta_HF, zeta_E, section.get("method", method),
+                                                 section.get("constant", section.get("constant_type", "normal")), basis1)
+            zeta_cor = zeta_E - zeta_HF
+        except Exception:
+            # try provider fallback (USPE module) if present
+            if provider is not None:
+                try:
+                    zeta_total = _call_cbs_extrapolation(provider, zeta_HF, zeta_E, section.get("method", method),
+                                                         section.get("constant", section.get("constant_type", "normal")), basis1)
+                    zeta_cor = zeta_E - zeta_HF
+                except Exception as e:
+                    logging.getLogger(__name__).exception("USPE-style CBS extrapolation failed for %s: %s", calc_name, e)
+                    return
+            else:
+                logging.getLogger(__name__).exception("USPE-style CBS extrapolation not available for %s (no TP or USPE provider)", calc_name)
+                return
+
+        scheme_label = section.get("scheme", calc_name).strip()
+        writer.write_result(str(output_file), scheme_label, {
+            "basis": basis1, "method": method, "dc_provider": dc_scheme,
+            "constant": section.get("constant", section.get("constant_type", "normal"))
+        }, zeta_HF, zeta_cor, zeta_total)
+        return
+
+    # Branch: USTE (two-point)
+    # require two-point keys (allow alternate key names)
+    try:
+        raw_hf1 = section.get("zeta_HF1", section.get("zeta_HF", None))
+        raw_hf2 = section.get("zeta_HF2", section.get("zeta_HF_2", None))
+        raw_e1  = section.get("zeta_E1",  section.get("zeta_E", None))
+        raw_e2  = section.get("zeta_E2",  section.get("zeta_E_2", None))
+        if raw_hf1 is None or raw_hf2 is None or raw_e1 is None or raw_e2 is None:
+            logging.getLogger(__name__).error("USTE-style tensorial requires zeta_HF1/zeta_HF2 and zeta_E1/zeta_E2 keys for %s", calc_name)
+            return
+        zeta_HF1 = float(raw_hf1); zeta_HF2 = float(raw_hf2)
+        zeta_E1 = float(raw_e1);   zeta_E2 = float(raw_e2)
     except ValueError as e:
         logging.getLogger(__name__).error("Invalid numeric param in %s: %s", calc_name, e)
         return
 
+    # Build dictionaries: prefer provider, else TP
+    corr_dict = {}
+    hf_dict = {}
+    dicts_fn = None
+    if provider is not None:
+        dicts_fn = _find_callable(provider, "dictionaries")
+    if dicts_fn is None:
+        dicts_fn = _find_callable(TP, "dictionaries")
+
+    if dicts_fn is None:
+        logging.getLogger(__name__).error("No 'dictionaries' function found in provider or TP; cannot run USTE for %s", calc_name)
+        return
+
+    try:
+        # try calling with (method, basis1, basis2)
+        hf_dict, corr_dict = dicts_fn(method, basis1, section.get("basis2", None))
+    except Exception:
+        try:
+            hf_dict, corr_dict = dicts_fn(method, basis1, basis2)
+        except Exception as e:
+            logging.getLogger(__name__).exception("dictionaries(...) call failed for %s: %s", calc_name, e)
+            return
+
+    # compute per-basis correlation contributions (Ecr1, Ecr2) using provider then TP
+    try:
+        Ecr1, Ecr2 = _call_correlation(provider if provider is not None else TP, zeta_HF1, zeta_HF2, zeta_E1, zeta_E2)
+    except Exception:
+        try:
+            Ecr1, Ecr2 = _call_correlation(TP, zeta_HF1, zeta_HF2, zeta_E1, zeta_E2)
+        except Exception as e:
+            logging.getLogger(__name__).exception("Unable to obtain two-point correlation contributions for %s: %s", calc_name, e)
+            return
+
+    # compute dynamic correlation via provider helper or fallback
+    try:
+        dc = _compute_dynamic_correlation_with_provider(provider if provider is not None else TP, corr_dict, basis1, basis2, Ecr1, Ecr2)
+    except Exception as e:
+        logging.getLogger(__name__).exception("Failed to compute dynamic correlation for %s: %s", calc_name, e)
+        return
+
+    # final CBS extrapolation: prefer TP, else provider
+    try:
+        zeta_HF, zeta_cor, zeta_total = _call_cbs_extrapolation(TP, zeta_HF1, zeta_HF2, Ecr1, Ecr2, corr_dict, basis1, basis2)
+    except Exception as e_tp:
+        logging.getLogger(__name__).warning("TP.CBS_extrapolation failed for %s: %s — trying provider fallback", calc_name, e_tp)
+        try:
+            zeta_HF, zeta_cor, zeta_total = _call_cbs_extrapolation(provider if provider is not None else TP, zeta_HF1, zeta_HF2, Ecr1, Ecr2, corr_dict, basis1, basis2)
+        except Exception as e_prov:
+            logging.getLogger(__name__).exception("Provider CBS_extrapolation also failed for %s: %s", calc_name, e_prov)
+            return
+
+    scheme_label = section.get("scheme", calc_name).strip()
+    writer.write_result(str(output_file), scheme_label, {
+        "basis1": basis1, "basis2": basis2, "method": method, "dc_provider": dc_scheme
+    }, zeta_HF, zeta_cor, zeta_total)
+
+
+def run_tensorial(section: configparser.SectionProxy, output_file: Path, calc_name: str) -> None:
+    """
+    Delegating run_tensorial: prefer TP.run_tensorial_from_section (module-owned parser),
+    otherwise fall back to the legacy _run_tensorial_legacy implementation above.
+    """
+    if TP is None:
+        logging.getLogger(__name__).error("TensorialProperties module not found; skipping %s", calc_name)
+        return
+
+    # write job header
     with output_file.open("a") as f:
         f.write("\n")
         f.write(f" JOB: {calc_name}\n")
 
-    try:
-        zeta_HF, zeta_cor, zeta = tensorial_run(TP, method, basis1, basis2, zeta_HF1, zeta_HF2, zeta_E1, zeta_E2)
-    except Exception as e:
-        logging.getLogger(__name__).exception("Error while processing tensorial calculation %s: %s", calc_name, e)
-        return
+    # Prefer a helper inside the module (if added). Accept either name.
+    run_helper = _find_callable(TP, "run_tensorial_from_section", "run_tensorial")
+    if run_helper:
+        try:
+            # pass a plain dict (SectionProxy works but dict is clearer)
+            zeta_HF, zeta_cor, zeta_total = run_helper(dict(section))
+            scheme_label = section.get("scheme", calc_name).strip()
+            writer.write_result(str(output_file), scheme_label, {
+                "basis1": section.get("basis1"), "method": section.get("method"),
+                "dc_provider": section.get("dc_scheme", section.get("dc", "USTE1"))
+            }, zeta_HF, zeta_cor, zeta_total)
+            return
+        except Exception as e:
+            logging.getLogger(__name__).exception("TP.run_tensorial helper failed for %s: %s — falling back to legacy", calc_name, e)
 
-    writer.write_result(str(output_file), calc_name, {
-        "basis1": basis1, "basis2": basis2, "method": method
-    }, zeta_HF, zeta_cor, zeta)
+    # fallback to legacy in-main logic
+    try:
+        _run_tensorial_legacy(section, output_file, calc_name)
+    except Exception as e:
+        logging.getLogger(__name__).exception("Fallback tensorial processing failed for %s: %s", calc_name, e)
 
 
 # -----------------------------------------------------------------------------
