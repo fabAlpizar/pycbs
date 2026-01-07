@@ -1,5 +1,5 @@
 """
-Configuration Validator:  Ensures all required parameters are present
+Configuration Validator: Ensures all required parameters are present
 """
 
 import logging
@@ -11,15 +11,10 @@ logger = logging.getLogger(__name__)
 class ConfigValidator:
     """Validates configuration sections based on scheme and method"""
 
-    # Required parameters per scheme
     REQUIRED_PARAMS = {
-        'USTE1': {
+        'USTE1':  {
             'required_all': ['scheme', 'method', 'basis1', 'basis2', 'HF1', 'HF2', 'E1', 'E2'],
-            'required_if': {
-                'MP2': [],
-                'CCSD(T)': [],
-                'MP2+CCSD(T)': [],
-            }
+            'required_if': {}
         },
         'USTE2': {
             'required_all': ['scheme', 'method', 'basis1', 'basis2', 'basis3', 'basis4', 'HF1', 'HF2', 'E1', 'E2'],
@@ -27,21 +22,63 @@ class ConfigValidator:
         },
         'USPE': {
             'required_all': ['scheme', 'method', 'basis', 'HF', 'Etot'],
-            'optional': ['constant'],
+            'optional':  ['constant'],
             'required_if': {}
         },
         'TENSORIAL': {
             'required_all': ['scheme', 'method', 'basis1', 'basis2'],
             'required_if': {
                 'USPE': ['zeta_HF1', 'zeta_E1'],
-                'USTE1': ['zeta_HF1', 'zeta_HF2', 'zeta_E1', 'zeta_E2'],
+                'USTE1':  ['zeta_HF1', 'zeta_HF2', 'zeta_E1', 'zeta_E2'],
             },
             'optional': ['dc_scheme', 'constant']
         },
         'FREQUENCY': {
             'required_all': ['scheme', 'method', 'basis1', 'basis2', 'HF1', 'HF2', 'F1', 'F2'],
             'required_if': {}
-        }
+        },
+        'FELLER': {
+            'required_all': ['scheme', 'Ehf_X', 'Ehf_Y', 'X', 'Y'],
+            'optional': ['alfa'],
+        },
+        'HF_E': {
+            'required_all': ['scheme', 'HF1', 'HF2', 'basis1', 'basis2'],
+        },
+        'TRUHLAR_HF': {
+            'required_all': ['scheme', 'Ehf_X', 'Ehf_Y', 'X', 'Y'],
+            'optional': ['alfa'],
+        },
+        'KLOPPER': {
+            'required_all': ['scheme', 'Ehf_X', 'Ehf_Y', 'X', 'Y'],
+            'optional': ['alfa'],
+        },
+        'JENSEN': {
+            'required_all': ['scheme', 'Ehf_X', 'Ehf_Y', 'X', 'Y'],
+            'optional': ['alfa'],
+        },
+        'BAKOULES': {
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y', 'X', 'Y'],
+            'optional': ['beta'],
+        },
+        'OAN': {
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y'],
+            'optional': ['beta'],
+        },
+        'TRUHLAR_CORR': {
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y', 'X', 'Y'],
+            'optional': ['beta'],
+        },
+        'MARTIN': {
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y', 'X', 'Y'],
+            'optional': ['beta'],
+        },
+        'HALKIER_HELGAKER': {
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y', 'X', 'Y'],
+        },
+        'HUH_LEE': {
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y', 'X', 'Y'],
+            'optional': ['beta'],
+        },
     }
 
     @classmethod
@@ -50,7 +87,7 @@ class ConfigValidator:
         Validate a configuration section.
 
         Args:
-            section_name: Name of the configuration section (e.g., 'Calculation1')
+            section_name: Name of the configuration section
             section_dict: Dictionary of key-value pairs from the section
 
         Returns:
@@ -59,50 +96,48 @@ class ConfigValidator:
         errors = []
 
         scheme = section_dict.get('scheme', '').upper().strip()
-        method = section_dict.get('method', '').upper().strip()
+        method = section_dict.get('method', '').upper().strip() if 'method' in section_dict else None
 
         if not scheme:
             errors.append("Missing 'scheme' parameter")
             return False, errors
 
-        if not method:
-            errors.append("Missing 'method' parameter")
+        if scheme not in cls.REQUIRED_PARAMS and scheme not in ['FELLER', 'HF_E', 'TRUHLAR_HF', 'KLOPPER', 'JENSEN',
+                                                                   'BAKOULES', 'OAN', 'TRUHLAR_CORR', 'MARTIN',
+                                                                   'HALKIER_HELGAKER', 'HUH_LEE']:
+            errors.append(f"Unknown scheme:  '{scheme}'")
             return False, errors
 
-        if scheme not in cls.REQUIRED_PARAMS:
-            errors.append(f"Unknown scheme: '{scheme}'. Valid schemes: {', '.join(cls.REQUIRED_PARAMS.keys())}")
-            return False, errors
-
-        validation_rules = cls.REQUIRED_PARAMS[scheme]
+        # Get validation rules for this scheme
+        validation_rules = cls.REQUIRED_PARAMS. get(scheme, {})
 
         # Check required parameters
         for param in validation_rules.get('required_all', []):
             if param not in section_dict or not str(section_dict[param]).strip():
                 errors.append(f"Missing required parameter: '{param}' for scheme '{scheme}'")
 
-        # Check method-specific requirements
-        required_if_dict = validation_rules.get('required_if', {})
-        if method in required_if_dict:
-            for param in required_if_dict[method]:
-                if param not in section_dict or not str(section_dict[param]).strip():
-                    errors.append(f"Missing required parameter for method '{method}': '{param}'")
+        # Check method-specific requirements (if method exists)
+        if method:
+            required_if_dict = validation_rules.get('required_if', {})
+            if method in required_if_dict:
+                for param in required_if_dict[method]:
+                    if param not in section_dict or not str(section_dict[param]).strip():
+                        errors.append(f"Missing required parameter for method '{method}': '{param}'")
 
         # Validate numeric parameters
-        numeric_params = [k for k, v in section_dict.items()
-                          if k.lower() in ['hf1', 'hf2', 'e1', 'e2', 'f1', 'f2', 'hf', 'etot',
-                                           'zeta_hf1', 'zeta_hf2', 'zeta_e1', 'zeta_e2', 'zeta_hf', 'zeta_e']]
+        numeric_params_to_check = [
+            'HF1', 'HF2', 'E1', 'E2', 'F1', 'F2', 'HF', 'Etot',
+            'Ehf_X', 'Ehf_Y', 'Ec_X', 'Ec_Y', 'X', 'Y',
+            'zeta_HF1', 'zeta_HF2', 'zeta_E1', 'zeta_E2', 'zeta_HF', 'zeta_E',
+            'alfa', 'beta'
+        ]
 
-        for param in numeric_params:
-            try:
-                float(section_dict[param])
-            except (ValueError, TypeError):
-                errors.append(f"Parameter '{param}' must be numeric, got: '{section_dict[param]}'")
-
-        # Validate basis sets are known
-        basis_params = [k for k in section_dict.keys() if k.lower().startswith('basis')]
-        for basis_param in basis_params:
-            # This is best-effort; we can expand the basis validation later
-            pass
+        for param in numeric_params_to_check:
+            if param in section_dict:
+                try:
+                    float(section_dict[param])
+                except (ValueError, TypeError):
+                    errors.append(f"Parameter '{param}' must be numeric, got: '{section_dict[param]}'")
 
         is_valid = len(errors) == 0
         return is_valid, errors

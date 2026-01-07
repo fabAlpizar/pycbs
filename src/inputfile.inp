@@ -1,13 +1,11 @@
 # pyCBS input file
 [Calculation1]
-scheme = tensorial
-method = CCSD(T)
-basis1 = VTZ
-basis2 = VQZ
-zeta_HF1 = -78.59958733
-zeta_E1  = -78.87185782
-zeta_E2  = -78.95918649
-dc_scheme = USPE
+scheme = FELLER
+Ehf_X = -79.234916
+Ehf_Y = -79.259885
+X = 3.02
+Y = 3.64
+alfa = 1.353
 
 [Calculation2]
 scheme = USTE1
