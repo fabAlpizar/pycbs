@@ -3,7 +3,7 @@
 import math
 from typing import Tuple, Dict, Optional
 
-from basis import hf, dc1, dc2, dc3
+from src.basis import hf, dc1, dc2, dc3
 
 # ---------------------------------------------------------------------
 # Dictionaries / constants
