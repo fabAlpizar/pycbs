@@ -1,13 +1,13 @@
 # pyCBS input file
 [Calculation1]
-scheme = USTE1
-method = MP2
-basis1 = VDZ
-basis2 = VTZ
-HF1 = -78.59958733
-HF2 = -78.62321616
-E1 = -78.87185782
-E2 = -78.95918649
+scheme = tensorial
+method = CCSD(T)
+basis1 = VTZ
+basis2 = VQZ
+zeta_HF1 = -78.59958733
+zeta_E1  = -78.87185782
+zeta_E2  = -78.95918649
+dc_scheme = USPE
 
 [Calculation2]
 scheme = USTE1
@@ -102,7 +102,7 @@ E2 = -194.866366
 [OPTIMIZATION]
 optimization = True
 init_parameters = 0.96654,103.93761
-basis_sets = VDZ, VTZ
+basis_sets = STO-3G, MINI
 METHOD = CCSD(T)
 beta = 1.62
 maxcycle = 20

@@ -20,23 +20,24 @@ import basis
 
 # Module imports (optional providers)
 try:
-    import USTE1
+    pass
 except Exception:
     USTE1 = None
 try:
-    import USTE2
+    pass
 except Exception:
     USTE2 = None
 try:
-    import USPE
+    pass
 except Exception:
     USPE = None
 try:
-    import tensorial_properties1 as TP
+    from src.pycbs.corr_component import USPE, USTE1, USTE2, tensorial_properties1 as TP
+    from src.pycbs.frequency import frequency
 except Exception:
     TP = None
 try:
-    import frequency
+    pass
 except Exception:
     frequency = None
 
