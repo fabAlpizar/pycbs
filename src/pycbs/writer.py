@@ -1,5 +1,5 @@
 # writer.py
-from src.pycbs import citations
+#from src.pycbs import citations
 
 LOGO = """
                              $$$$$$\  $$$$$$$\   $$$$$$\  
@@ -44,10 +44,10 @@ def write_header(filename):
         f.write(INFO_BLOCK)
         f.write("\n\n")
         if not GENERAL_CITATION_WRITTEN:
-            write_general_citation(f)
+            #write_general_citation(f)
             GENERAL_CITATION_WRITTEN = True
 
-
+"""
 def write_general_citation(file):
     file.write("\n" + "=" * 70 + "\n")
     file.write("                          CITATION INFORMATION\n")
@@ -58,6 +58,7 @@ def write_general_citation(file):
         for ref in default_citations:
             file.write(f"   {ref}\n")
         file.write("\n")
+        
 
 
 def write_scheme_citations(file, scheme):
@@ -67,7 +68,7 @@ def write_scheme_citations(file, scheme):
         for ref in specific_citations:
             file.write(f"   {ref}\n")
         file.write("\n")
-
+"""
 
 def write_result(filename, scheme, data, EHF=None, dc=None, energy=None):
     """
@@ -82,7 +83,7 @@ def write_result(filename, scheme, data, EHF=None, dc=None, energy=None):
         f.write("\n" + "=" * 70 + "\n")
         f.write(f"                       Extrapolation Scheme: {scheme}\n")
         f.write("=" * 70 + "\n")
-        write_scheme_citations(f, scheme)
+        #write_scheme_citations(f, scheme)
         f.write("Input Parameters:\n")
         f.write("-" * 70 + "\n")
         for key, value in data.items():
