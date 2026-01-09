@@ -1,6 +1,7 @@
 import math
 from src.pycbs.basis import hf, dc1, dc2, dc3  # Import dictionaries form basis.py
 
+
 # Function to retrieve dictionaries based on the selected method and two chosen databases
 def dictionaries(metodo, basis1, basis2):
     """"Return Hartree-Fock and correlation dictionaries based on the selected method and bases."""
