@@ -1,5 +1,5 @@
 # writer.py
-import citations
+from src.pycbs import citations
 
 LOGO = """
                              $$$$$$\  $$$$$$$\   $$$$$$\  
