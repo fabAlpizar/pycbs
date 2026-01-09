@@ -5,7 +5,7 @@ from src.pycbs.basis import hf
 # Individual implementations
 # -------------------------------------------------
 
-def feller(Ehf_X, Ehf_Y, X=2, Y=3, alfa=1.353):
+def feller(Ehf_X: float, Ehf_Y: float, X=2, Y=3, alfa=1.353):
     num = Ehf_Y * mt.exp(-alfa * X) - Ehf_X * mt.exp(-alfa * Y)
     den = mt.exp(-alfa * X) - mt.exp(-alfa * Y)
     return num / den
