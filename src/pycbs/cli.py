@@ -9,8 +9,8 @@ import logging
 import sys
 from pathlib import Path
 
-# CORRECT package imports (this is the key fix)
-from . import writer, basis
+# Package imports
+from . import writer
 from .config_validator import ConfigValidator
 from .module_loader import SchemeModuleLoader
 
@@ -35,6 +35,27 @@ def setup_logging(verbosity: int = 0) -> None:
 
 
 # ----------------------------------------------------------------------
+# Central execution entry point
+# ----------------------------------------------------------------------
+
+def run(params: dict):
+    """
+    Execute a CBS scheme based on validated parameters.
+
+    This is the single execution gateway used by the CLI.
+    """
+    scheme = params["scheme"]
+    module = SchemeModuleLoader.load_scheme(scheme)
+
+    if not hasattr(module, "compute"):
+        raise AttributeError(
+            f"Scheme '{scheme}' does not expose a compute(params) function"
+        )
+
+    return module.compute(params)
+
+
+# ----------------------------------------------------------------------
 # Config handling
 # ----------------------------------------------------------------------
 
@@ -43,7 +64,7 @@ def read_config(input_path: Path) -> configparser.ConfigParser:
         raise FileNotFoundError(f"Configuration file not found: {input_path}")
 
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str  # preserve case (you rely on this)
+    cfg.optionxform = str  # preserve case
     cfg.read(input_path)
 
     if not cfg.sections():
@@ -80,26 +101,9 @@ def process_section(
             return False
 
         # ----------------------------
-        # Load scheme dynamically
+        # Execute scheme
         # ----------------------------
-        module = SchemeModuleLoader.load_scheme(scheme)
-
-        # ----------------------------
-        # Resolve callable
-        # ----------------------------
-        if hasattr(module, "compute"):
-            func = module.compute
-        elif hasattr(module, "run"):
-            func = module.run
-        else:
-            raise AttributeError(
-                f"Scheme '{scheme}' does not expose a compute() or run() function"
-            )
-
-        # ----------------------------
-        # Execute
-        # ----------------------------
-        result = func(params)
+        result = run(params)
 
         # ----------------------------
         # Write output
@@ -155,7 +159,7 @@ def main() -> None:
         logger.error(e)
         sys.exit(1)
 
-    # Initialize output
+    # Initialize output file
     args.output.write_text("")
     writer.write_header(str(args.output))
 
@@ -164,7 +168,7 @@ def main() -> None:
 
     for section_name in config.sections():
         if section_name.upper() == "OPTIMIZATION":
-            logger.warning("OPTIMIZATION section not yet wired")
+            logger.warning("OPTIMIZATION section not yet supported")
             continue
 
         total += 1
