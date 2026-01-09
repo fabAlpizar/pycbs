@@ -1,5 +1,5 @@
 import math as mt
-from pycbs.basis import hf
+from src.pycbs.basis import hf
 
 # -------------------------------------------------
 # Individual implementations
