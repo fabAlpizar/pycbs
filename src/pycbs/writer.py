@@ -1,5 +1,12 @@
-# writer.py
-#from src.pycbs import citations
+# src/pycbs/writer.py
+"""
+Writer utilities for pyCBS results.
+Single, consistent implementation for header, per-job results, errors,
+optimization history, and summary table.
+"""
+
+from pathlib import Path
+from typing import Any, Dict, Optional, List
 
 LOGO = """
                              $$$$$$\  $$$$$$$\   $$$$$$\  
@@ -31,40 +38,11 @@ INFO_BLOCK = """
 """
 
 GENERAL_CITATION_WRITTEN = False
-RESULTS_SUMMARY = []  # stores per-scheme final results for summary table
-
-# src/pycbs/writer.py
-from pathlib import Path
-from typing import Any, Dict, Optional
-
-def write_header(output_path: str) -> None:
-    """Write initial header to output file (clear file already done by CLI)."""
-    with open(output_path, "a") as f:
-        f.write("pyCBS results\n")
-        f.write("="*60 + "\n")
-
-def write_result(output_path: str, section_name: str, scheme: str, result: Any) -> None:
-    """
-    Write results produced by compute(params).
-    Accepts result as either dict (preferred) or scalar/tuple.
-    """
-    with open(output_path, "a") as f:
-        f.write(f"\nJOB: {section_name}\n")
-        f.write(f"Scheme: {scheme}\n")
-        # If result is a dict: write keys
-        if isinstance(result, dict):
-            for k, v in result.items():
-                f.write(f"{k}: {v}\n")
-        else:
-            f.write(f"Result: {result}\n")
-
-def write_error(output_path: str, section_name: str, message: str) -> None:
-    """Append an error message for the named section."""
-    with open(output_path, "a") as f:
-        f.write(f"\nERROR in [{section_name}]: {message}\n")
+RESULTS_SUMMARY: List[Dict[str, Any]] = []
 
 
-def write_header(filename):
+def write_header(filename: str) -> None:
+    """Write initial header to output file (overwrites file)."""
     global GENERAL_CITATION_WRITTEN, RESULTS_SUMMARY
     RESULTS_SUMMARY = []
     with open(filename, "w") as f:
@@ -74,80 +52,102 @@ def write_header(filename):
         f.write(INFO_BLOCK)
         f.write("\n\n")
         if not GENERAL_CITATION_WRITTEN:
-            #write_general_citation(f)
             GENERAL_CITATION_WRITTEN = True
 
-"""
-def write_general_citation(file):
-    file.write("\n" + "=" * 70 + "\n")
-    file.write("                          CITATION INFORMATION\n")
-    file.write("=" * 70 + "\n\n")
-    default_citations = citations.CITATIONS.get("DEFAULT", [])
-    if default_citations:
-        file.write("Please cite this program as:\n\n")
-        for ref in default_citations:
-            file.write(f"   {ref}\n")
-        file.write("\n")
-        
+
+def write_error(filename: str, section_name: str, message: str) -> None:
+    """Append an error message for the named section."""
+    with open(filename, "a") as f:
+        f.write(f"\nERROR in [{section_name}]: {message}\n")
 
 
-def write_scheme_citations(file, scheme):
-    specific_citations = citations.CITATIONS.get(scheme, [])
-    if specific_citations:
-        file.write(f"Additionally, cite the following references when using the {scheme} scheme:\n\n")
-        for ref in specific_citations:
-            file.write(f"   {ref}\n")
-        file.write("\n")
-"""
+def _coerce_data_dict(data: Any) -> Dict[str, Any]:
+    """Ensure 'data' used for printing parameters is a dict. If it's a string, return {'input': data}."""
+    if data is None:
+        return {}
+    if isinstance(data, dict):
+        return data
+    # Try to coerce Path-like or other objects
+    try:
+        return dict(data)
+    except Exception:
+        return {"value": data}
 
-def write_result(filename, scheme, data, EHF=None, dc=None, energy=None):
+
+def write_result(filename: str, scheme: str, data: Any, EHF: Optional[float] = None,
+                 dc: Optional[float] = None, energy: Optional[float] = None) -> None:
     """
-    Write a detailed result block into the results file.
+    Write a detailed result block.
 
-    - If EHF and dc are provided (not None), print Hartree-Fock (CBS), Dynamic Correlation,
-      and Total CBS Energy.
-    - Otherwise, print a single CBS Extrapolated Energy line (existing behavior).
+    Args:
+        filename: path to file (string)
+        scheme: scheme name (string)
+        data: dict-like of input parameters (or any, will be coerced)
+        EHF: Hartree-Fock CBS energy (optional)
+        dc: dynamic correlation contribution (optional)
+        energy: total CBS energy (optional)
     """
     global RESULTS_SUMMARY
+    datad = _coerce_data_dict(data)
+
+    # determine whether HF+dc components present
+    has_components = (EHF is not None) and (dc is not None)
+
     with open(filename, "a") as f:
         f.write("\n" + "=" * 70 + "\n")
         f.write(f"                       Extrapolation Scheme: {scheme}\n")
         f.write("=" * 70 + "\n")
-        #write_scheme_citations(f, scheme)
         f.write("Input Parameters:\n")
         f.write("-" * 70 + "\n")
-        for key, value in data.items():
-            f.write(f"{key:>20}: {value}\n")
+        if datad:
+            # Print sorted keys for stable output
+            for key in sorted(datad.keys()):
+                try:
+                    f.write(f"{key:>20}: {datad[key]}\n")
+                except Exception:
+                    f.write(f"{key:>20}: {str(datad[key])}\n")
+        else:
+            f.write(" (no input parameters)\n")
         f.write("-" * 70 + "\n")
         f.write("Extrapolation Results:\n")
         f.write("-" * 70 + "\n")
 
-        # If both EHF and dc were provided, print the detailed breakdown
-        if (EHF is not None) and (dc is not None):
+        if has_components:
             try:
-                f.write(f"{'Hartree-Fock (CBS):':>25} {float(EHF):.10f}\n")
+                f.write(f"{'Hartree-Fock (CBS):':>30} {float(EHF):.10f}\n")
             except Exception:
-                f.write(f"{'Hartree-Fock (CBS):':>25} {EHF}\n")
+                f.write(f"{'Hartree-Fock (CBS):':>30} {EHF}\n")
             try:
-                f.write(f"{'Dynamic Correlation:':>25} {float(dc):.10f}\n")
+                f.write(f"{'Dynamic Correlation:':>30} {float(dc):.10f}\n")
             except Exception:
-                f.write(f"{'Dynamic Correlation:':>25} {dc}\n")
+                f.write(f"{'Dynamic Correlation:':>30} {dc}\n")
             try:
-                f.write(f"{'Total CBS Energy:':>25} {float(energy):.10f}\n")
+                f.write(f"{'Total CBS Energy:':>30} {float(energy):.10f}\n")
             except Exception:
-                f.write(f"{'Total CBS Energy:':>25} {energy}\n")
-            has_components = True
+                f.write(f"{'Total CBS Energy:':>30} {energy}\n")
         else:
-            # Fallback / existing behaviour for items without HF/dc components
-            try:
-                f.write(f"{'CBS Extrapolated Energy:':>25} {float(energy):.10f}\n")
-            except Exception:
-                f.write(f"{'CBS Extrapolated Energy:':>25} {energy}\n")
-            has_components = False
+            # If only one value is provided, prefer energy; otherwise write whatever we have
+            if energy is not None:
+                try:
+                    f.write(f"{'CBS Extrapolated Energy:':>30} {float(energy):.10f}\n")
+                except Exception:
+                    f.write(f"{'CBS Extrapolated Energy:':>30} {energy}\n")
+            elif EHF is not None:
+                try:
+                    f.write(f"{'HF (CBS):':>30} {float(EHF):.10f}\n")
+                except Exception:
+                    f.write(f"{'HF (CBS):':>30} {EHF}\n")
+            elif dc is not None:
+                try:
+                    f.write(f"{'Dynamic Corr (only):':>30} {float(dc):.10f}\n")
+                except Exception:
+                    f.write(f"{'Dynamic Corr (only):':>30} {dc}\n")
+            else:
+                f.write("No numeric result available\n")
 
         f.write("=" * 70 + "\n\n")
 
-    # Store a record for the final summary table. Include a flag whether HF/dc components are present.
+    # Append to summary record
     RESULTS_SUMMARY.append({
         'scheme': scheme,
         'energy': energy,
@@ -157,23 +157,20 @@ def write_result(filename, scheme, data, EHF=None, dc=None, energy=None):
     })
 
 
-def write_optimization_summary(filename, history):
-    """
-    Write a dedicated optimization cycle summary into the results file.
-    history: list of dicts {'cycle', 'parameters', 'energy', 'displacement_factor'}
-    """
+def write_optimization_summary(filename: str, history: list) -> None:
+    """Write optimization cycle history (if provided)."""
     with open(filename, "a") as f:
         f.write("\n" + "=" * 70 + "\n")
         f.write("                      OPTIMIZATION CYCLE HISTORY\n")
         f.write("=" * 70 + "\n\n")
-        f.write(f"{'Cycle':>5} {'r(OH)[Å]':>12} {'HOH[°]':>12} {'Energy[Ha]':>18} {'DispFactor':>12}\n")
+        f.write(f"{'Cycle':>5} {'p0':>12} {'p1':>12} {'Energy[Ha]':>18} {'DispFactor':>12}\n")
         f.write("-" * 70 + "\n")
         for step in history:
-            cyc = step.get('cycle', 0)
+            try:
+                cyc = int(step.get('cycle', 0))
+            except Exception:
+                cyc = 0
             params = step.get('parameters', [None, None])
-            energy = step.get('energy', 0.0)
-            df = step.get('displacement_factor', 0.0)
-            # protect against numpy arrays or Nones
             try:
                 p0 = float(params[0])
             except Exception:
@@ -183,22 +180,19 @@ def write_optimization_summary(filename, history):
             except Exception:
                 p1 = 0.0
             try:
-                en = float(energy)
+                en = float(step.get('energy', 0.0))
             except Exception:
                 en = 0.0
             try:
-                dff = float(df)
+                dff = float(step.get('displacement_factor', 0.0))
             except Exception:
                 dff = 0.0
             f.write(f"{cyc:5d} {p0:12.8f} {p1:12.8f} {en:18.10f} {dff:12.6f}\n")
         f.write("\n" + "=" * 70 + "\n\n")
 
 
-def write_summary_table(filename):
-    """
-    Write the summary table. Rows that have has_components=True show HF & Dynamic Corr columns;
-    others show only the total energy (but columns preserve alignment).
-    """
+def write_summary_table(filename: str) -> None:
+    """Write the final summary table appended to the results file."""
     global RESULTS_SUMMARY
     if not RESULTS_SUMMARY:
         return
@@ -206,7 +200,6 @@ def write_summary_table(filename):
         f.write("\n" + "=" * 70 + "\n")
         f.write("                      SUMMARY OF RESULTS\n")
         f.write("=" * 70 + "\n\n")
-        # Header (we always print the three columns for clarity)
         f.write(f"{'Scheme':<20}{'HF (CBS)':>18}{'Dynamic Corr.':>18}{'Total Energy':>18}\n")
         f.write("-" * 70 + "\n")
         for item in RESULTS_SUMMARY:
@@ -217,17 +210,13 @@ def write_summary_table(filename):
             has_components = item.get('has_components', False)
 
             if has_components:
-                # print HF, DC and Total energy if available
                 try:
                     f.write(f"{scheme:<20}{float(EHF):18.10f}{float(dc):18.10f}{float(energy):18.10f}\n")
                 except Exception:
-                    # fallback with simple str formatting if floats fail
                     f.write(f"{scheme:<20}{str(EHF):>18}{str(dc):>18}{str(energy):>18}\n")
             else:
-                # fill HF and DC columns with blanks, print only total energy
                 try:
                     f.write(f"{scheme:<20}{'':18}{'':18}{float(energy):18.10f}\n")
                 except Exception:
                     f.write(f"{scheme:<20}{'':18}{'':18}{str(energy):>18}\n")
-
         f.write("\n" + "=" * 70 + "\n")
