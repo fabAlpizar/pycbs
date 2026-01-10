@@ -130,32 +130,30 @@ def process_section(
     output_file: Path
 ) -> bool:
     try:
+        # raw: preserve original strings from configparser for validation
         raw = dict(section)
-        params = normalize_params(raw)
-        scheme = params.get("SCHEME", "")
 
-        if not scheme:
-            raise ValueError(f"[{section_name}] Missing required key: scheme")
-
-        logger.info(f"Processing [{section_name}] | scheme={scheme}")
-
-        # ----------------------------
-        # Validate input
-        # ----------------------------
-        ok, errors = ConfigValidator.validate_section(section_name, params)
+        # Validate raw config (validator is now case-insensitive)
+        ok, errors = ConfigValidator.validate_section(section_name, raw)
         if not ok:
             for err in errors:
                 writer.write_error(output_file, section_name, err)
             return False
 
-        # ----------------------------
+        # Normalize values for computation (lowercase keys, typed numbers)
+        params = normalize_params(raw)
+
+        # scheme is normalized to uppercase inside normalize_params
+        scheme = params.get("scheme", "")
+        if not scheme:
+            raise ValueError(f"[{section_name}] Missing required key: scheme")
+
+        logger.info(f"Processing [{section_name}] | scheme={scheme}")
+
         # Execute scheme
-        # ----------------------------
         result = run(params)
 
-        # ----------------------------
         # Write output
-        # ----------------------------
         writer.write_result(output_file, section_name, scheme, result)
 
         return True
