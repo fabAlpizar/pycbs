@@ -1,4 +1,8 @@
-# USPE.py  -- cleaned, consistent, and self-contained
+# src/pycbs/uspe/USPE.py
+"""
+USPE core routines (single-point extrapolation).
+Pure functions, no side effects. Return floats or tuples of floats.
+"""
 
 import math
 from typing import Tuple, Dict, Optional
@@ -13,11 +17,12 @@ def dictionaries(method: str, basis1: str, basis2: Optional[str] = None) -> Tupl
     Return (hf_dict, correlation_dict) appropriate for the requested method.
     If basis2 is None it will be treated as basis1 for validation purposes.
     """
-    if method == "MP2":
+    method_up = method.upper()
+    if method_up == "MP2":
         dic_correlacion = dc1
-    elif method == "CCSD(T)":
+    elif method_up == "CCSD(T)":
         dic_correlacion = dc2
-    elif method == "MP2+CCSD(T)":
+    elif method_up == "MP2+CCSD(T)":
         dic_correlacion = dc3
     else:
         raise ValueError(f"Invalid method: {method!r}")
@@ -42,23 +47,24 @@ def select_constant(constant: str) -> Dict[str, float]:
     a_normal = {"MP2": 0.0111, "CCSD": 0.0073, "CCSD(T)": 0.0078}
     a_aug = {"MP2": 0.0094, "CCSD": 0.0061, "CCSD(T)": 0.0065}
 
-    if constant == "normal":
+    if constant is None:
         return a_normal
-    elif constant == "augmented":
+    c = constant.lower()
+    if c == "normal":
+        return a_normal
+    if c == "augmented":
         return a_aug
-    else:
-        raise ValueError(f"Invalid constant type: {constant!r} (expected 'normal' or 'augmented')")
+    raise ValueError(f"Invalid constant type: {constant!r} (expected 'normal' or 'augmented')")
 
 
 # ---------------------------------------------------------------------
-# HF extrapolation helper (keeps same formula you had)
+# HF extrapolation helper (exponential ansatz)
 # ---------------------------------------------------------------------
 def hartree_fock_energy(zeta_HF1: float, zeta_HF2: float, basis1: str, basis2: str) -> float:
     """
-    HF extrapolation using the exponential ansatz from the original code.
+    HF extrapolation using the exponential ansatz.
     Returns the extrapolated HF component (zeta_HF).
     """
-    # Validate bases available in hf
     if basis1 not in hf or basis2 not in hf:
         raise ValueError(f"Basis '{basis1}' or '{basis2}' not found in hf lookup.")
 
@@ -70,18 +76,16 @@ def hartree_fock_energy(zeta_HF1: float, zeta_HF2: float, basis1: str, basis2: s
 
 
 # ---------------------------------------------------------------------
-# USPE single-point helpers
+# USPE core
 # ---------------------------------------------------------------------
 def USPE_correlation_energy(method: str, basis1: str, constant: str, zeta_E: float) -> float:
     """
-    Estimate the correlation contribution (single-point) using the USPE formula:
+    Single-point USPE correlation estimate:
       zeta_cor = (a_method * zeta_E) / (hierarchical_exponent(basis1)^3)
-
-    Returns a float.
     """
     _, dic_correlation = dictionaries(method, basis1, basis1)
     a_values = select_constant(constant)
-    a = a_values.get(method)
+    a = a_values.get(method.upper())
     if a is None:
         raise KeyError(f"Method '{method}' not available in constant table.")
     exponent = float(dic_correlation[basis1])
@@ -91,27 +95,24 @@ def USPE_correlation_energy(method: str, basis1: str, constant: str, zeta_E: flo
 
 
 def USPE_CBS_extrapolation(zeta_HF1: float, zeta_HF2: float, zeta_E: float,
-                           method: str, constant: str, basis1: str, basis2: Optional[str] = None):
+                           method: str, constant: str, basis1: str, basis2: Optional[str] = None) -> Tuple[float, float, float]:
     """
-    Perform the USPE single-point CBS extrapolation and return a consistent tuple:
+    Perform the USPE single-point CBS extrapolation and return:
       (zeta_HF, zeta_cor, zeta_total)
-
-    This keeps results consistent with USTE-style functions.
     """
     if basis2 is None:
         basis2 = basis1
 
-    # get correlation dictionary (and validate)
+    # validate and get correlation dictionary
     _, dic_correlation = dictionaries(method, basis1, basis2)
     a_values = select_constant(constant)
-    a = a_values.get(method)
-    if a is None:
+    if a_values.get(method.upper()) is None:
         raise KeyError(f"Method '{method}' not available in constant table.")
 
     zeta_HF = hartree_fock_energy(zeta_HF1, zeta_HF2, basis1, basis2)
     exponent = float(dic_correlation[basis1])
     if exponent == 0:
         raise ZeroDivisionError("Hierarchical exponent is zero for basis " + basis1)
-    zeta_cor = (float(a) * float(zeta_E)) / (exponent ** 3)
+    zeta_cor = (float(a_values[method.upper()]) * float(zeta_E)) / (exponent ** 3)
     zeta_total = zeta_HF + zeta_cor
     return float(zeta_HF), float(zeta_cor), float(zeta_total)
