@@ -149,7 +149,7 @@ def process_section(
             raise ValueError(f"[{section_name}] Missing required key: scheme")
 
         logger.info(f"Processing [{section_name}] | scheme={scheme}")
-        logger.debug("Running scheme %s; normalized params=%r", scheme, params)
+
 
         # Execute scheme
         result = run(params)
