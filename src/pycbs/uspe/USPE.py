@@ -3,7 +3,7 @@
 import math
 from typing import Tuple, Dict, Optional
 
-from src.pycbs.basis import hf, dc1, dc2, dc3
+from pycbs.basis import hf, dc1, dc2, dc3
 
 # ---------------------------------------------------------------------
 # Dictionaries / constants

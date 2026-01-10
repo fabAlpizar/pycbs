@@ -1,7 +1,7 @@
 # tensorial_properties1.py  (fixed & cleaned)
 
 import math
-from src.pycbs.basis import hf, dc1, dc2, dc3
+from pycbs.basis import hf, dc1, dc2, dc3
 
 # Function to retrieve dictionaries based on the selected method and two chosen databases
 def dictionaries(metodo: str, basis1: str, basis2: str):
