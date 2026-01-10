@@ -86,45 +86,50 @@ class ConfigValidator:
         """
         Validate a configuration section.
 
-        Args:
-            section_name: Name of the configuration section
-            section_dict: Dictionary of key-value pairs from the section
-
-        Returns:
-            (is_valid, list_of_errors)
+        This validator is case-insensitive for keys: it lower-cases incoming keys,
+        then compares against required parameter names case-insensitively.
         """
         errors = []
 
-        scheme = section_dict.get('scheme', '').upper().strip()
-        method = section_dict.get('method', '').upper().strip() if 'method' in section_dict else None
+        # Normalize incoming keys to lowercase for robust validation
+        sec = {str(k).strip().lower(): v for k, v in section_dict.items()}
+
+        scheme = str(sec.get('scheme', '')).upper().strip()
+        method = sec.get('method')
+        method_up = str(method).upper().strip() if method is not None else None
 
         if not scheme:
             errors.append("Missing 'scheme' parameter")
             return False, errors
 
-        if scheme not in cls.REQUIRED_PARAMS and scheme not in ['FELLER', 'HF_E', 'TRUHLAR_HF', 'KLOPPER', 'JENSEN',
-                                                                   'BAKOULES', 'OAN', 'TRUHLAR_CORR', 'MARTIN',
-                                                                   'HALKIER_HELGAKER', 'HUH_LEE']:
-            errors.append(f"Unknown scheme:  '{scheme}'")
+        # Allowed schemes set = keys of REQUIRED_PARAMS plus explicit single-function schemes
+        allowed = set(cls.REQUIRED_PARAMS.keys()) | {
+            'FELLER', 'HF_E', 'TRUHLAR_HF', 'KLOPPER', 'JENSEN',
+            'BAKOULES', 'OAN', 'TRUHLAR_CORR', 'MARTIN',
+            'HALKIER_HELGAKER', 'HUH_LEE'
+        }
+
+        if scheme not in allowed:
+            errors.append(f"Unknown scheme: '{scheme}'")
             return False, errors
 
-        # Get validation rules for this scheme
-        validation_rules = cls.REQUIRED_PARAMS. get(scheme, {})
+        # Get validation rules for this scheme (if present)
+        validation_rules = cls.REQUIRED_PARAMS.get(scheme, {})
 
-        # Check required parameters
+        # Check required parameters (case-insensitive)
         for param in validation_rules.get('required_all', []):
-            if param not in section_dict or not str(section_dict[param]).strip():
+            if param.lower() not in sec or not str(sec.get(param.lower(), '')).strip():
                 errors.append(f"Missing required parameter: '{param}' for scheme '{scheme}'")
 
-        # Check method-specific requirements (if method exists)
-        if method:
+        # Check method-specific required_if (case-insensitive)
+        if method_up:
             required_if_dict = validation_rules.get('required_if', {})
-            if method in required_if_dict:
-                for param in required_if_dict[method]:
-                    if param not in section_dict or not str(section_dict[param]).strip():
-                        errors.append(f"Missing required parameter for method '{method}': '{param}'")
+            req_for_method = required_if_dict.get(method_up, [])
+            for param in req_for_method:
+                if param.lower() not in sec or not str(sec.get(param.lower(), '')).strip():
+                    errors.append(f"Missing required parameter for method '{method_up}': '{param}'")
 
-        # Validate numeric parameters
+        # Validate numeric parameters (case-insensitive)
         numeric_params_to_check = [
             'HF1', 'HF2', 'E1', 'E2', 'F1', 'F2', 'HF', 'Etot',
             'Ehf_X', 'Ehf_Y', 'Ec_X', 'Ec_Y', 'X', 'Y',
@@ -133,11 +138,12 @@ class ConfigValidator:
         ]
 
         for param in numeric_params_to_check:
-            if param in section_dict:
+            key = param.lower()
+            if key in sec and sec[key] is not None and str(sec[key]).strip() != '':
                 try:
-                    float(section_dict[param])
+                    float(sec[key])
                 except (ValueError, TypeError):
-                    errors.append(f"Parameter '{param}' must be numeric, got: '{section_dict[param]}'")
+                    errors.append(f"Parameter '{param}' must be numeric, got: '{sec[key]}'")
 
         is_valid = len(errors) == 0
         return is_valid, errors
