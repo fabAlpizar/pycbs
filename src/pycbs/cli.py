@@ -77,14 +77,62 @@ def read_config(input_path: Path) -> configparser.ConfigParser:
 # Section dispatcher
 # ----------------------------------------------------------------------
 
+def normalize_params(raw: dict) -> dict:
+    """
+    Convert configparser string values into typed params suitable for compute().
+    - Keys are normalized to lowercase (case-insensitive input).
+    - 'scheme' and 'method' values are uppercased.
+    - Basis names and labels preserve case.
+    - Numeric-looking values are converted to int or float.
+    - Empty strings and None-like values become None.
+    """
+    params = {}
+
+    for k, v in raw.items():
+        key = k.strip().lower()
+
+        if v is None:
+            val = None
+        else:
+            val = v.strip()
+
+        # Normalize empty / None-like values
+        if isinstance(val, str) and val.lower() in {"", "none", "null"}:
+            params[key] = None
+            continue
+
+        # Scheme and method → uppercase values
+        if key in {"scheme", "method"}:
+            params[key] = val.upper() if isinstance(val, str) else val
+            continue
+
+        # BASIS names and metadata → preserve case
+        if key.startswith("basis") or key in {"constant", "comment", "label"}:
+            params[key] = val
+            continue
+
+        # Try numeric coercion
+        if isinstance(val, str):
+            try:
+                f = float(val)
+                params[key] = int(f) if f.is_integer() else f
+            except ValueError:
+                params[key] = val
+        else:
+            params[key] = val
+
+    return params
+
+
 def process_section(
     section_name: str,
     section: configparser.SectionProxy,
     output_file: Path
 ) -> bool:
     try:
-        params = dict(section)
-        scheme = params.get("scheme", "").strip()
+        raw = dict(section)
+        params = normalize_params(raw)
+        scheme = params.get("SCHEME", "")
 
         if not scheme:
             raise ValueError(f"[{section_name}] Missing required key: scheme")
