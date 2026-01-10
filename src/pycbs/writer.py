@@ -33,6 +33,36 @@ INFO_BLOCK = """
 GENERAL_CITATION_WRITTEN = False
 RESULTS_SUMMARY = []  # stores per-scheme final results for summary table
 
+# src/pycbs/writer.py
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+def write_header(output_path: str) -> None:
+    """Write initial header to output file (clear file already done by CLI)."""
+    with open(output_path, "a") as f:
+        f.write("pyCBS results\n")
+        f.write("="*60 + "\n")
+
+def write_result(output_path: str, section_name: str, scheme: str, result: Any) -> None:
+    """
+    Write results produced by compute(params).
+    Accepts result as either dict (preferred) or scalar/tuple.
+    """
+    with open(output_path, "a") as f:
+        f.write(f"\nJOB: {section_name}\n")
+        f.write(f"Scheme: {scheme}\n")
+        # If result is a dict: write keys
+        if isinstance(result, dict):
+            for k, v in result.items():
+                f.write(f"{k}: {v}\n")
+        else:
+            f.write(f"Result: {result}\n")
+
+def write_error(output_path: str, section_name: str, message: str) -> None:
+    """Append an error message for the named section."""
+    with open(output_path, "a") as f:
+        f.write(f"\nERROR in [{section_name}]: {message}\n")
+
 
 def write_header(filename):
     global GENERAL_CITATION_WRITTEN, RESULTS_SUMMARY
