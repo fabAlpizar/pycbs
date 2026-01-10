@@ -51,16 +51,13 @@ In order to set up the necessary environment:
    ```
    conda activate pyCBS
    ```
-4. (Optional) If you modify code or configuration files and want changes to take effect, reinstall in editable mode:
+4. Make it editable:
    ```
    pip install -e.
    ```
    
    
 
-
-> **_NOTE:_**  The conda environment will have pyCBS installed in editable mode.
-> Some changes, e.g. in `setup.cfg`, might require you to run `pip install -e .` again.
 
 
 
