@@ -149,12 +149,46 @@ def process_section(
             raise ValueError(f"[{section_name}] Missing required key: scheme")
 
         logger.info(f"Processing [{section_name}] | scheme={scheme}")
+        logger.debug("Running scheme %s; normalized params=%r", scheme, params)
 
         # Execute scheme
         result = run(params)
 
         # Write output
-        writer.write_result(output_file, section_name, scheme, result)
+        # Prepare data for writer: use the raw input (strings) so writer prints the
+        # parameters exactly as the user supplied them.
+        data_for_writer = raw if isinstance(raw, dict) else dict(section)
+
+        # Map compute() result into writer's expected fields:
+        EHF = None
+        dc = None
+        energy = None
+
+        # result can be:
+        #  - dict with keys like {'EHF':..., 'E_corr':..., 'E_CBS':...}
+        #  - tuple/list (EHF, dc, energy)
+        #  - scalar (energy)
+        if isinstance(result, dict):
+            # attempt common keys
+            EHF = result.get('EHF') or result.get('E_HF') or result.get('E_hf') or result.get('zeta_HF') or result.get('zeta_hf')
+            dc = result.get('E_corr') or result.get('dc') or result.get('dynamic_corr') or result.get('zeta_cor')
+            energy = result.get('E_CBS') or result.get('energy') or result.get('total') or result.get('E_total')
+        elif isinstance(result, (list, tuple)):
+            if len(result) == 3:
+                EHF, dc, energy = result
+            elif len(result) == 2:
+                # ambiguous: assume (dc, energy)
+                dc, energy = result
+            else:
+                energy = result[0]
+        else:
+            # scalar
+            energy = result
+
+        # Finally call writer with the standardized signature.
+        # writer expects: filename (str), scheme (str), data (dict of inputs), EHF, dc, energy
+        writer.write_result(str(output_file), scheme, data_for_writer, EHF=EHF, dc=dc, energy=energy)
+
 
         return True
 
