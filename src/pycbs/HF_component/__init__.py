@@ -1,51 +1,50 @@
+# src/pycbs/HF_component/__init__.py
 import math as mt
+import inspect
+from typing import Any, Dict, Callable
+
 from pycbs.basis import hf
 
 # -------------------------------------------------
-# Individual implementations
+# Individual implementations (use lowercase parameter names)
 # -------------------------------------------------
 
-def feller(Ehf_X: float, Ehf_Y: float, X=2, Y=3, alfa=1.353):
-    num = Ehf_Y * mt.exp(-alfa * X) - Ehf_X * mt.exp(-alfa * Y)
-    den = mt.exp(-alfa * X) - mt.exp(-alfa * Y)
+def feller(ehf_x: float, ehf_y: float, x: int = 2, y: int = 3, alfa: float = 1.353):
+    num = ehf_y * mt.exp(-alfa * x) - ehf_x * mt.exp(-alfa * y)
+    den = mt.exp(-alfa * x) - mt.exp(-alfa * y)
     return num / den
 
 
-def jensen(Ehf_X: float, Ehf_Y: float, X=2, Y=3, alfa=5.163):
-    num = Ehf_Y * (X + 1) * mt.exp(-alfa * mt.sqrt(X)) \
-        - Ehf_X * (Y + 1) * mt.exp(-alfa * mt.sqrt(Y))
-    den = (X + 1) * mt.exp(-alfa * mt.sqrt(X)) \
-        - (Y + 1) * mt.exp(-alfa * mt.sqrt(Y))
+def jensen(ehf_x: float, ehf_y: float, x: int = 2, y: int = 3, alfa: float = 5.163):
+    num = ehf_y * (x + 1) * mt.exp(-alfa * mt.sqrt(x)) - ehf_x * (y + 1) * mt.exp(-alfa * mt.sqrt(y))
+    den = (x + 1) * mt.exp(-alfa * mt.sqrt(x)) - (y + 1) * mt.exp(-alfa * mt.sqrt(y))
     return num / den
 
 
-def klopper(Ehf_X: float, Ehf_Y: float, X=2, Y=3, alfa=4.257):
-    num = Ehf_X * mt.exp(-alfa * mt.sqrt(Y)) \
-        - mt.exp(-alfa * mt.sqrt(X)) * Ehf_Y
-    den = mt.exp(-alfa * mt.sqrt(X)) - mt.exp(-alfa * mt.sqrt(Y))
+def klopper(ehf_x: float, ehf_y: float, x: int = 2, y: int = 3, alfa: float = 4.257):
+    num = ehf_x * mt.exp(-alfa * mt.sqrt(y)) - mt.exp(-alfa * mt.sqrt(x)) * ehf_y
+    den = mt.exp(-alfa * mt.sqrt(x)) - mt.exp(-alfa * mt.sqrt(y))
     return num / den
 
 
-def truhlar(Ehf_X: float, Ehf_Y: float, X=2, Y=3, alfa=3.337):
-    num = Ehf_Y * X**-alfa - Ehf_X * Y**-alfa
-    den = X**-alfa - Y**-alfa
+def truhlar(ehf_x: float, ehf_y: float, x: int = 2, y: int = 3, alfa: float = 3.337):
+    num = ehf_y * x**-alfa - ehf_x * y**-alfa
+    den = x**-alfa - y**-alfa
     return num / den
 
 
-def hf_e(HF1:float, HF2:float, basis1, basis2):
+def hf_e(hf1: float, hf2: float, basis1: str, basis2: str):
+    # use hf mapping from pycbs.basis
     return (
-        HF1 * mt.exp(2.284 * hf[basis1])
-        - HF2 * mt.exp(2.284 * hf[basis2])
+        hf1 * mt.exp(2.284 * hf[basis1])
+        - hf2 * mt.exp(2.284 * hf[basis2])
     ) / (
         mt.exp(2.284 * hf[basis1])
         - mt.exp(2.284 * hf[basis2])
     )
 
 
-# -------------------------------------------------
-# Registry
-# -------------------------------------------------
-
+# Registry mapping (scheme name -> function)
 HF_SCHEMES = {
     "FELLER": feller,
     "JENSEN": jensen,
@@ -55,20 +54,23 @@ HF_SCHEMES = {
 }
 
 
-# -------------------------------------------------
-# Public entry point
-# -------------------------------------------------
-
-def compute(params: dict):
-    scheme = params["scheme"].upper()
+# Public entry point used by the loader
+def compute(params: Dict[str, Any]):
+    """
+    params: normalized dict with lowercase keys (e.g. 'ehf_x', 'hf1', 'basis1', ...)
+           and scheme value uppercased in params['scheme'] (e.g. 'FELLER').
+    """
+    scheme = params.get("scheme", "").upper()
     func = HF_SCHEMES.get(scheme)
-
     if func is None:
         raise ValueError(f"Unknown HF scheme: {scheme}")
 
-    kwargs = {
-        k: v for k, v in params.items()
-        if k not in {"scheme", "method"}
-    }
+    # Filter params to only the callable's accepted keyword names (function uses lowercase names)
+    sig = inspect.signature(func)
+    accepted = set(sig.parameters.keys())
 
+    # Build kwargs using lowercase keys already present in params
+    kwargs = {k: v for k, v in params.items() if k in accepted}
+
+    # Call and return
     return func(**kwargs)

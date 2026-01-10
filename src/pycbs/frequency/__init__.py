@@ -1,17 +1,18 @@
-from .frequency import CBS_extrapolation, dictionaries
-
+# src/pycbs/frequency/__init__.py
+from .frequency import dictionaries, CBS_extrapolation
 
 def compute(params: dict):
-    hf1 = params["HF1"]
-    hf2 = params["HF2"]
-    f1 = params["F1"]
-    f2 = params["F2"]
-    method = params["method"]
-    basis1 = params["basis1"]
-    basis2 = params["basis2"]
+    method = params.get("method")
+    basis1 = params.get("basis1")
+    basis2 = params.get("basis2", basis1)
+    hf1 = params.get("hf1")
+    hf2 = params.get("hf2")
+    f1 = params.get("f1", params.get("F1", None))
+    f2 = params.get("f2", params.get("F2", None))
 
-    _, dic = dictionaries(method, basis1, basis2)
+    if None in (method, basis1, basis2, hf1, hf2, f1, f2):
+        raise ValueError("FREQUENCY compute() missing parameters")
 
-    return CBS_extrapolation(
-        hf1, hf2, f1, f2, dic, basis1, basis2
-    )
+    hf_dict, corr_dict = dictionaries(method, basis1, basis2)
+    EHF, dc, CBS = CBS_extrapolation(hf1, hf2, f1, f2, corr_dict, basis1, basis2)
+    return {"EHF": EHF, "E_corr": dc, "E_CBS": CBS}
