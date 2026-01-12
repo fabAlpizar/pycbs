@@ -23,7 +23,7 @@ def jensen(ehf_x: float, ehf_y: float, x: int = 2, y: int = 3, alfa: float = 5.1
 
 def klopper(ehf_x: float, ehf_y: float, x: int = 2, y: int = 3, alfa: float = 4.257):
     num = ehf_x * mt.exp(-alfa * mt.sqrt(y)) - mt.exp(-alfa * mt.sqrt(x)) * ehf_y
-    den = mt.exp(-alfa * mt.sqrt(x)) - mt.exp(-alfa * mt.sqrt(y))
+    den = mt.exp(-alfa * mt.sqrt(y)) - mt.exp(-alfa * mt.sqrt(x))
     return num / den
 
 
