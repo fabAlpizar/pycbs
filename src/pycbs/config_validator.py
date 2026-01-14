@@ -57,15 +57,15 @@ class ConfigValidator:
             'optional': ['alfa'],
         },
         'BAKOULES': {
-            'required_all': ['scheme', 'Ec_X', 'Ec_Y', 'X', 'Y'],
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y','Ehf_X', 'Ehf_Y', 'X', 'Y'],
             'optional': ['beta'],
         },
         'OAN': {
-            'required_all': ['scheme', 'Ec_X', 'Ec_Y'],
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y','Ehf_X', 'Ehf_Y'],
             'optional': ['beta'],
         },
         'TRUHLAR_CORR': {
-            'required_all': ['scheme', 'Ec_X', 'Ec_Y', 'X', 'Y'],
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y','Ehf_X', 'Ehf_Y', 'X', 'Y'],
             'optional': ['beta'],
         },
         'MARTIN': {
@@ -73,10 +73,10 @@ class ConfigValidator:
             'optional': ['beta'],
         },
         'HALKIER_HELGAKER': {
-            'required_all': ['scheme', 'Ec_X', 'Ec_Y', 'X', 'Y'],
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y','Ehf_X', 'Ehf_Y', 'X', 'Y'],
         },
         'HUH_LEE': {
-            'required_all': ['scheme', 'Ec_X', 'Ec_Y', 'X', 'Y'],
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y','Ehf_X', 'Ehf_Y', 'X', 'Y'],
             'optional': ['beta'],
         },
     }
