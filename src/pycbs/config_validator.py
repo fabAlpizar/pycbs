@@ -69,7 +69,7 @@ class ConfigValidator:
             'optional': ['beta'],
         },
         'MARTIN': {
-            'required_all': ['scheme', 'Ec_X', 'Ec_Y', 'X', 'Y'],
+            'required_all': ['scheme', 'Ec_X', 'Ec_Y','Ehf_X', 'Ehf_Y' 'X', 'Y'],
             'optional': ['beta'],
         },
         'HALKIER_HELGAKER': {

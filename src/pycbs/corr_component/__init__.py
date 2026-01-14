@@ -22,8 +22,10 @@ def huh_lee(ec_x: float, ec_y: float, x: int = 2, y: int = 3, beta: float = 0.22
     return num / den
 
 
-def martin(ec_x: float, ec_y: float, x: int = 2, y: int = 3, beta: float = 3.315):
-    num = ec_y * ((x + 0.5) ** -beta) - ec_x * ((y + 0.5) ** -beta)
+def martin(ec_x: float, ec_y: float,ehf_x:float,ehf_y:float, x: int = 2, y: int = 3, beta: float = 3.315):
+    Ecorr_x = ec_x - ehf_x
+    Ecorr_y = ec_y - ehf_y
+    num = Ecorr_y * ((x + 0.5) ** -beta) - Ecorr_x * ((y + 0.5) ** -beta)
     den = ((x + 0.5) ** -beta) - ((y + 0.5) ** -beta)
     return num / den
 
