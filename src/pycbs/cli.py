@@ -108,7 +108,8 @@ def normalize_params(raw: dict) -> dict:
 def process_section(
     section_name: str,
     section: configparser.SectionProxy,
-    calculations: List[Dict[str, Any]]
+    calculations: List[Dict[str, Any]],
+    output_file: Path
 ) -> bool:
     try:
         raw = dict(section)
@@ -116,7 +117,7 @@ def process_section(
         ok, errors = ConfigValidator.validate_section(section_name, raw)
         if not ok:
             for err in errors:
-                writer.write_error(None, section_name, err)
+                writer.write_error(str(output_file), section_name, err)
             return False
 
         params = normalize_params(raw)
@@ -135,7 +136,6 @@ def process_section(
         }
 
         # ---- result mapping (robust but minimal) ----
-
         if isinstance(result, dict):
             record["hf_cbs"] = result.get("EHF") or result.get("E_HF")
             record["corr_cbs"] = result.get("E_corr") or result.get("dc")
@@ -164,7 +164,8 @@ def process_section(
 
     except Exception as e:
         logger.exception(f"Error in [{section_name}]")
-        writer.write_error(None, section_name, str(e))
+        # pass the real output file path (not None)
+        writer.write_error(str(output_file), section_name, str(e))
         return False
 
 
@@ -217,7 +218,7 @@ def main() -> None:
             continue
 
         total += 1
-        if process_section(section_name, config[section_name], calculations):
+        if process_section(section_name, config[section_name], calculations, args.output):
             success += 1
 
     writer.write_reports(
