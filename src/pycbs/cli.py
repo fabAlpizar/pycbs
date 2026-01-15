@@ -113,7 +113,8 @@ def process_section(
 ) -> bool:
     """
     Run and map one section into writer-friendly record dicts.
-    This mapping is intentionally tolerant to many result shapes and key names.
+    Tolerant to many result shapes; places scalar/ambiguous numbers into the
+    correct key depending on the scheme classification (HF / CORR / MIXED).
     """
     try:
         raw = dict(section)
@@ -134,16 +135,14 @@ def process_section(
 
         result = run(params)
 
-        # DEBUG: show raw result to help diagnose mapping problems (use -vv for this)
+        # DEBUG: show raw result to help diagnose mapping problems (use -vv)
         logger.debug("Raw compute() result for [%s]: %r", section_name, result)
 
-        # initialize record
         record: Dict[str, Any] = {
             "calculation": raw.get("label", section_name),
             "scheme": scheme,
         }
 
-        # Helper: coerce to float if possible
         def _to_float(v):
             if v is None:
                 return None
@@ -156,59 +155,56 @@ def process_section(
                     return None
             return None
 
-        # If result is dict-like, normalize keys (lowercase) and flatten one nested level
+        # Prepare classification sets from writer so behavior is consistent
+        hf_set = {s.lower() for s in getattr(writer, "DEFAULT_HF_COMPONENTS", set())}
+        corr_set = {s.lower() for s in getattr(writer, "DEFAULT_CORR_COMPONENTS", set())}
+        mixed_set = {s.lower() for s in getattr(writer, "DEFAULT_MIXED_SCHEMES", set())}
+
+        scheme_low = str(scheme).strip().lower()
+
+        # If result is dict-like: normalize keys, flatten one level, and extract candidates
         if isinstance(result, dict):
             res: Dict[str, Any] = {}
             for k, v in result.items():
                 if isinstance(v, dict):
-                    # flatten one level: prefix with parent key to avoid clashes but also keep inner keys
                     for k2, v2 in v.items():
                         res[f"{k}.{k2}".lower()] = v2
-                        # also add inner key alone for convenience
                         res[k2.lower()] = v2
                 else:
                     res[k.lower()] = v
 
-            # common variants for HF
             EHF = (
                 res.get("ehf")
                 or res.get("e_hf")
                 or res.get("ehf_cbs")
-                or res.get("e_hf_cbs")
                 or res.get("hf_cbs")
                 or res.get("hf")
             )
-            # correlation variants
             dc = (
                 res.get("e_corr")
                 or res.get("ecorr")
                 or res.get("corr_cbs")
                 or res.get("corr")
                 or res.get("dc")
-                or res.get("dynamic_corr")
             )
-            # total energy variants
             energy = (
                 res.get("e_cbs")
                 or res.get("ecbs")
-                or res.get("e_cbs_total")
                 or res.get("e_total")
                 or res.get("total")
                 or res.get("energy")
-                or res.get("e_cbs_energy")
             )
             freq = res.get("freq_cbs") or res.get("frequency") or res.get("freq")
             tens = res.get("tens_prop") or res.get("tensprop") or res.get("tensor")
             prop_hint = res.get("property_type") or res.get("property")
 
-            # coercions
             EHFf = _to_float(EHF)
             dcf = _to_float(dc)
             energyf = _to_float(energy)
             freqf = _to_float(freq)
-            tensf = tens  # tensor may be string or structured — keep as-is
+            tensf = tens  # keep as-is if non-numeric
 
-            # Fallback: if none of the above found, search for first numeric value in res
+            # Fallback: if nothing numeric found, search for the first numeric value
             if EHFf is None and dcf is None and energyf is None:
                 for v in res.values():
                     nv = _to_float(v)
@@ -216,12 +212,30 @@ def process_section(
                         energyf = nv
                         break
 
+            # Place values into record; but if only 'energyf' found and scheme is corr/hf assign accordingly
             if EHFf is not None:
                 record["hf_cbs"] = EHFf
             if dcf is not None:
                 record["corr_cbs"] = dcf
+
+            # If energyf present but hf/corr not set, decide by scheme classification
             if energyf is not None:
-                record["total_energy"] = energyf
+                if ("corr_cbs" not in record) and (scheme_low in corr_set):
+                    record["corr_cbs"] = energyf
+                elif ("hf_cbs" not in record) and (scheme_low in hf_set):
+                    record["hf_cbs"] = energyf
+                else:
+                    # mixed or unknown: prefer total_energy unless scheme says otherwise
+                    if scheme_low in mixed_set and (("hf_cbs" in record) or ("corr_cbs" in record)):
+                        # if mixed and we already have hf/corr, keep energy as total if present
+                        record["total_energy"] = energyf
+                    elif scheme_low in mixed_set:
+                        # mixed but no components present, put as total
+                        record["total_energy"] = energyf
+                    else:
+                        # unknown scheme default -> total_energy
+                        record["total_energy"] = energyf
+
             if freqf is not None:
                 record["freq_cbs"] = freqf
             if tensf is not None:
@@ -236,20 +250,48 @@ def process_section(
                 record["corr_cbs"] = _to_float(result[1])
                 record["total_energy"] = _to_float(result[2])
             elif len(result) == 2:
-                record["corr_cbs"] = _to_float(result[0])
-                record["total_energy"] = _to_float(result[1])
+                # ambiguous: decide by scheme classification
+                first = _to_float(result[0])
+                second = _to_float(result[1])
+                if scheme_low in corr_set and first is not None and second is not None:
+                    # assume (corr, energy)
+                    record["corr_cbs"] = first
+                    record["total_energy"] = second
+                else:
+                    # default: (dc, energy)
+                    record["corr_cbs"] = first
+                    record["total_energy"] = second
             elif len(result) == 1:
-                record["total_energy"] = _to_float(result[0])
+                val = _to_float(result[0])
+                if val is not None:
+                    if scheme_low in corr_set:
+                        record["corr_cbs"] = val
+                    elif scheme_low in hf_set:
+                        record["hf_cbs"] = val
+                    else:
+                        record["total_energy"] = val
             else:
-                # try to find first numeric in sequence
+                # try to find first numeric
                 for v in result:
                     nv = _to_float(v)
                     if nv is not None:
-                        record["total_energy"] = nv
+                        if scheme_low in corr_set:
+                            record["corr_cbs"] = nv
+                        elif scheme_low in hf_set:
+                            record["hf_cbs"] = nv
+                        else:
+                            record["total_energy"] = nv
                         break
         else:
-            # scalar results
-            record["total_energy"] = _to_float(result)
+            # scalar result
+            val = _to_float(result)
+            if val is not None:
+                if scheme_low in corr_set:
+                    record["corr_cbs"] = val
+                elif scheme_low in hf_set:
+                    record["hf_cbs"] = val
+                else:
+                    record["total_energy"] = val
 
         calculations.append(record)
         return True
@@ -258,6 +300,7 @@ def process_section(
         logger.exception("Error in [%s]", section_name)
         writer.write_error(str(output_file), section_name, str(e))
         return False
+
 
 
 
