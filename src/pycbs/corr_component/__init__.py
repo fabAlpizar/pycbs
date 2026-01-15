@@ -58,7 +58,7 @@ CORR_SCHEMES = {
     "HALKIER_HELGAKER": halkier,
     "HUH_LEE": huh_lee,
     "MARTIN": martin,
-    "OANc": oanc,
+    "OANC": oanc,
     "TRUHLAR_CORR": truhlar_corr,
 }
 

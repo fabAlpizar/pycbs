@@ -24,7 +24,7 @@ class SchemeModuleLoader:
         "HALKIER_HELGAKER": "pycbs.corr_component",
         "HUH_LEE": "pycbs.corr_component",
         "MARTIN": "pycbs.corr_component",
-        "OANc": "pycbs.corr_component",
+        "OANC": "pycbs.corr_component",
         "TRUHLAR_CORR": "pycbs.corr_component",
 
         # --- Full CBS extrapolation schemes ---
