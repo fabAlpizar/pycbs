@@ -113,9 +113,8 @@ def process_section(
 ) -> bool:
     """
     Run and map one section into writer-friendly record dicts.
-    Tolerant to many result shapes; places scalar/ambiguous numbers into the
-    correct key depending on the scheme classification (HF / CORR / MIXED).
-    Special-case: FREQUENCY -> freq_cbs, TENSORIAL -> tens_prop.
+    Normalizes scheme names and classification sets using the same rule so
+    'HUH_LEE' matches 'huh-lee', etc.
     """
     try:
         raw = dict(section)
@@ -136,7 +135,6 @@ def process_section(
 
         result = run(params)
 
-        # DEBUG: show raw result to help diagnose mapping problems (use -vv)
         logger.debug("Raw compute() result for [%s]: %r", section_name, result)
 
         record: Dict[str, Any] = {
@@ -156,12 +154,16 @@ def process_section(
                     return None
             return None
 
-        # classification sets taken from writer defaults (keeps single source of truth)
-        hf_set = {s.lower() for s in getattr(writer, "DEFAULT_HF_COMPONENTS", set())}
-        corr_set = {s.lower() for s in getattr(writer, "DEFAULT_CORR_COMPONENTS", set())}
-        mixed_set = {s.lower() for s in getattr(writer, "DEFAULT_MIXED_SCHEMES", set())}
+        # --- canonical normalizer: lower + replace underscores with hyphens ---
+        def _canon(s: str) -> str:
+            return str(s).strip().lower().replace("_", "-")
 
-        scheme_low = str(scheme).strip().lower()
+        # Build normalized classification sets from writer defaults
+        hf_set = {_canon(s) for s in getattr(writer, "DEFAULT_HF_COMPONENTS", set())}
+        corr_set = {_canon(s) for s in getattr(writer, "DEFAULT_CORR_COMPONENTS", set())}
+        mixed_set = {_canon(s) for s in getattr(writer, "DEFAULT_MIXED_SCHEMES", set())}
+
+        scheme_low = _canon(scheme)
 
         # If result is dict-like: normalize keys, flatten one level, and extract candidates
         if isinstance(result, dict):
@@ -207,9 +209,9 @@ def process_section(
             dcf = _to_float(dc)
             energyf = _to_float(energy)
             freqf = _to_float(freq)
-            tensf = tens  # tensor may be non-numeric; keep as-is
+            tensf = tens  # may be structured
 
-            # Fallback: if nothing numeric found, search for the first numeric value
+            # Fallback: search first numeric if nothing explicit found
             if EHFf is None and dcf is None and energyf is None and freqf is None:
                 for v in res.values():
                     nv = _to_float(v)
@@ -217,46 +219,40 @@ def process_section(
                         energyf = nv
                         break
 
-            # Put explicit components if present
             if EHFf is not None:
                 record["hf_cbs"] = EHFf
             if dcf is not None:
                 record["corr_cbs"] = dcf
 
-            # Special-case mapping for frequency/tensorial schemes or property hint
-            if (scheme_low == "frequency") or prop_hint.startswith("freq"):
-                # energyf -> freq_cbs
+            # Special-case mapping: frequency / tensorial
+            if scheme_low == "frequency" or prop_hint.startswith("freq"):
                 if freqf is not None:
                     record["freq_cbs"] = freqf
                 elif energyf is not None:
                     record["freq_cbs"] = energyf
-                # do not set total_energy in this branch
-            elif (scheme_low == "tensorial") or prop_hint.startswith("tens"):
+            elif scheme_low == "tensorial" or prop_hint.startswith("tens"):
                 if tensf is not None:
                     record["tens_prop"] = tensf
                 elif energyf is not None:
                     record["tens_prop"] = energyf
-                # do not set total_energy in this branch
             else:
-                # Place energy according to scheme classification or as fallback total_energy
+                # Place energy according to scheme classification
                 if energyf is not None:
                     if ("corr_cbs" not in record) and (scheme_low in corr_set):
                         record["corr_cbs"] = energyf
                     elif ("hf_cbs" not in record) and (scheme_low in hf_set):
                         record["hf_cbs"] = energyf
                     else:
-                        # mixed or unknown: prefer total_energy
                         record["total_energy"] = energyf
 
-            if freqf is not None and "freq_cbs" not in record and (scheme_low != "frequency"):
+            if freqf is not None and "freq_cbs" not in record and scheme_low != "frequency":
                 record["freq_cbs"] = freqf
-            if tensf is not None and "tens_prop" not in record and (scheme_low != "tensorial"):
+            if tensf is not None and "tens_prop" not in record and scheme_low != "tensorial":
                 record["tens_prop"] = tensf
             if prop_hint:
                 record["property_type"] = prop_hint
 
         elif isinstance(result, (tuple, list)):
-            # common shapes: (EHF, dc, energy) or (dc, energy) or (energy,)
             if len(result) == 3:
                 record["hf_cbs"] = _to_float(result[0])
                 record["corr_cbs"] = _to_float(result[1])
@@ -264,7 +260,6 @@ def process_section(
             elif len(result) == 2:
                 first = _to_float(result[0])
                 second = _to_float(result[1])
-                # if scheme is corr-only, treat first as corr and second as total
                 if scheme_low in corr_set:
                     record["corr_cbs"] = first
                     record["total_energy"] = second
@@ -272,7 +267,6 @@ def process_section(
                     record["hf_cbs"] = first
                     record["total_energy"] = second
                 else:
-                    # default: corr, total
                     record["corr_cbs"] = first
                     record["total_energy"] = second
             elif len(result) == 1:
@@ -285,7 +279,6 @@ def process_section(
                     else:
                         record["total_energy"] = val
             else:
-                # find first numeric and assign based on scheme
                 for v in result:
                     nv = _to_float(v)
                     if nv is not None:
@@ -297,7 +290,7 @@ def process_section(
                             record["total_energy"] = nv
                         break
         else:
-            # scalar result
+            # scalar
             val = _to_float(result)
             if val is not None:
                 if scheme_low in corr_set:
@@ -314,6 +307,7 @@ def process_section(
         logger.exception("Error in [%s]", section_name)
         writer.write_error(str(output_file), section_name, str(e))
         return False
+
 
 
 
