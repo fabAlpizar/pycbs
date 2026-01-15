@@ -8,6 +8,7 @@ import configparser
 import logging
 import sys
 from pathlib import Path
+from typing import Dict, Any, List
 
 # Package imports
 from . import writer
@@ -39,11 +40,6 @@ def setup_logging(verbosity: int = 0) -> None:
 # ----------------------------------------------------------------------
 
 def run(params: dict):
-    """
-    Execute a CBS scheme based on validated parameters.
-
-    This is the single execution gateway used by the CLI.
-    """
     scheme = params["scheme"]
     module = SchemeModuleLoader.load_scheme(scheme)
 
@@ -64,7 +60,7 @@ def read_config(input_path: Path) -> configparser.ConfigParser:
         raise FileNotFoundError(f"Configuration file not found: {input_path}")
 
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str  # preserve case
+    cfg.optionxform = str
     cfg.read(input_path)
 
     if not cfg.sections():
@@ -74,127 +70,101 @@ def read_config(input_path: Path) -> configparser.ConfigParser:
 
 
 # ----------------------------------------------------------------------
-# Section dispatcher
+# Normalization
 # ----------------------------------------------------------------------
 
 def normalize_params(raw: dict) -> dict:
-    """
-    Convert configparser string values into typed params suitable for compute().
-    - Keys are normalized to lowercase (case-insensitive input).
-    - 'scheme' and 'method' values are uppercased.
-    - Basis names and labels preserve case.
-    - Numeric-looking values are converted to int or float.
-    - Empty strings and None-like values become None.
-    """
     params = {}
 
     for k, v in raw.items():
         key = k.strip().lower()
+        val = v.strip() if isinstance(v, str) else v
 
-        if v is None:
-            val = None
-        else:
-            val = v.strip()
-
-        # Normalize empty / None-like values
-        if isinstance(val, str) and val.lower() in {"", "none", "null"}:
+        if val is None or (isinstance(val, str) and val.lower() in {"", "none", "null"}):
             params[key] = None
             continue
 
-        # Scheme and method → uppercase values
         if key in {"scheme", "method"}:
-            params[key] = val.upper() if isinstance(val, str) else val
+            params[key] = val.upper()
             continue
 
-        # BASIS names and metadata → preserve case
         if key.startswith("basis") or key in {"constant", "comment", "label"}:
             params[key] = val
             continue
 
-        # Try numeric coercion
-        if isinstance(val, str):
-            try:
-                f = float(val)
-                params[key] = int(f) if f.is_integer() else f
-            except ValueError:
-                params[key] = val
-        else:
+        try:
+            f = float(val)
+            params[key] = int(f) if f.is_integer() else f
+        except Exception:
             params[key] = val
 
     return params
 
 
+# ----------------------------------------------------------------------
+# Section processing
+# ----------------------------------------------------------------------
+
 def process_section(
     section_name: str,
     section: configparser.SectionProxy,
-    output_file: Path
+    calculations: List[Dict[str, Any]]
 ) -> bool:
     try:
-        # raw: preserve original strings from configparser for validation
         raw = dict(section)
 
-        # Validate raw config (validator is now case-insensitive)
         ok, errors = ConfigValidator.validate_section(section_name, raw)
         if not ok:
             for err in errors:
-                writer.write_error(output_file, section_name, err)
+                writer.write_error(None, section_name, err)
             return False
 
-        # Normalize values for computation (lowercase keys, typed numbers)
         params = normalize_params(raw)
 
-        # scheme is normalized to uppercase inside normalize_params
-        scheme = params.get("scheme", "")
+        scheme = params.get("scheme")
         if not scheme:
             raise ValueError(f"[{section_name}] Missing required key: scheme")
 
         logger.info(f"Processing [{section_name}] | scheme={scheme}")
 
-
-        # Execute scheme
         result = run(params)
 
-        # Write output
-        # Prepare data for writer: use the raw input (strings) so writer prints the
-        # parameters exactly as the user supplied them.
-        data_for_writer = raw if isinstance(raw, dict) else dict(section)
+        record: Dict[str, Any] = {
+            "calculation": raw.get("label", section_name),
+            "scheme": scheme,
+        }
 
-        # Map compute() result into writer's expected fields:
-        EHF = None
-        dc = None
-        energy = None
+        # ---- result mapping (robust but minimal) ----
 
-        # result can be:
-        #  - dict with keys like {'EHF':..., 'E_corr':..., 'E_CBS':...}
-        #  - tuple/list (EHF, dc, energy)
-        #  - scalar (energy)
         if isinstance(result, dict):
-            # attempt common keys
-            EHF = result.get('EHF') or result.get('E_HF') or result.get('E_hf') or result.get('zeta_HF') or result.get('zeta_hf')
-            dc = result.get('E_corr') or result.get('dc') or result.get('dynamic_corr') or result.get('zeta_cor')
-            energy = result.get('E_CBS') or result.get('energy') or result.get('total') or result.get('E_total')
-        elif isinstance(result, (list, tuple)):
+            record["hf_cbs"] = result.get("EHF") or result.get("E_HF")
+            record["corr_cbs"] = result.get("E_corr") or result.get("dc")
+            record["freq_cbs"] = result.get("freq_cbs")
+            record["tens_prop"] = result.get("tens_prop")
+            record["total_energy"] = (
+                result.get("E_CBS")
+                or result.get("E_total")
+                or result.get("energy")
+            )
+            record["property_type"] = result.get("property_type")
+
+        elif isinstance(result, (tuple, list)):
             if len(result) == 3:
-                EHF, dc, energy = result
+                record["hf_cbs"], record["corr_cbs"], record["total_energy"] = result
             elif len(result) == 2:
-                # ambiguous: assume (dc, energy)
-                dc, energy = result
+                record["corr_cbs"], record["total_energy"] = result
             else:
-                energy = result[0]
+                record["total_energy"] = result[0]
+
         else:
-            # scalar
-            energy = result
+            record["total_energy"] = result
 
-        # Finally call writer with the standardized signature.
-        # writer expects: filename (str), scheme (str), data (dict of inputs), EHF, dc, energy
-        writer.write_result(str(output_file), scheme, data_for_writer, EHF=EHF, dc=dc, energy=energy)
-
-
+        calculations.append(record)
         return True
 
     except Exception as e:
         logger.exception(f"Error in [{section_name}]")
-        writer.write_error(output_file, section_name, str(e))
+        writer.write_error(None, section_name, str(e))
         return False
 
 
@@ -207,29 +177,14 @@ def main() -> None:
         prog="pycbs",
         description="pyCBS – Complete Basis Set Extrapolation Tool"
     )
-    parser.add_argument(
-        "-input", "--input",
-        type=Path,
-        required=True,
-        help="Path to input configuration file"
-    )
-    parser.add_argument(
-        "-o", "--output",
-        type=Path,
-        default=Path("results.out"),
-        help="Output file"
-    )
-    parser.add_argument(
-        "-v", "--verbose",
-        action="count",
-        default=0,
-        help="Increase verbosity (-v, -vv)"
-    )
+    parser.add_argument("-input", "--input", type=Path, required=True)
+    parser.add_argument("-o", "--output", type=Path, default=Path("results.out"))
+    parser.add_argument("-v", "--verbose", action="count", default=0)
 
     args = parser.parse_args()
     setup_logging(args.verbose)
 
-    LOGO = """
+    print("""
                                  $$$$$$\  $$$$$$$\   $$$$$$\  
                                 $$  __$$\ $$  __$$\ $$  __$$\ 
             $$$$$$\  $$\   $$\ $$ /  \__|$$ |  $$ |$$ /  \__|
@@ -241,28 +196,7 @@ def main() -> None:
             $$ |      $$\   $$ |                              
             $$ |      \$$$$$$  |                              
             \__|       \______/                               
-    """
-
-    INFO_BLOCK = """
-            *******************************************************
-            *               Alberto Guerra-Barroso,               *
-            *              Fabio J. Delgado-Alpízar               *
-            *    Lab of Computational and Theoretical Chemistry   *
-            *      Faculty of Chemistry,University of Havana      *
-            *                                                     *
-            *                        and                          *
-            *                                                     *
-            *              Antonio J. C. Varandas                 *
-            *    Department of Chemistry, and Chemistry Centre    *
-            *                University of Coimbra                *                    
-            *******************************************************
-    """
-    print(LOGO)
-    print(INFO_BLOCK)
-
-    logger.info("Starting pyCBS")
-    logger.info(f"Input : {args.input}")
-    logger.info(f"Output: {args.output}")
+    """)
 
     try:
         config = read_config(args.input)
@@ -270,21 +204,27 @@ def main() -> None:
         logger.error(e)
         sys.exit(1)
 
-    # Initialize output file
     args.output.write_text("")
     writer.write_header(str(args.output))
 
-    total = 0
-    success = 0
+    calculations: List[Dict[str, Any]] = []
+
+    total = success = 0
 
     for section_name in config.sections():
         if section_name.upper() == "OPTIMIZATION":
-            logger.warning("OPTIMIZATION section not yet supported")
+            logger.warning("OPTIMIZATION section not supported")
             continue
 
         total += 1
-        if process_section(section_name, config[section_name], args.output):
+        if process_section(section_name, config[section_name], calculations):
             success += 1
+
+    writer.write_reports(
+        str(args.output),
+        calculations=calculations,
+        opt_cycles=[]
+    )
 
     logger.info(f"Completed {success}/{total} calculations")
     sys.exit(0 if success == total else 1)
