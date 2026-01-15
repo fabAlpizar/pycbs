@@ -115,6 +115,7 @@ def process_section(
     Run and map one section into writer-friendly record dicts.
     Tolerant to many result shapes; places scalar/ambiguous numbers into the
     correct key depending on the scheme classification (HF / CORR / MIXED).
+    Special-case: FREQUENCY -> freq_cbs, TENSORIAL -> tens_prop.
     """
     try:
         raw = dict(section)
@@ -155,7 +156,7 @@ def process_section(
                     return None
             return None
 
-        # Prepare classification sets from writer so behavior is consistent
+        # classification sets taken from writer defaults (keeps single source of truth)
         hf_set = {s.lower() for s in getattr(writer, "DEFAULT_HF_COMPONENTS", set())}
         corr_set = {s.lower() for s in getattr(writer, "DEFAULT_CORR_COMPONENTS", set())}
         mixed_set = {s.lower() for s in getattr(writer, "DEFAULT_MIXED_SCHEMES", set())}
@@ -177,6 +178,7 @@ def process_section(
                 res.get("ehf")
                 or res.get("e_hf")
                 or res.get("ehf_cbs")
+                or res.get("e_hf_cbs")
                 or res.get("hf_cbs")
                 or res.get("hf")
             )
@@ -186,61 +188,71 @@ def process_section(
                 or res.get("corr_cbs")
                 or res.get("corr")
                 or res.get("dc")
+                or res.get("dynamic_corr")
             )
             energy = (
                 res.get("e_cbs")
                 or res.get("ecbs")
+                or res.get("e_cbs_total")
                 or res.get("e_total")
                 or res.get("total")
                 or res.get("energy")
+                or res.get("e_cbs_energy")
             )
             freq = res.get("freq_cbs") or res.get("frequency") or res.get("freq")
             tens = res.get("tens_prop") or res.get("tensprop") or res.get("tensor")
-            prop_hint = res.get("property_type") or res.get("property")
+            prop_hint = (res.get("property_type") or res.get("property") or "").strip().lower()
 
             EHFf = _to_float(EHF)
             dcf = _to_float(dc)
             energyf = _to_float(energy)
             freqf = _to_float(freq)
-            tensf = tens  # keep as-is if non-numeric
+            tensf = tens  # tensor may be non-numeric; keep as-is
 
             # Fallback: if nothing numeric found, search for the first numeric value
-            if EHFf is None and dcf is None and energyf is None:
+            if EHFf is None and dcf is None and energyf is None and freqf is None:
                 for v in res.values():
                     nv = _to_float(v)
                     if nv is not None:
                         energyf = nv
                         break
 
-            # Place values into record; but if only 'energyf' found and scheme is corr/hf assign accordingly
+            # Put explicit components if present
             if EHFf is not None:
                 record["hf_cbs"] = EHFf
             if dcf is not None:
                 record["corr_cbs"] = dcf
 
-            # If energyf present but hf/corr not set, decide by scheme classification
-            if energyf is not None:
-                if ("corr_cbs" not in record) and (scheme_low in corr_set):
-                    record["corr_cbs"] = energyf
-                elif ("hf_cbs" not in record) and (scheme_low in hf_set):
-                    record["hf_cbs"] = energyf
-                else:
-                    # mixed or unknown: prefer total_energy unless scheme says otherwise
-                    if scheme_low in mixed_set and (("hf_cbs" in record) or ("corr_cbs" in record)):
-                        # if mixed and we already have hf/corr, keep energy as total if present
-                        record["total_energy"] = energyf
-                    elif scheme_low in mixed_set:
-                        # mixed but no components present, put as total
-                        record["total_energy"] = energyf
+            # Special-case mapping for frequency/tensorial schemes or property hint
+            if (scheme_low == "frequency") or prop_hint.startswith("freq"):
+                # energyf -> freq_cbs
+                if freqf is not None:
+                    record["freq_cbs"] = freqf
+                elif energyf is not None:
+                    record["freq_cbs"] = energyf
+                # do not set total_energy in this branch
+            elif (scheme_low == "tensorial") or prop_hint.startswith("tens"):
+                if tensf is not None:
+                    record["tens_prop"] = tensf
+                elif energyf is not None:
+                    record["tens_prop"] = energyf
+                # do not set total_energy in this branch
+            else:
+                # Place energy according to scheme classification or as fallback total_energy
+                if energyf is not None:
+                    if ("corr_cbs" not in record) and (scheme_low in corr_set):
+                        record["corr_cbs"] = energyf
+                    elif ("hf_cbs" not in record) and (scheme_low in hf_set):
+                        record["hf_cbs"] = energyf
                     else:
-                        # unknown scheme default -> total_energy
+                        # mixed or unknown: prefer total_energy
                         record["total_energy"] = energyf
 
-            if freqf is not None:
+            if freqf is not None and "freq_cbs" not in record and (scheme_low != "frequency"):
                 record["freq_cbs"] = freqf
-            if tensf is not None:
+            if tensf is not None and "tens_prop" not in record and (scheme_low != "tensorial"):
                 record["tens_prop"] = tensf
-            if prop_hint is not None:
+            if prop_hint:
                 record["property_type"] = prop_hint
 
         elif isinstance(result, (tuple, list)):
@@ -250,15 +262,17 @@ def process_section(
                 record["corr_cbs"] = _to_float(result[1])
                 record["total_energy"] = _to_float(result[2])
             elif len(result) == 2:
-                # ambiguous: decide by scheme classification
                 first = _to_float(result[0])
                 second = _to_float(result[1])
-                if scheme_low in corr_set and first is not None and second is not None:
-                    # assume (corr, energy)
+                # if scheme is corr-only, treat first as corr and second as total
+                if scheme_low in corr_set:
                     record["corr_cbs"] = first
                     record["total_energy"] = second
+                elif scheme_low in hf_set:
+                    record["hf_cbs"] = first
+                    record["total_energy"] = second
                 else:
-                    # default: (dc, energy)
+                    # default: corr, total
                     record["corr_cbs"] = first
                     record["total_energy"] = second
             elif len(result) == 1:
@@ -271,7 +285,7 @@ def process_section(
                     else:
                         record["total_energy"] = val
             else:
-                # try to find first numeric
+                # find first numeric and assign based on scheme
                 for v in result:
                     nv = _to_float(v)
                     if nv is not None:
@@ -300,6 +314,7 @@ def process_section(
         logger.exception("Error in [%s]", section_name)
         writer.write_error(str(output_file), section_name, str(e))
         return False
+
 
 
 

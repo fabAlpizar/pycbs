@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional, List, Iterable, Tuple, Union
 LOGO = """
                              $$$$$$\  $$$$$$$\   $$$$$$\  
                             $$  __$$\ $$  __$$\ $$  __$$\ 
-        $$$$$$\  $$\   $$\ $$ /  \__|$$ |  $$ |$$ /  \__|
+        $$$$$$\  $$\   $$\  $$ /  \__|$$ |  $$ |$$ /  \__|
         $$  __$$\ $$ |  $$ |$$ |      $$$$$$$\ |\$$$$$$\  
         $$ /  $$ |$$ |  $$ |$$ |      $$  __$$\  \____$$\  
         $$ |  $$ |$$ |  $$ |$$ |  $$\ $$ |  $$ |$$\   $$ |
@@ -54,15 +54,19 @@ RESULTS_SUMMARY: List[Dict[str, Any]] = []
 # Formatting & rendering
 # -------------------------
 def _format_numeric(v: Any) -> str:
+    """Return numeric values as plain decimal text (10 fractional digits).
+    None -> '-'."""
     if v is None:
         return "-"
     try:
         if isinstance(v, bool):
             return str(v)
         val = float(v)
-        return f"{val:.10e}"
+        # Plain decimal with fixed precision (no scientific notation)
+        return f"{val:.10f}"
     except Exception:
         return str(v)
+
 
 
 def _format_generic(v: Any) -> str:
@@ -74,13 +78,21 @@ def _format_generic(v: Any) -> str:
 
 
 def _render_table(headers: List[str], rows: Iterable[List[Any]]) -> str:
+    """Render a simple left-aligned ASCII table.
+
+    When there are no data rows, render a single row filled with '-' so the
+    table body is not empty (user requested).
+    """
     str_rows = [[_format_generic(c) for c in row] for row in rows]
-    # If there are no rows, still render headers with minimal widths
-    if str_rows:
-        columns = list(zip(*([headers] + str_rows)))
-    else:
-        columns = [(h,) for h in headers]
+
+    # If there are no data rows, create one row of '-' placeholders (one per header)
+    if not str_rows:
+        str_rows = [["-" for _ in headers]]
+
+    # Compute columns and widths
+    columns = list(zip(*([headers] + str_rows)))
     col_widths = [max(len(str(x)) for x in col) + 2 for col in columns]
+
     sep = "+" + "+".join("-" * w for w in col_widths) + "+"
 
     def render_row(cells: List[str]) -> str:
@@ -91,6 +103,7 @@ def _render_table(headers: List[str], rows: Iterable[List[Any]]) -> str:
         lines.append(render_row(r))
     lines.append(sep)
     return "\n".join(lines)
+
 
 
 # -------------------------
