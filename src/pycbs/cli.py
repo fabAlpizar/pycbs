@@ -229,6 +229,37 @@ def main() -> None:
     args = parser.parse_args()
     setup_logging(args.verbose)
 
+    LOGO = """
+                                 $$$$$$\  $$$$$$$\   $$$$$$\  
+                                $$  __$$\ $$  __$$\ $$  __$$\ 
+            $$$$$$\  $$\   $$\ $$ /  \__|$$ |  $$ |$$ /  \__|
+            $$  __$$\ $$ |  $$ |$$ |      $$$$$$$\ |\$$$$$$\  
+            $$ /  $$ |$$ |  $$ |$$ |      $$  __$$\  \____$$\  
+            $$ |  $$ |$$ |  $$ |$$ |  $$\ $$ |  $$ |$$\   $$ |
+            $$$$$$$  |\$$$$$$$ |\$$$$$$  |$$$$$$$  |\$$$$$$  |
+            $$  ____/  \____$$ | \______/ \_______/  \______/ 
+            $$ |      $$\   $$ |                              
+            $$ |      \$$$$$$  |                              
+            \__|       \______/                               
+    """
+
+    INFO_BLOCK = """
+            *******************************************************
+            *               Alberto Guerra-Barroso,               *
+            *              Fabio J. Delgado-Alpízar               *
+            *    Lab of Computational and Theoretical Chemistry   *
+            *      Faculty of Chemistry,University of Havana      *
+            *                                                     *
+            *                        and                          *
+            *                                                     *
+            *              Antonio J. C. Varandas                 *
+            *    Department of Chemistry, and Chemistry Centre    *
+            *                University of Coimbra                *                    
+            *******************************************************
+    """
+    print(LOGO)
+    print(INFO_BLOCK)
+
     logger.info("Starting pyCBS")
     logger.info(f"Input : {args.input}")
     logger.info(f"Output: {args.output}")

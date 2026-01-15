@@ -1,222 +1,304 @@
-# src/pycbs/writer.py
 """
-Writer utilities for pyCBS results.
-Single, consistent implementation for header, per-job results, errors,
-optimization history, and summary table.
+writer.py
+
+A robust, professional writer utility for pyCBS that creates human- and machine-readable
+reports for:
+  1) CBS Extrapolations (summary table)
+  2) Geometrical Optimization (cycle vs CBS-energy table)
+
+Design goals
+- Follow the mapping rules provided by the user: HF-only schemes, correlation-only schemes,
+  mixed (uste/uste2/uspe) that return both HF and correlation CBS and total/other properties.
+- Produce a single summary table for CBS extrapolations with these 7 columns (in order):
+    calculation, scheme, HF_CBS, Corr_CBS, Freq_CBS, TensProp, Total Energy
+- Produce an optimization table with two columns: Cycle, CBS Energy
+- Be robust: accept inputs as simple dictionaries (order-agnostic), validate them, and
+  fall back to sensible defaults when values are missing.
+- Provide plain-text (ASCII) output plus optional CSV and LaTeX exports when pandas is
+  available. Avoid hard dependency on third-party packages for terminal output.
+
+Usage
+- The repository caller should collect per-calculation results into a list of dicts where each
+  dict minimally contains:
+      {
+          'calculation': '<input-section-name-or-user-label>',
+          'scheme': '<scheme-name>',
+          'hf_cbs': <float or None>,         # optional depending on scheme
+          'corr_cbs': <float or None>,       # optional depending on scheme
+          'freq_cbs': <float or None>,       # optional
+          'tens_prop': <str or float or None>, # optional (tensorial properties)
+          'total_energy': <float or None>,   # optional
+          'property_type': '<energy|frequency|tensprop|total>' # optional hint
+      }
+- Optimization cycles: list of (cycle_index, cbs_energy) or list of dicts
+
 """
+from __future__ import annotations
+import os
+import math
+from typing import List, Dict, Any, Optional, Iterable, Tuple
+import shutil
 
-from pathlib import Path
-from typing import Any, Dict, Optional, List
-
-LOGO = """
-                             $$$$$$\  $$$$$$$\   $$$$$$\  
-                            $$  __$$\ $$  __$$\ $$  __$$\ 
-        $$$$$$\  $$\   $$\ $$ /  \__|$$ |  $$ |$$ /  \__|
-        $$  __$$\ $$ |  $$ |$$ |      $$$$$$$\ |\$$$$$$\  
-        $$ /  $$ |$$ |  $$ |$$ |      $$  __$$\  \____$$\  
-        $$ |  $$ |$$ |  $$ |$$ |  $$\ $$ |  $$ |$$\   $$ |
-        $$$$$$$  |\$$$$$$$ |\$$$$$$  |$$$$$$$  |\$$$$$$  |
-        $$  ____/  \____$$ | \______/ \_______/  \______/ 
-        $$ |      $$\   $$ |                              
-        $$ |      \$$$$$$  |                              
-        \__|       \______/                               
-"""
-
-INFO_BLOCK = """
-        *******************************************************
-        *               Alberto Guerra-Barroso,               *
-        *              Fabio J. Delgado-Alpízar               *
-        *    Lab of Computational and Theoretical Chemistry   *
-        *      Faculty of Chemistry,University of Havana      *
-        *                                                     *
-        *                        and                          *
-        *                                                     *
-        *              Antonio J. C. Varandas                 *
-        *    Department of Chemistry, and Chemistry Centre    *
-        *                University of Coimbra                *                    
-        *******************************************************
-"""
-
-GENERAL_CITATION_WRITTEN = False
-RESULTS_SUMMARY: List[Dict[str, Any]] = []
+# Try importing pandas only for enhanced exports; otherwise continue without it.
+try:
+    import pandas as pd
+except Exception:
+    pd = None  # type: ignore
 
 
-def write_header(filename: str) -> None:
-    """Write initial header to output file (overwrites file)."""
-    global GENERAL_CITATION_WRITTEN, RESULTS_SUMMARY
-    RESULTS_SUMMARY = []
-    with open(filename, "w") as f:
-        f.write(LOGO)
-        f.write("\n\n")
-        f.write("             pyCBS: Complete Basis Set Extrapolation Tool\n\n")
-        f.write(INFO_BLOCK)
-        f.write("\n\n")
-        if not GENERAL_CITATION_WRITTEN:
-            GENERAL_CITATION_WRITTEN = True
+# ---------------------------------------------------------------------------
+# Scheme classification (defaults). These can be extended at runtime by the caller.
+# ---------------------------------------------------------------------------
+DEFAULT_HF_COMPONENTS = {"feller", "truhlar_hf", "jensen", "klopper", "hf_e"}
+DEFAULT_CORR_COMPONENTS = {"martin", "truhlar_corr", "oanc", "bakowies", "huh-lee", "halkier-helgaker"}
+DEFAULT_MIXED_SCHEMES = {"uste1", "uste2", "uspe"}  # these return HF + CORR + Total (or property)
 
 
-def write_error(filename: str, section_name: str, message: str) -> None:
-    """Append an error message for the named section."""
-    with open(filename, "a") as f:
-        f.write(f"\nERROR in [{section_name}]: {message}\n")
+# ---------------------------------------------------------------------------
+# Helper: plain text table renderer (dependency-free)
+# ---------------------------------------------------------------------------
 
-
-def _coerce_data_dict(data: Any) -> Dict[str, Any]:
-    """Ensure 'data' used for printing parameters is a dict. If it's a string, return {'input': data}."""
-    if data is None:
-        return {}
-    if isinstance(data, dict):
-        return data
-    # Try to coerce Path-like or other objects
-    try:
-        return dict(data)
-    except Exception:
-        return {"value": data}
-
-
-def write_result(filename: str, scheme: str, data: Any, EHF: Optional[float] = None,
-                 dc: Optional[float] = None, energy: Optional[float] = None) -> None:
-    """
-    Write a detailed result block.
-
-    Args:
-        filename: path to file (string)
-        scheme: scheme name (string)
-        data: dict-like of input parameters (or any, will be coerced)
-        EHF: Hartree-Fock CBS energy (optional)
-        dc: dynamic correlation contribution (optional)
-        energy: total CBS energy (optional)
-    """
-    global RESULTS_SUMMARY
-    datad = _coerce_data_dict(data)
-
-    # determine whether HF+dc components present
-    has_components = (EHF is not None) and (dc is not None)
-
-    with open(filename, "a") as f:
-        f.write("\n" + "=" * 70 + "\n")
-        f.write(f"                       Extrapolation Scheme: {scheme}\n")
-        f.write("=" * 70 + "\n")
-        f.write("Input Parameters:\n")
-        f.write("-" * 70 + "\n")
-        if datad:
-            # Print sorted keys for stable output
-            for key in sorted(datad.keys()):
-                try:
-                    f.write(f"{key:>20}: {datad[key]}\n")
-                except Exception:
-                    f.write(f"{key:>20}: {str(datad[key])}\n")
-        else:
-            f.write(" (no input parameters)\n")
-        f.write("-" * 70 + "\n")
-        f.write("Extrapolation Results:\n")
-        f.write("-" * 70 + "\n")
-
-        if has_components:
-            try:
-                f.write(f"{'Hartree-Fock (CBS):':>30} {float(EHF):.10f}\n")
-            except Exception:
-                f.write(f"{'Hartree-Fock (CBS):':>30} {EHF}\n")
-            try:
-                f.write(f"{'Dynamic Correlation:':>30} {float(dc):.10f}\n")
-            except Exception:
-                f.write(f"{'Dynamic Correlation:':>30} {dc}\n")
-            try:
-                f.write(f"{'Total CBS Energy:':>30} {float(energy):.10f}\n")
-            except Exception:
-                f.write(f"{'Total CBS Energy:':>30} {energy}\n")
-        else:
-            # If only one value is provided, prefer energy; otherwise write whatever we have
-            if energy is not None:
-                try:
-                    f.write(f"{'CBS Extrapolated Energy:':>30} {float(energy):.10f}\n")
-                except Exception:
-                    f.write(f"{'CBS Extrapolated Energy:':>30} {energy}\n")
-            elif EHF is not None:
-                try:
-                    f.write(f"{'HF (CBS):':>30} {float(EHF):.10f}\n")
-                except Exception:
-                    f.write(f"{'HF (CBS):':>30} {EHF}\n")
-            elif dc is not None:
-                try:
-                    f.write(f"{'Dynamic Corr (only):':>30} {float(dc):.10f}\n")
-                except Exception:
-                    f.write(f"{'Dynamic Corr (only):':>30} {dc}\n")
+def _format_value(v: Any) -> str:
+    """Format numeric values in scientific format; keep strings as-is; None -> '-'."""
+    if v is None:
+        return "-"
+    if isinstance(v, (float, int)) and (not isinstance(v, bool)):
+        # Use scientific notation for energies; but if number is small integer-like show as int
+        try:
+            if abs(float(v)) >= 1e-4:
+                return f"{float(v):.6e}"
             else:
-                f.write("No numeric result available\n")
-
-        f.write("=" * 70 + "\n\n")
-
-    # Append to summary record
-    RESULTS_SUMMARY.append({
-        'scheme': scheme,
-        'energy': energy,
-        'EHF': EHF,
-        'dc': dc,
-        'has_components': has_components
-    })
+                return f"{float(v):.6e}"
+        except Exception:
+            return str(v)
+    return str(v)
 
 
-def write_optimization_summary(filename: str, history: list) -> None:
-    """Write optimization cycle history (if provided)."""
-    with open(filename, "a") as f:
-        f.write("\n" + "=" * 70 + "\n")
-        f.write("                      OPTIMIZATION CYCLE HISTORY\n")
-        f.write("=" * 70 + "\n\n")
-        f.write(f"{'Cycle':>5} {'p0':>12} {'p1':>12} {'Energy[Ha]':>18} {'DispFactor':>12}\n")
-        f.write("-" * 70 + "\n")
-        for step in history:
-            try:
-                cyc = int(step.get('cycle', 0))
-            except Exception:
-                cyc = 0
-            params = step.get('parameters', [None, None])
-            try:
-                p0 = float(params[0])
-            except Exception:
-                p0 = 0.0
-            try:
-                p1 = float(params[1])
-            except Exception:
-                p1 = 0.0
-            try:
-                en = float(step.get('energy', 0.0))
-            except Exception:
-                en = 0.0
-            try:
-                dff = float(step.get('displacement_factor', 0.0))
-            except Exception:
-                dff = 0.0
-            f.write(f"{cyc:5d} {p0:12.8f} {p1:12.8f} {en:18.10f} {dff:12.6f}\n")
-        f.write("\n" + "=" * 70 + "\n\n")
+def _render_table(headers: List[str], rows: Iterable[List[Any]]) -> str:
+    """Render a simple left-aligned ASCII table.
+
+    This function does not require third-party packages and aims for a clean scientific look.
+    """
+    # Convert all cells to strings with formatting rules
+    str_rows = [[_format_value(c) for c in row] for row in rows]
+
+    # Compute column widths
+    columns = list(zip(*([headers] + str_rows))) if str_rows else [(h,) for h in headers]
+    col_widths = [max(len(str(x)) for x in col) + 2 for col in columns]
+
+    # Helper to render a single row
+    def render_row(cells: List[str]) -> str:
+        return "|" + "".join(f" {cell.ljust(w-1)}|" for cell, w in zip(cells, col_widths))
+
+    sep = "+" + "+".join("-" * w for w in col_widths) + "+"
+    lines = [sep, render_row(headers), sep]
+    for r in str_rows:
+        lines.append(render_row(r))
+    lines.append(sep)
+    return "\n".join(lines)
 
 
-def write_summary_table(filename: str) -> None:
-    """Write the final summary table appended to the results file."""
-    global RESULTS_SUMMARY
-    if not RESULTS_SUMMARY:
-        return
-    with open(filename, "a") as f:
-        f.write("\n" + "=" * 70 + "\n")
-        f.write("                      SUMMARY OF RESULTS\n")
-        f.write("=" * 70 + "\n\n")
-        f.write(f"{'Scheme':<20}{'HF (CBS)':>18}{'Dynamic Corr.':>18}{'Total Energy':>18}\n")
-        f.write("-" * 70 + "\n")
-        for item in RESULTS_SUMMARY:
-            scheme = item.get('scheme', '')
-            energy = item.get('energy', None)
-            EHF = item.get('EHF', None)
-            dc = item.get('dc', None)
-            has_components = item.get('has_components', False)
+# ---------------------------------------------------------------------------
+# Writer implementation
+# ---------------------------------------------------------------------------
+class Writer:
+    """Create publication-style, machine-friendly reports for CBS extrapolations
+    and geometry optimization cycles.
 
-            if has_components:
-                try:
-                    f.write(f"{scheme:<20}{float(EHF):18.10f}{float(dc):18.10f}{float(energy):18.10f}\n")
-                except Exception:
-                    f.write(f"{scheme:<20}{str(EHF):>18}{str(dc):>18}{str(energy):>18}\n")
+    The Writer does not assume the internal structure of the rest of the package; it
+    operates on simple Python structures (lists/dicts). This keeps it easy to integrate.
+    """
+
+    def __init__(
+        self,
+        outdir: Optional[str] = "outputs",
+        hf_components: Optional[Iterable[str]] = None,
+        corr_components: Optional[Iterable[str]] = None,
+        mixed_schemes: Optional[Iterable[str]] = None,
+        write_csv: bool = True,
+        write_latex: bool = False,
+    ) -> None:
+        self.outdir = outdir or "outputs"
+        self.hf_components = set(hf_components) if hf_components is not None else set(DEFAULT_HF_COMPONENTS)
+        self.corr_components = set(corr_components) if corr_components is not None else set(DEFAULT_CORR_COMPONENTS)
+        self.mixed_schemes = set(mixed_schemes) if mixed_schemes is not None else set(DEFAULT_MIXED_SCHEMES)
+        self.write_csv = write_csv
+        self.write_latex = write_latex and (pd is not None)
+
+        # Prepare output directory
+        if os.path.exists(self.outdir):
+            # keep it but ensure it's writeable
+            if not os.path.isdir(self.outdir):
+                raise RuntimeError(f"Output path {self.outdir} exists and is not a directory")
+        else:
+            os.makedirs(self.outdir, exist_ok=True)
+
+    # ---------------------- Public API ----------------------
+    def write_reports(self, calculations: List[Dict[str, Any]], opt_cycles: List[Tuple[int, float]]) -> Dict[str, str]:
+        """Write the CBS summary and optimization tables.
+
+        Returns a dict with paths to the generated textual/CSV/LaTeX files (where applicable).
+        """
+        cbs_path = os.path.join(self.outdir, "cbs_extrapolations.txt")
+        opt_path = os.path.join(self.outdir, "geometry_optimization.txt")
+
+        # Build tables
+        cbs_headers, cbs_rows = self._build_cbs_table(calculations)
+        opt_headers, opt_rows = self._build_opt_table(opt_cycles)
+
+        # Render to text and write
+        with open(cbs_path, "w", encoding="utf-8") as f:
+            f.write("CBS Extrapolations\n")
+            f.write("=" * 80 + "\n\n")
+            f.write(_render_table(cbs_headers, cbs_rows))
+            f.write("\n")
+
+        with open(opt_path, "w", encoding="utf-8") as f:
+            f.write("Geometrical Optimization\n")
+            f.write("=" * 80 + "\n\n")
+            f.write(_render_table(opt_headers, opt_rows))
+            f.write("\n")
+
+        outputs = {"cbs_txt": cbs_path, "opt_txt": opt_path}
+
+        # Optional: export CSV/LaTeX using pandas if available
+        if self.write_csv or self.write_latex:
+            if pd is None:
+                # graceful fallback: notify user via return value that pandas was not available
+                outputs["csv_warning"] = "pandas not installed; CSV/LaTeX exports skipped"
             else:
-                try:
-                    f.write(f"{scheme:<20}{'':18}{'':18}{float(energy):18.10f}\n")
-                except Exception:
-                    f.write(f"{scheme:<20}{'':18}{'':18}{str(energy):>18}\n")
-        f.write("\n" + "=" * 70 + "\n")
+                # Build DataFrames
+                df_cbs = pd.DataFrame([dict(zip(cbs_headers, r)) for r in cbs_rows])
+                df_opt = pd.DataFrame([dict(zip(opt_headers, r)) for r in opt_rows])
+
+                if self.write_csv:
+                    csv_cbs = os.path.join(self.outdir, "cbs_extrapolations.csv")
+                    csv_opt = os.path.join(self.outdir, "geometry_optimization.csv")
+                    df_cbs.to_csv(csv_cbs, index=False)
+                    df_opt.to_csv(csv_opt, index=False)
+                    outputs["cbs_csv"] = csv_cbs
+                    outputs["opt_csv"] = csv_opt
+
+                if self.write_latex:
+                    tex_cbs = os.path.join(self.outdir, "cbs_extrapolations.tex")
+                    tex_opt = os.path.join(self.outdir, "geometry_optimization.tex")
+                    with open(tex_cbs, "w", encoding="utf-8") as f:
+                        f.write(df_cbs.to_latex(index=False, float_format="%.6e"))
+                    with open(tex_opt, "w", encoding="utf-8") as f:
+                        f.write(df_opt.to_latex(index=False, float_format="%.6e"))
+                    outputs["cbs_tex"] = tex_cbs
+                    outputs["opt_tex"] = tex_opt
+
+        return outputs
+
+    # ---------------------- Internal helpers ----------------------
+    def _build_cbs_table(self, calculations: List[Dict[str, Any]]) -> Tuple[List[str], List[List[Any]]]:
+        """Given a list of calculation-result dicts, produce headers and rows for the
+        CBS summary table with the exact column order requested by the user.
+
+        Column order: calculation, scheme, HF_CBS, Corr_CBS, Freq_CBS, TensProp, Total Energy
+        """
+        headers = ["calculation", "scheme", "HF_CBS", "Corr_CBS", "Freq_CBS", "TensProp", "Total Energy"]
+        rows: List[List[Any]] = []
+
+        for entry in calculations:
+            # Normalize keys to lower-case for flexible input
+            calculation_label = entry.get("calculation") or entry.get("label") or entry.get("name") or "unnamed"
+            scheme = entry.get("scheme", "unknown").lower()
+
+            hf_val = entry.get("hf_cbs")
+            corr_val = entry.get("corr_cbs")
+            freq_val = entry.get("freq_cbs")
+            tens_val = entry.get("tens_prop") or entry.get("tensprop")
+            total_val = entry.get("total_energy")
+            property_hint = (entry.get("property_type") or "").lower()
+
+            # Decide filling according to scheme classification (user rules)
+            if scheme in self.hf_components:
+                # Only HF CBS produced
+                row = [calculation_label, scheme, hf_val, None, None, None, None]
+            elif scheme in self.corr_components:
+                # Only correlation CBS produced
+                row = [calculation_label, scheme, None, corr_val, None, None, None]
+            elif scheme in self.mixed_schemes:
+                # Mixed: fill HF, CORR, and either Total Energy or property columns per hint
+                if property_hint.startswith("freq") or (freq_val is not None):
+                    row = [calculation_label, scheme, hf_val, corr_val, freq_val, None, None]
+                elif property_hint.startswith("tens") or (tens_val is not None):
+                    row = [calculation_label, scheme, hf_val, corr_val, None, tens_val, None]
+                else:
+                    row = [calculation_label, scheme, hf_val, corr_val, None, None, total_val]
+            else:
+                # Unknown scheme: try to infer from available fields. Prioritize explicit fields.
+                if hf_val is not None and corr_val is None:
+                    row = [calculation_label, scheme, hf_val, None, None, None, None]
+                elif corr_val is not None and hf_val is None:
+                    row = [calculation_label, scheme, None, corr_val, None, None, None]
+                else:
+                    # If both or neither present, preserve whatever is available and prefer total_energy
+                    row = [
+                        calculation_label,
+                        scheme,
+                        hf_val,
+                        corr_val,
+                        freq_val,
+                        tens_val,
+                        total_val,
+                    ]
+
+            rows.append(row)
+
+        return headers, rows
+
+    def _build_opt_table(self, opt_cycles: List[Tuple[int, float]]) -> Tuple[List[str], List[List[Any]]]:
+        """Build the two-column optimization table. Accepts either a list of (cycle, energy)
+        or a list of dicts containing 'cycle' and 'cbs_energy'."""
+        headers = ["Cycle", "CBS Energy"]
+        rows: List[List[Any]] = []
+
+        for item in opt_cycles:
+            if isinstance(item, dict):
+                cycle = item.get("cycle")
+                energy = item.get("cbs_energy") or item.get("energy") or item.get("total_energy")
+            elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                cycle, energy = item[0], item[1]
+            else:
+                # skip malformed entries
+                continue
+            rows.append([cycle, energy])
+
+        return headers, rows
+
+
+# ---------------------------------------------------------------------------
+# Minimal self-test / example usage
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    # Example input that demonstrates the mapping rules requested by the user.
+    sample_calculations = [
+        {"calculation": "calculation_H2_FELLER", "scheme": "feller", "hf_cbs": -1.23456789},
+        {"calculation": "calculation_N2_HALKIER_HELGAKER", "scheme": "halkier-helgaker", "corr_cbs": -0.0012345},
+        {
+            "calculation": "calculation_CH4_USTE1",
+            "scheme": "uste1",
+            "hf_cbs": -10.123456789,
+            "corr_cbs": -0.987654321,
+            "total_energy": -11.11111111,
+        },
+        {
+            "calculation": "calculation_CO_USPE_FREQ",
+            "scheme": "uspe",
+            "hf_cbs": -200.1,
+            "corr_cbs": -0.9,
+            "freq_cbs": 3450.12,
+            "property_type": "frequency",
+        },
+    ]
+
+    sample_opt = [(0, -11.11111111), (1, -11.11120000), (2, -11.11125000)]
+
+    writer = Writer(outdir="outputs_example", write_csv=True, write_latex=False)
+    out = writer.write_reports(sample_calculations, sample_opt)
+    print("Generated files:")
+    for k, v in out.items():
+        print(f"  {k}: {v}")
