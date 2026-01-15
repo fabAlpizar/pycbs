@@ -20,11 +20,11 @@ class SchemeModuleLoader:
         "TRUHLAR_HF": "pycbs.HF_component",
 
         # --- Correlation-only schemes ---
-        "BAKOULES": "pycbs.corr_component",
+        "BAKOWIES": "pycbs.corr_component",
         "HALKIER_HELGAKER": "pycbs.corr_component",
         "HUH_LEE": "pycbs.corr_component",
         "MARTIN": "pycbs.corr_component",
-        "OAN": "pycbs.corr_component",
+        "OANc": "pycbs.corr_component",
         "TRUHLAR_CORR": "pycbs.corr_component",
 
         # --- Full CBS extrapolation schemes ---

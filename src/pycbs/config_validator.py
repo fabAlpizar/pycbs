@@ -56,11 +56,11 @@ class ConfigValidator:
             'required_all': ['scheme', 'Ehf_X', 'Ehf_Y', 'X', 'Y'],
             'optional': ['alfa'],
         },
-        'BAKOULES': {
+        'BAKOWIES': {
             'required_all': ['scheme', 'Ec_X', 'Ec_Y','Ehf_X', 'Ehf_Y', 'X', 'Y'],
             'optional': ['beta'],
         },
-        'OAN': {
+        'OANc': {
             'required_all': ['scheme', 'Ec_X', 'Ec_Y','Ehf_X', 'Ehf_Y'],
             'optional': ['beta'],
         },
@@ -105,7 +105,7 @@ class ConfigValidator:
         # Allowed schemes set = keys of REQUIRED_PARAMS plus explicit single-function schemes
         allowed = set(cls.REQUIRED_PARAMS.keys()) | {
             'FELLER', 'HF_E', 'TRUHLAR_HF', 'KLOPPER', 'JENSEN',
-            'BAKOULES', 'OAN', 'TRUHLAR_CORR', 'MARTIN',
+            'BAKOWIES', 'OANc', 'TRUHLAR_CORR', 'MARTIN',
             'HALKIER_HELGAKER', 'HUH_LEE'
         }
 
