@@ -96,7 +96,13 @@ def _render_table(headers: List[str], rows: Iterable[List[Any]]) -> str:
     sep = "+" + "+".join("-" * w for w in col_widths) + "+"
 
     def render_row(cells: List[str]) -> str:
-        return "|" + "".join(f" {cell.ljust(w-1)}|" for cell, w in zip(cells, col_widths))
+        rendered = []
+        for cell, w in zip(cells, col_widths):
+            if cell == "-":
+                rendered.append(" " + cell.center(w - 1) + "|")
+            else:
+                rendered.append(" " + cell.ljust(w - 1) + "|")
+        return "|" + "".join(rendered)
 
     lines = [sep, render_row(headers), sep]
     for r in str_rows:
@@ -112,7 +118,8 @@ def _render_table(headers: List[str], rows: Iterable[List[Any]]) -> str:
 def _norm_scheme(scheme: Optional[str]) -> str:
     if scheme is None:
         return "unknown"
-    return str(scheme).strip().lower()
+    return str(scheme).strip().lower().replace("_", "-")
+
 
 
 def _coerce_entry(entry: Any) -> Dict[str, Any]:
