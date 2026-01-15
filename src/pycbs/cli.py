@@ -188,7 +188,7 @@ def main() -> None:
     print("""
                                  $$$$$$\  $$$$$$$\   $$$$$$\  
                                 $$  __$$\ $$  __$$\ $$  __$$\ 
-            $$$$$$\  $$\   $$\ $$ /  \__|$$ |  $$ |$$ /  \__|
+            $$$$$$\  $$\   $$\  $$ /  \__|$$ |  $$ |$$ /  \__|
             $$  __$$\ $$ |  $$ |$$ |      $$$$$$$\ |\$$$$$$\  
             $$ /  $$ |$$ |  $$ |$$ |      $$  __$$\  \____$$\  
             $$ |  $$ |$$ |  $$ |$$ |  $$\ $$ |  $$ |$$\   $$ |
@@ -198,7 +198,20 @@ def main() -> None:
             $$ |      \$$$$$$  |                              
             \__|       \______/                               
     """)
-
+    print("""
+            *******************************************************
+            *               Alberto Guerra-Barroso,               *
+            *              Fabio J. Delgado-Alpízar               *
+            *    Lab of Computational and Theoretical Chemistry   *
+            *      Faculty of Chemistry, University of Havana     *
+            *                                                     *
+            *                        and                          *
+            *                                                     *
+            *              Antonio J. C. Varandas                 *
+            *    Department of Chemistry, and Chemistry Centre    *
+            *                University of Coimbra                *                    
+            *******************************************************
+    """)
     try:
         config = read_config(args.input)
     except Exception as e:
