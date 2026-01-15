@@ -4,7 +4,7 @@ import inspect
 from typing import Any, Dict
 
 # Correlation schemes implemented with lowercase parameter names
-def bakowies(ec_x: float, ec_y: float,ehf_x:float,ehf_y:float, x: int = 2, y: int = 3, beta: float = 3.877):
+def bakowies(ec_x: float, ec_y: float, ehf_x:float, ehf_y:float, x: int = 2, y: int = 3, beta: float = 3.877):
     Ecorr_x = ec_x - ehf_x
     Ecorr_y = ec_y - ehf_y
     num = Ecorr_y * ((x + 1) ** -beta) - Ecorr_x * ((y + 1) ** -beta)
@@ -54,7 +54,7 @@ def truhlar_corr(ec_x: float, ec_y: float,ehf_x:float,ehf_y:float, x: int = 2, y
 
 # Registry
 CORR_SCHEMES = {
-    "BAKOWIES": bakowies(),
+    "BAKOWIES": bakowies,
     "HALKIER_HELGAKER": halkier,
     "HUH_LEE": huh_lee,
     "MARTIN": martin,
