@@ -111,6 +111,10 @@ def process_section(
     calculations: List[Dict[str, Any]],
     output_file: Path
 ) -> bool:
+    """
+    Run and map one section into writer-friendly record dicts.
+    This mapping is intentionally tolerant to many result shapes and key names.
+    """
     try:
         raw = dict(section)
 
@@ -130,43 +134,131 @@ def process_section(
 
         result = run(params)
 
+        # DEBUG: show raw result to help diagnose mapping problems (use -vv for this)
+        logger.debug("Raw compute() result for [%s]: %r", section_name, result)
+
+        # initialize record
         record: Dict[str, Any] = {
             "calculation": raw.get("label", section_name),
             "scheme": scheme,
         }
 
-        # ---- result mapping (robust but minimal) ----
+        # Helper: coerce to float if possible
+        def _to_float(v):
+            if v is None:
+                return None
+            if isinstance(v, (float, int)) and not isinstance(v, bool):
+                return float(v)
+            if isinstance(v, str):
+                try:
+                    return float(v)
+                except Exception:
+                    return None
+            return None
+
+        # If result is dict-like, normalize keys (lowercase) and flatten one nested level
         if isinstance(result, dict):
-            record["hf_cbs"] = result.get("EHF") or result.get("E_HF")
-            record["corr_cbs"] = result.get("E_corr") or result.get("dc")
-            record["freq_cbs"] = result.get("freq_cbs")
-            record["tens_prop"] = result.get("tens_prop")
-            record["total_energy"] = (
-                result.get("E_CBS")
-                or result.get("E_total")
-                or result.get("energy")
+            res: Dict[str, Any] = {}
+            for k, v in result.items():
+                if isinstance(v, dict):
+                    # flatten one level: prefix with parent key to avoid clashes but also keep inner keys
+                    for k2, v2 in v.items():
+                        res[f"{k}.{k2}".lower()] = v2
+                        # also add inner key alone for convenience
+                        res[k2.lower()] = v2
+                else:
+                    res[k.lower()] = v
+
+            # common variants for HF
+            EHF = (
+                res.get("ehf")
+                or res.get("e_hf")
+                or res.get("ehf_cbs")
+                or res.get("e_hf_cbs")
+                or res.get("hf_cbs")
+                or res.get("hf")
             )
-            record["property_type"] = result.get("property_type")
+            # correlation variants
+            dc = (
+                res.get("e_corr")
+                or res.get("ecorr")
+                or res.get("corr_cbs")
+                or res.get("corr")
+                or res.get("dc")
+                or res.get("dynamic_corr")
+            )
+            # total energy variants
+            energy = (
+                res.get("e_cbs")
+                or res.get("ecbs")
+                or res.get("e_cbs_total")
+                or res.get("e_total")
+                or res.get("total")
+                or res.get("energy")
+                or res.get("e_cbs_energy")
+            )
+            freq = res.get("freq_cbs") or res.get("frequency") or res.get("freq")
+            tens = res.get("tens_prop") or res.get("tensprop") or res.get("tensor")
+            prop_hint = res.get("property_type") or res.get("property")
+
+            # coercions
+            EHFf = _to_float(EHF)
+            dcf = _to_float(dc)
+            energyf = _to_float(energy)
+            freqf = _to_float(freq)
+            tensf = tens  # tensor may be string or structured — keep as-is
+
+            # Fallback: if none of the above found, search for first numeric value in res
+            if EHFf is None and dcf is None and energyf is None:
+                for v in res.values():
+                    nv = _to_float(v)
+                    if nv is not None:
+                        energyf = nv
+                        break
+
+            if EHFf is not None:
+                record["hf_cbs"] = EHFf
+            if dcf is not None:
+                record["corr_cbs"] = dcf
+            if energyf is not None:
+                record["total_energy"] = energyf
+            if freqf is not None:
+                record["freq_cbs"] = freqf
+            if tensf is not None:
+                record["tens_prop"] = tensf
+            if prop_hint is not None:
+                record["property_type"] = prop_hint
 
         elif isinstance(result, (tuple, list)):
+            # common shapes: (EHF, dc, energy) or (dc, energy) or (energy,)
             if len(result) == 3:
-                record["hf_cbs"], record["corr_cbs"], record["total_energy"] = result
+                record["hf_cbs"] = _to_float(result[0])
+                record["corr_cbs"] = _to_float(result[1])
+                record["total_energy"] = _to_float(result[2])
             elif len(result) == 2:
-                record["corr_cbs"], record["total_energy"] = result
+                record["corr_cbs"] = _to_float(result[0])
+                record["total_energy"] = _to_float(result[1])
+            elif len(result) == 1:
+                record["total_energy"] = _to_float(result[0])
             else:
-                record["total_energy"] = result[0]
-
+                # try to find first numeric in sequence
+                for v in result:
+                    nv = _to_float(v)
+                    if nv is not None:
+                        record["total_energy"] = nv
+                        break
         else:
-            record["total_energy"] = result
+            # scalar results
+            record["total_energy"] = _to_float(result)
 
         calculations.append(record)
         return True
 
     except Exception as e:
-        logger.exception(f"Error in [{section_name}]")
-        # pass the real output file path (not None)
+        logger.exception("Error in [%s]", section_name)
         writer.write_error(str(output_file), section_name, str(e))
         return False
+
 
 
 # ----------------------------------------------------------------------
