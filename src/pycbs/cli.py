@@ -366,14 +366,34 @@ def main() -> None:
     writer.write_header(str(args.output))
 
     calculations: List[Dict[str, Any]] = []
+    opt_cycles: List[Dict[str, Any]] = []
 
     total = success = 0
 
     for section_name in config.sections():
+        # handle optimization section specially
         if section_name.upper() == "OPTIMIZATION":
-            logger.warning("OPTIMIZATION section not supported")
+            # lazy import (optimizer may have heavy deps)
+            try:
+                # relative import if inside package
+                from .optimization.opt_4 import optimize_from_config
+            except Exception:
+                # fallback import by module name
+                import importlib
+                opt_mod = importlib.import_module("pycbs.optimization.opt_4")
+                optimize_from_config = getattr(opt_mod, "optimize_from_config")
+
+            logger.info("Found OPTIMIZATION section in INI; attempting optimization...")
+            try:
+                cycles = optimize_from_config(config[section_name])
+                if cycles:
+                    opt_cycles.extend(cycles)
+                logger.info("Optimization finished (section: OPTIMIZATION).")
+            except Exception as exc:
+                logger.error(f"Optimization failed: {exc}")
             continue
 
+        # existing processing for normal calculation sections
         total += 1
         if process_section(section_name, config[section_name], calculations, args.output):
             success += 1
@@ -381,7 +401,7 @@ def main() -> None:
     writer.write_reports(
         str(args.output),
         calculations=calculations,
-        opt_cycles=[]
+        opt_cycles=opt_cycles
     )
 
     logger.info(f"Completed {success}/{total} calculations")
