@@ -317,7 +317,10 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
     # attempt correlation methods
     corr_e = None
     last_err = None
-    if "ccsd(t)" in method_preference:
+    # normalize preference to lower-case tokens
+    pref = tuple([p.lower() for p in method_preference]) if method_preference is not None else ("ccsd(t)", "mp2")
+
+    if "ccsd(t)" in pref:
         try:
             mycc = cc.CCSD(mf)
             mycc.conv_tol = 1e-7
@@ -338,7 +341,7 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
             last_err = e
             corr_e = None
 
-    if corr_e is None and "mp2" in method_preference:
+    if corr_e is None and ("mp2" in pref or "mp2" in method_preference):
         try:
             mp2 = mp.MP2(mf)
             mp2.verbose = 0
@@ -369,18 +372,21 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
 # ---------------------
 # High-level CBS energy: evaluate molecule at two basis sets and return CBS energy
 # ---------------------
-def compute_cbs_energy(symbols, coords, basis_pair=None, cfg=CONFIG):
+def compute_cbs_energy(symbols, coords, basis_pair=None, cfg=CONFIG, method_preference=None):
     """
     Compute CBS-extrapolated energy for given Cartesian coordinates.
     Returns: (E_CBS, E_HF_CBS, E_CORR_CBS, debug_dict)
+
+    method_preference: tuple/list of method tokens passed down to compute_scf_and_correlation
+                       e.g. ("ccsd(t)", "mp2") or ("mp2",)
     """
     if basis_pair is None:
         basis_pair = cfg["BASIS_SETS"]
     # small basis first
     bs1, bs2 = basis_pair
 
-    scf1, corr1 = compute_scf_and_correlation(symbols, coords, bs1)
-    scf2, corr2 = compute_scf_and_correlation(symbols, coords, bs2)
+    scf1, corr1 = compute_scf_and_correlation(symbols, coords, bs1, method_preference=method_preference)
+    scf2, corr2 = compute_scf_and_correlation(symbols, coords, bs2, method_preference=method_preference)
 
     E_cbs, E_hf_cbs, E_corr_cbs = cbs_compose(corr1, corr2, scf1, scf2, cfg=cfg)
     debug = {
@@ -395,11 +401,12 @@ def compute_cbs_energy(symbols, coords, basis_pair=None, cfg=CONFIG):
 # Caching wrapper for energy evaluations (keyed by rounded internal coordinates)
 # ---------------------
 class EnergyCache:
-    def __init__(self, symbols, internals, coords0, rounding=8):
+    def __init__(self, symbols, internals, coords0, rounding=8, method_preference=None):
         self.symbols = symbols
         self.internals = internals
         self.coords0 = np.array(coords0)
         self.rounding = rounding
+        self.method_preference = method_preference
         self._cache = {}
 
     def _key_from_internals(self, internal_vector):
@@ -412,8 +419,10 @@ class EnergyCache:
             return self._cache[k]
         # reconstruct Cartesian
         cart = internal_to_cartesian(self.coords0, self.internals, internal_vector)
-        # compute CBS
-        E_cbs, E_hf_cbs, E_corr_cbs, debug = compute_cbs_energy(self.symbols, cart, basis_pair)
+        # compute CBS, passing method preference if present
+        E_cbs, E_hf_cbs, E_corr_cbs, debug = compute_cbs_energy(
+            self.symbols, cart, basis_pair, cfg=CONFIG, method_preference=self.method_preference
+        )
         res = {"E_cbs": E_cbs, "E_hf_cbs": E_hf_cbs, "E_corr_cbs": E_corr_cbs, "cart": cart, "debug": debug}
         self._cache[k] = res
         return res
@@ -427,15 +436,31 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
     Optimize geometry (internals) with L-BFGS-B, using CBS energy as objective.
     Returns optimized carts, final energy, and result dict.
     """
-    # ---- add this line near the top of optimize_geometry, alongside other locals ----
+    # record per-cycle CBS energies
     cbs_history = []
 
     if options is None:
         options = {}
     cfg = CONFIG
 
+    # Map options.method (string like 'MP2' or 'CCSD(T)') into method_preference tuple
+    method_pref = None
+    method_opt = options.get("method", None)
+    if method_opt is not None:
+        mstr = str(method_opt).strip().lower()
+        if "mp2" in mstr and "ccsd" not in mstr:
+            method_pref = ("mp2",)
+        elif "ccsd" in mstr or "ccsd(t)" in mstr or "ccsdt" in mstr:
+            # Prefer CCSD(T) and fall back to MP2 if needed
+            method_pref = ("ccsd(t)", "mp2")
+        else:
+            # unknown token: keep default behavior
+            method_pref = ("ccsd(t)", "mp2")
+    else:
+        method_pref = ("ccsd(t)", "mp2")
+
     internals, values0 = build_internals(symbols, coords0)
-    energy_cache = EnergyCache(symbols, internals, coords0, rounding=8)
+    energy_cache = EnergyCache(symbols, internals, coords0, rounding=8, method_preference=method_pref)
 
     # bounds: for bonds only, apply a factor to initial distances for bounds
     nvars = len(internals)
@@ -502,6 +527,23 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
 
 
 # ---------------------
+# Helper: clean inline comment-bearing config values
+# ---------------------
+def _clean_config_value(raw):
+    """
+    Given a raw string returned by configparser.SectionProxy.get, remove inline comments
+    like '; comment' or '# comment' and strip whitespace. Return None if input falsy.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        return raw
+    # remove inline comments starting with ';' or '#'
+    val = raw.split(';', 1)[0].split('#', 1)[0].strip()
+    return val if val != "" else None
+
+
+# ---------------------
 # Programmatic wrapper for integration with cli.py
 # ---------------------
 def optimize_from_config(cfg_section: SectionProxy):
@@ -509,17 +551,26 @@ def optimize_from_config(cfg_section: SectionProxy):
     Read an [optimization] config section and run the optimizer.
     Returns a list of dicts: [{"cycle": int, "cbs_energy": float}, ...]
     """
-    # Parse enable flag (accepts bool-like strings)
+    # Parse enable flag (accepts bool-like strings) with inline-comment robustness
+    raw_enabled = None
     try:
-        enabled = cfg_section.getboolean("optimization")
+        # try the SectionProxy convenience first
+        raw_enabled = cfg_section.get("optimization")
     except Exception:
-        enabled = str(cfg_section.get("optimization", "False")).lower() in ("1", "true", "yes", "on")
+        raw_enabled = cfg_section.get("optimization", None) if isinstance(cfg_section, dict) else None
+
+    enabled_val = _clean_config_value(raw_enabled)
+    if enabled_val is None:
+        enabled = False
+    else:
+        enabled = str(enabled_val).lower() in ("1", "true", "yes", "on")
 
     if not enabled:
         return []
 
     # xys is mandatory
-    xys = cfg_section.get("xys", fallback=None)
+    raw_xys = cfg_section.get("xys", fallback=None)
+    xys = _clean_config_value(raw_xys)
     if not xys:
         raise ValueError("INI [optimization] must include 'xys' when optimization = True")
 
@@ -530,28 +581,36 @@ def optimize_from_config(cfg_section: SectionProxy):
     symbols, coords0 = read_xyz(xys)
 
     # method / basis pair
-    method = cfg_section.get("method", fallback="CCSD(T)").strip()
-    basis1 = cfg_section.get("basis1", fallback=None)
-    basis2 = cfg_section.get("basis2", fallback=None)
+    raw_method = cfg_section.get("method", fallback=None)
+    method = _clean_config_value(raw_method) or "CCSD(T)"
+    raw_basis1 = cfg_section.get("basis1", fallback=None)
+    raw_basis2 = cfg_section.get("basis2", fallback=None)
+    basis1 = _clean_config_value(raw_basis1)
+    basis2 = _clean_config_value(raw_basis2)
     basis_pair = None
     if basis1 and basis2:
         basis_pair = (basis1.strip(), basis2.strip())
+    else:
+        basis_pair = CONFIG["BASIS_SETS"]
 
     # numeric options
+    raw_beta = cfg_section.get("beta", fallback=None)
+    beta_val = _clean_config_value(raw_beta)
     try:
-        beta = cfg_section.getfloat("beta", fallback=None)
+        beta = float(beta_val) if beta_val is not None else None
     except Exception:
-        val = cfg_section.get("beta", fallback=None)
-        beta = float(val) if val is not None else None
+        beta = None
 
+    raw_spin = cfg_section.get("spin", fallback=None)
+    spin_val = _clean_config_value(raw_spin)
     try:
-        spin = cfg_section.getint("spin", fallback=None)
+        spin = int(spin_val) if spin_val is not None else None
     except Exception:
-        val = cfg_section.get("spin", fallback=None)
-        spin = int(val) if val is not None else None
+        spin = None
 
     # output file for the final optimized xyz (optional)
-    output_xyz = cfg_section.get("output", fallback=None)
+    raw_output = cfg_section.get("output", fallback=None)
+    output_xyz = _clean_config_value(raw_output)
     if output_xyz is None:
         base, ext = os.path.splitext(xys)
         output_xyz = base + "_opt" + (ext or ".xyz")
