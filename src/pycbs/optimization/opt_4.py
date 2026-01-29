@@ -1,29 +1,6 @@
-#!/usr/bin/env python3
-"""
-opt_3.py — CBS geometry optimizer using redundant internal coordinates + L-BFGS
-
-Usage (from shell):
-    python opt_3.py input.xyz --output optimized.xyz
-
-Requirements:
-    - numpy
-    - scipy
-    - pyscf
-
-Design goals / notes:
-    - compute_cbs_energy returns SCF energy and correlation energy separately
-      and then the CBS composition is computed from those components.
-    - internal_to_cartesian uses least_squares to reconstruct Cartesian coords
-      from target internals (robust numerical inversion).
-    - caching of energy evaluations to reduce redundant PySCF calculations.
-    - default basis set pair: cc-pVDZ / cc-pVTZ and correlation extrapolation ~ n^-3.
-      These are configurable in the CONFIG block below.
-"""
 import argparse
 import math
-import copy
 import sys
-from functools import lru_cache
 from configparser import SectionProxy
 import os
 
@@ -568,17 +545,17 @@ def optimize_from_config(cfg_section: SectionProxy):
     if not enabled:
         return []
 
-    # xys is mandatory
-    raw_xys = cfg_section.get("xys", fallback=None)
-    xys = _clean_config_value(raw_xys)
-    if not xys:
-        raise ValueError("INI [optimization] must include 'xys' when optimization = True")
+    # xyz is mandatory
+    raw_xyz = cfg_section.get("xyz", fallback=None)
+    xyz = _clean_config_value(raw_xyz)
+    if not xyz:
+        raise ValueError("INI [optimization] must include 'xyz' when optimization = True")
 
-    if not os.path.exists(xys):
-        raise FileNotFoundError(f"XYS file not found: {xys}")
+    if not os.path.exists(xyz):
+        raise FileNotFoundError(f"XYZ file not found: {xyz}")
 
     # read xyz (uses existing read_xyz in this module)
-    symbols, coords0 = read_xyz(xys)
+    symbols, coords0 = read_xyz(xyz)
 
     # method / basis pair
     raw_method = cfg_section.get("method", fallback=None)
@@ -612,7 +589,7 @@ def optimize_from_config(cfg_section: SectionProxy):
     raw_output = cfg_section.get("output", fallback=None)
     output_xyz = _clean_config_value(raw_output)
     if output_xyz is None:
-        base, ext = os.path.splitext(xys)
+        base, ext = os.path.splitext(xyz)
         output_xyz = base + "_opt" + (ext or ".xyz")
 
     # Build options dict for optimize_geometry
