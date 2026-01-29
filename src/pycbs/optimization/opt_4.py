@@ -69,17 +69,11 @@ def read_xyz(filename):
 
 
 def write_xyz(filename, symbols, coords, comment=""):
-    """
-    Write a simple XYZ file with consistent, single-space columns:
-      SYMBOL X Y Z
-    Coordinates are written with 10 decimal places (no forced field width).
-    """
     nat = len(symbols)
-    with open(filename, "w", encoding="utf-8") as fh:
-        fh.write(f"{nat}\n")
-        fh.write(f"{comment}\n")
+    with open(filename, "w") as fh:
+        fh.write(f"{nat}\n{comment}\n")
         for s, c in zip(symbols, coords):
-            fh.write(f"{s} {c[0]:.10f} {c[1]:.10f} {c[2]:.10f}\n")
+            fh.write(f"{s:2s} {c[0]: .10f} {c[1]: .10f} {c[2]: .10f}\n")
 
 
 
