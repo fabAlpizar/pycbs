@@ -69,11 +69,18 @@ def read_xyz(filename):
 
 
 def write_xyz(filename, symbols, coords, comment=""):
+    """
+    Write a simple XYZ file with consistent, single-space columns:
+      SYMBOL X Y Z
+    Coordinates are written with 10 decimal places (no forced field width).
+    """
     nat = len(symbols)
-    with open(filename, "w") as fh:
-        fh.write(f"{nat}\n{comment}\n")
+    with open(filename, "w", encoding="utf-8") as fh:
+        fh.write(f"{nat}\n")
+        fh.write(f"{comment}\n")
         for s, c in zip(symbols, coords):
-            fh.write(f"{s:2s} {c[0]: .10f} {c[1]: .10f} {c[2]: .10f}\n")
+            fh.write(f"{s} {c[0]:.10f} {c[1]:.10f} {c[2]:.10f}\n")
+
 
 
 def dist(a, b):
@@ -612,13 +619,8 @@ def optimize_from_config(cfg_section: SectionProxy):
         )
 
     output_xyz = os.path.abspath(output_xyz)
-    with open(output_xyz, "w", encoding="utf-8") as fh:
-        fh.write(f"{len(symbols)}\n")
-        fh.write(
-            f"Optimized geometry (CBS). Final E = {res['final_energy']:.10f} Ha\n"
-        )
-        for s, xyz in zip(symbols, opt_coords):
-            fh.write(f"{s} {xyz[0]:.10f} {xyz[1]:.10f} {xyz[2]:.10f}\n")
+    comment = f"Optimized geometry (CBS). Final E = {res.get('final_energy', float('nan')):.10f} Ha"
+    write_xyz(output_xyz, symbols, opt_coords, comment=comment)
 
     print(f"[optimization] Optimized geometry written to: {output_xyz}")
 
@@ -654,8 +656,7 @@ def main():
     write_xyz(args.output, symbols, res["final_cart"], comment=f"CBS opt energy {res['final_energy']:.10f} Ha")
     print("Optimization finished. Final CBS energy (Ha):", res["final_energy"])
     print("Wrote optimized geometry to:", args.output)
-    # You may print debug info if desired:
-    # print(res["debug"])
+
 
 
 if __name__ == "__main__":
