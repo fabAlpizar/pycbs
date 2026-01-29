@@ -627,17 +627,23 @@ def optimize_from_config(cfg_section: SectionProxy):
     res = optimize_geometry(symbols, coords0, basis_pair=basis_pair, options=options)
 
     # Write final optimized geometry if available (non-fatal if it fails)
-    try:
-        opt_symbols = symbols
-        opt_coords = res.get("final_cart", None)
-        if opt_coords is not None:
-            with open(output_xyz, "w", encoding="utf-8") as fh:
-                fh.write(f"{len(opt_symbols)}\n")
-                fh.write("Optimized by pyCBS integration\n")
-                for s, xyz in zip(opt_symbols, opt_coords):
-                    fh.write(f"{s} {xyz[0]:.10f} {xyz[1]:.10f} {xyz[2]:.10f}\n")
-    except Exception:
-        pass
+    # --- WRITE OPTIMIZED GEOMETRY (MANDATORY OUTPUT) ---
+    opt_coords = res.get("final_cart", None)
+    if opt_coords is None:
+        raise RuntimeError(
+            "Optimization completed but no final_cart returned; cannot write optimized geometry."
+        )
+
+    output_xyz = os.path.abspath(output_xyz)
+    with open(output_xyz, "w", encoding="utf-8") as fh:
+        fh.write(f"{len(symbols)}\n")
+        fh.write(
+            f"Optimized geometry (CBS). Final E = {res['final_energy']:.10f} Ha\n"
+        )
+        for s, xyz in zip(symbols, opt_coords):
+            fh.write(f"{s} {xyz[0]:.10f} {xyz[1]:.10f} {xyz[2]:.10f}\n")
+
+    print(f"[optimization] Optimized geometry written to: {output_xyz}")
 
     # Build opt_cycles list from cbs_history
     cbs_history = res.get("cbs_history", [])
