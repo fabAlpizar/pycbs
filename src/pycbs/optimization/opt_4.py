@@ -24,6 +24,8 @@ import math
 import copy
 import sys
 from functools import lru_cache
+from configparser import SectionProxy
+import os
 
 import numpy as np
 from scipy.optimize import minimize, least_squares
@@ -425,6 +427,9 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
     Optimize geometry (internals) with L-BFGS-B, using CBS energy as objective.
     Returns optimized carts, final energy, and result dict.
     """
+    # ---- add this line near the top of optimize_geometry, alongside other locals ----
+    cbs_history = []
+
     if options is None:
         options = {}
     cfg = CONFIG
@@ -453,6 +458,8 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
         if last["E"] is None or abs(E - last["E"]) > 1e-8:
             print(f"opt step: E_cbs = {E:.10f} Ha")
             last["E"] = E
+        # record CBS energy for this optimization cycle (append in Ha)
+        cbs_history.append(E)
 
     x0 = np.array(values0, dtype=float)
 
@@ -475,6 +482,11 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
     x_opt = opt_res.x
     final = energy_cache.evaluate(x_opt, basis_pair=basis_pair)
     final_cart = final["cart"]
+    # ensure final energy is in history (avoid duplicate if already appended)
+    final_E = final["E_cbs"]
+    if not cbs_history or abs(cbs_history[-1] - final_E) > 1e-12:
+        cbs_history.append(final_E)
+
     result = {
         "opt_result": opt_res,
         "final_energy": final["E_cbs"],
@@ -484,8 +496,97 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
         "debug": final["debug"],
         "internals": internals,
         "x_opt": x_opt,
+        "cbs_history": cbs_history,
     }
     return result
+
+
+# ---------------------
+# Programmatic wrapper for integration with cli.py
+# ---------------------
+def optimize_from_config(cfg_section: SectionProxy):
+    """
+    Read an [optimization] config section and run the optimizer.
+    Returns a list of dicts: [{"cycle": int, "cbs_energy": float}, ...]
+    """
+    # Parse enable flag (accepts bool-like strings)
+    try:
+        enabled = cfg_section.getboolean("optimization")
+    except Exception:
+        enabled = str(cfg_section.get("optimization", "False")).lower() in ("1", "true", "yes", "on")
+
+    if not enabled:
+        return []
+
+    # xys is mandatory
+    xys = cfg_section.get("xys", fallback=None)
+    if not xys:
+        raise ValueError("INI [optimization] must include 'xys' when optimization = True")
+
+    if not os.path.exists(xys):
+        raise FileNotFoundError(f"XYS file not found: {xys}")
+
+    # read xyz (uses existing read_xyz in this module)
+    symbols, coords0 = read_xyz(xys)
+
+    # method / basis pair
+    method = cfg_section.get("method", fallback="CCSD(T)").strip()
+    basis1 = cfg_section.get("basis1", fallback=None)
+    basis2 = cfg_section.get("basis2", fallback=None)
+    basis_pair = None
+    if basis1 and basis2:
+        basis_pair = (basis1.strip(), basis2.strip())
+
+    # numeric options
+    try:
+        beta = cfg_section.getfloat("beta", fallback=None)
+    except Exception:
+        val = cfg_section.get("beta", fallback=None)
+        beta = float(val) if val is not None else None
+
+    try:
+        spin = cfg_section.getint("spin", fallback=None)
+    except Exception:
+        val = cfg_section.get("spin", fallback=None)
+        spin = int(val) if val is not None else None
+
+    # output file for the final optimized xyz (optional)
+    output_xyz = cfg_section.get("output", fallback=None)
+    if output_xyz is None:
+        base, ext = os.path.splitext(xys)
+        output_xyz = base + "_opt" + (ext or ".xyz")
+
+    # Build options dict for optimize_geometry
+    options = {}
+    if beta is not None:
+        options["beta"] = beta
+    if spin is not None:
+        options["spin"] = spin
+    options["method"] = method
+
+    # Run the core optimizer (returns dict with cbs_history)
+    res = optimize_geometry(symbols, coords0, basis_pair=basis_pair, options=options)
+
+    # Write final optimized geometry if available (non-fatal if it fails)
+    try:
+        opt_symbols = symbols
+        opt_coords = res.get("final_cart", None)
+        if opt_coords is not None:
+            with open(output_xyz, "w", encoding="utf-8") as fh:
+                fh.write(f"{len(opt_symbols)}\n")
+                fh.write("Optimized by pyCBS integration\n")
+                for s, xyz in zip(opt_symbols, opt_coords):
+                    fh.write(f"{s} {xyz[0]:.10f} {xyz[1]:.10f} {xyz[2]:.10f}\n")
+    except Exception:
+        pass
+
+    # Build opt_cycles list from cbs_history
+    cbs_history = res.get("cbs_history", [])
+    opt_cycles = []
+    for i, e_cbs in enumerate(cbs_history, start=1):
+        opt_cycles.append({"cycle": i, "cbs_energy": e_cbs})
+
+    return opt_cycles
 
 
 # ---------------------
