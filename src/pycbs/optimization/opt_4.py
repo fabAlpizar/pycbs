@@ -23,12 +23,12 @@ CONFIG = {
 
     # CBS extrapolation parameters:
     # correlation extrapolation using power law ~ X^{-3} (we use X1=2, X2=3 for DZ/TZ)
-    "X1_CORR": 2.0,
-    "X2_CORR": 3.0,
+    "X1_CORR": 2.792,
+    "X2_CORR": 3.719,
     # HF extrapolation model uses an exponential; BETA often ~ 1.60
-    "X1_HF": 2.0,
-    "X2_HF": 3.0,
-    "BETA_HF": 1.63,
+    "X1_HF": 2.96,
+    "X2_HF": 3.87,
+    "BETA_HF": 1.62,
 
     # PySCF settings
     "PYSCF_MAX_MEMORY": 4 * 1024,  # in MB
@@ -39,7 +39,7 @@ CONFIG = {
     "LSQRMAXITER": 200,
 
     # Optimization (L-BFGS-B) options
-    "ENERGY_TOL": 1e-6,    # Hartree stopping criterion for CBS energy change
+    "ENERGY_TOL": 1e-8,    # Hartree stopping criterion for CBS energy change
     "X_TOL": 1e-4,         # step tolerance for internal coordinates
     "LBFGSB_MAXITER": 200,
     "BOND_MIN_FACTOR": 0.5,  # lower bound for bond length relative to initial
