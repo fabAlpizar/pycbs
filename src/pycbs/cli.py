@@ -17,7 +17,26 @@ from .module_loader import SchemeModuleLoader
 
 logger = logging.getLogger(__name__)
 
+def ensure_parent_dir(path: Path) -> None:
+    """Make sure parent directory of a path exists."""
+    path.parent.mkdir(parents=True, exist_ok=True)
 
+def unique_path(path: Path) -> Path:
+    """
+    Return a non-existing Path based on `path`.
+    If `path` does not exist return it; otherwise append _1, _2,... before suffix.
+    """
+    if not path.exists():
+        return path
+    parent = path.parent
+    stem = path.stem
+    suffix = path.suffix
+    i = 1
+    while True:
+        candidate = parent / f"{stem}_{i}{suffix}"
+        if not candidate.exists():
+            return candidate
+        i += 1
 # ----------------------------------------------------------------------
 # Logging
 # ----------------------------------------------------------------------
@@ -328,10 +347,9 @@ def main() -> None:
         "-o",
         "--output",
         type=Path,
-        default=Path("PyCBS-OUTPUTS") / "pycbs_report.txt",
-        help="Output report file (by default PyCBS-OUTPUTS/pycbs_report.txt)",
+        default=Path("PyCBS-OUTPUTS") / "extrapolations_results.txt",
+        help="Output report file (default: PyCBS-OUTPUTS/extrapolations_results.txt)",
     )
-    # make -v the default minimal verbosity (user receives a minimum of progress info)
     parser.add_argument("-v", "--verbose", action="count", default=1, help="Increase verbosity")
 
 
@@ -371,6 +389,8 @@ def main() -> None:
         logger.error(e)
         sys.exit(1)
 
+    ensure_parent_dir(args.output)
+    args.output = unique_path(args.output)
     args.output.write_text("")
     writer.write_header(str(args.output))
 
