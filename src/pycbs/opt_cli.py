@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""
-pycbs-opt CLI wrapper.
-
-This wrapper accepts a single INI file (first section is used) with the keys:
-  - xyz_file (required)
-  - method (optional)         default: "ccsd(t)"
-  - basis1, basis2 (optional) default: vdz, vtz
-  - spin (optional)           default: 0
-  - X1, X2, Xhf1, Xhf2 (optional) defaults: 2,3,2,3
-  - output_dir (optional)     default: PyCBS-OUTPUTS (directory)
-The wrapper maps short basis names (vdz, vtz, avdz, ...) to pyscf-style names (cc-pvdz, cc-pvtz, aug-cc-pvdz, ...).
-It then loads the optimization.py module and calls optimize_geometry(), writing outputs
-into the chosen output directory.
-"""
-
 from __future__ import annotations
 import argparse
 import configparser
@@ -27,8 +12,6 @@ import traceback
 logger = logging.getLogger(__name__)
 
 
-# Simple mapping from short basis keys to pyscf-style basis names.
-# Extend this mapping as needed.
 BASIS_MAP = {
     "vdz": "cc-pvdz",
     "vtz": "cc-pvtz",
@@ -37,7 +20,6 @@ BASIS_MAP = {
     "avdz": "aug-cc-pvdz",
     "avtz": "aug-cc-pvtz",
     "avqz": "aug-cc-pvqz",
-    # allow uppercase variants
     "VDZ": "cc-pvdz",
     "VTZ": "cc-pvtz",
 }
@@ -49,39 +31,28 @@ def map_basis(name: str) -> str:
     name = name.strip()
     if not name:
         return None
-    # if user gives a name that already looks like a pyscf basis, use it as-is
     low = name.lower()
     if "cc-" in low or "aug" in low or "-" in name:
         return name
-    # map common short forms (vdz -> cc-pvdz)
     mapped = BASIS_MAP.get(name) or BASIS_MAP.get(name.lower())
     return mapped if mapped else name
 
 
 def find_optimization_module() -> Tuple[str, object]:
-    """
-    Attempt to locate optimization.py in a few likely places and import it as a module.
-    Returns (path_used, module_object).
-    """
-    # 1) Look relative to this package directory: <...>/site-packages/pycbs/../pycbs-opt/optimization.py
     this_file = Path(__file__).resolve()
-    pkg_dir = this_file.parent  # .../pycbs
+    pkg_dir = this_file.parent
     candidate = pkg_dir.parent / "pycbs-opt" / "optimization.py"
     if candidate.exists():
         spec = importlib.util.spec_from_file_location("pycbs_opt_module", str(candidate))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return str(candidate), mod
-
-    # 2) Look for optimization.py next to this module (defensive)
     candidate2 = pkg_dir / "pycbs-opt" / "optimization.py"
     if candidate2.exists():
         spec = importlib.util.spec_from_file_location("pycbs_opt_module", str(candidate2))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return str(candidate2), mod
-
-    # 3) As a last resort, search sys.path for a file named optimization.py inside a folder named 'pycbs-opt'
     for p in map(Path, sys.path):
         try:
             c = p / "pycbs-opt" / "optimization.py"
@@ -92,40 +63,46 @@ def find_optimization_module() -> Tuple[str, object]:
                 return str(c), mod
         except Exception:
             continue
-
     raise FileNotFoundError("Could not locate pycbs-opt/optimization.py on sys.path or relative package path.")
 
 
 def load_params_from_ini(ini_path: Path) -> Dict[str, Any]:
     cfg = configparser.ConfigParser()
-    cfg.optionxform = str  # keep case of keys (but we'll handle lowercasing)
+    cfg.optionxform = str
     read_ok = cfg.read(str(ini_path))
     if not read_ok:
         raise FileNotFoundError(f"Cannot read config file: {ini_path}")
-
-    # prefer an explicit "OPTIMIZATION" section; otherwise take the first section or defaults
     section = None
     if "OPTIMIZATION" in cfg:
         section = "OPTIMIZATION"
     elif cfg.sections():
         section = cfg.sections()[0]
     else:
-        # no sections: use DEFAULT
         section = configparser.DEFAULTSECT
-
     params_raw = dict(cfg[section]) if section != configparser.DEFAULTSECT else dict(cfg.defaults())
-    # normalize keys to lowercase
     params = {k.lower(): v for k, v in params_raw.items()}
     return params
 
 
-def ensure_output_dir(dirpath: Path) -> Path:
-    dirpath.mkdir(parents=True, exist_ok=True)
-    return dirpath
+def ensure_output_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def unique_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    parent = path.parent
+    stem = path.stem
+    suffix = path.suffix
+    i = 1
+    while True:
+        candidate = parent / f"{stem}_{i}{suffix}"
+        if not candidate.exists():
+            return candidate
+        i += 1
 
 
 def prepare_options_from_params(params: Dict[str, Any]) -> Dict[str, Any]:
-    # defaults
     method = params.get("method", "ccsd(t)")
     spin = int(params.get("spin", 0))
     X1 = int(params.get("x1", 2))
@@ -148,7 +125,6 @@ def main(argv=None):
     parser.add_argument("-v", "--verbose", action="count", default=1, help="verbosity (default: 1)")
     args = parser.parse_args(argv)
 
-    # configure logging minimal by default
     logging.basicConfig(level=logging.INFO if args.verbose >= 1 else logging.WARNING, format="%(asctime)s [%(levelname)s] %(message)s")
 
     try:
@@ -157,7 +133,6 @@ def main(argv=None):
         logger.error("Failed to read config: %s", e)
         sys.exit(2)
 
-    # mandatory xyz_file
     if "xyz_file" not in params and "xyz" not in params:
         logger.error("Missing required 'xyz_file' entry in INI. Provide the XYZ path under key 'xyz_file'.")
         sys.exit(2)
@@ -167,17 +142,14 @@ def main(argv=None):
         logger.error("XYZ file does not exist: %s", xyz_file)
         sys.exit(2)
 
-    # basis handling
     basis1_name = params.get("basis1", "vdz")
     basis2_name = params.get("basis2", "vtz")
     basis1 = map_basis(basis1_name)
     basis2 = map_basis(basis2_name)
 
-    # output directory: config may optionally specify output_dir
     outdir = Path(params.get("output_dir", "PyCBS-OUTPUTS"))
     ensure_output_dir(outdir)
 
-    # find and import optimization module
     try:
         path_used, opt_mod = find_optimization_module()
     except Exception as e:
@@ -185,7 +157,6 @@ def main(argv=None):
         traceback.print_exc()
         sys.exit(3)
 
-    # Read xyz using the optimization module's read_xyz if available, otherwise parse simple xyz
     if not hasattr(opt_mod, "read_xyz") or not hasattr(opt_mod, "optimize_geometry"):
         logger.error("Loaded optimization module doesn't expose expected functions (read_xyz, optimize_geometry)")
         sys.exit(4)
@@ -193,30 +164,69 @@ def main(argv=None):
     symbols, coords0 = opt_mod.read_xyz(str(xyz_file))
 
     options = prepare_options_from_params(params)
-    # options dict can contain extra keys used by the module's optimize_geometry
     if "method" in params:
         options["method"] = params["method"]
 
-    # run optimization -> returns a dict (optimize_geometry semantics)
     logger.info("Starting optimization (basis pair: %s, %s) ...", basis1, basis2)
     basis_pair = (basis1, basis2)
+
+    # run optimization (user's optimization function may have different signature;
+    # we assume optimize_geometry(symbols, coords0, basis_pair=basis_pair, options=options))
     res = opt_mod.optimize_geometry(symbols, coords0, basis_pair=basis_pair, options=options)
 
-    # write optimized geometry to an output file inside outdir
-    out_xyz = outdir / (params.get("output_xyz", "optimized.xyz"))
-    opt_mod.write_xyz(str(out_xyz), symbols, res.get("coords", res.get("x", [])), comment="Optimized by pycbs-opt")
+    # Make unique output filenames in the shared PyCBS-OUTPUTS dir
+    opt_xyz_candidate = outdir / (params.get("output_xyz", "optimized.xyz"))
+    opt_xyz = unique_path(opt_xyz_candidate)
+    # write optimized geometry (use module write_xyz if available)
+    if hasattr(opt_mod, "write_xyz"):
+        opt_mod.write_xyz(str(opt_xyz), symbols, res.get("coords", res.get("x", [])), comment="Optimized by pycbs-opt")
+    else:
+        # fallback simple writer
+        with opt_xyz.open("w", encoding="utf-8") as fh:
+            fh.write(f"{len(symbols)}\n")
+            fh.write("Optimized by pycbs-opt\n")
+            coords = res.get("coords", res.get("x", []))
+            for sym, c in zip(symbols, coords):
+                fh.write(f"{sym} {c[0]} {c[1]} {c[2]}\n")
 
-    # produce a tiny summary file
-    summary_file = outdir / (params.get("summary_file", "optimization_summary.txt"))
-    with summary_file.open("w", encoding="utf-8") as fh:
-        fh.write("pycbs-opt summary\n")
-        fh.write(f"config: {args.config}\n")
-        fh.write(f"xyz: {xyz_file}\n")
-        fh.write(f"basis_pair: {basis_pair}\n")
-        fh.write(f"method: {options.get('method')}\n")
-        fh.write("Result keys:\n")
-        for k in sorted(res.keys()):
-            fh.write(f"  {k}: {res[k]}\n")
+    # write optimization history summary/table
+    history_path_candidate = outdir / (params.get("summary_file", "opt_history.txt"))
+    history_path = unique_path(history_path_candidate)
+
+    try:
+        with history_path.open("w", encoding="utf-8") as fh:
+            fh.write("pycbs-opt history / summary\n")
+            fh.write(f"config: {args.config}\n")
+            fh.write(f"xyz: {xyz_file}\n")
+            fh.write(f"basis_pair: {basis_pair}\n")
+            fh.write(f"method: {options.get('method')}\n\n")
+
+            # try to write a nice table if we have a history list in the result
+            history = res.get("history") or res.get("opt_history") or res.get("cycles")
+            if isinstance(history, list) and history:
+                # assume list of dict-like rows
+                keys = set()
+                for row in history:
+                    if isinstance(row, dict):
+                        keys.update(row.keys())
+                keys = sorted(keys)
+                if keys:
+                    fh.write("\t".join(keys) + "\n")
+                    for row in history:
+                        if isinstance(row, dict):
+                            fh.write("\t".join(str(row.get(k, "")) for k in keys) + "\n")
+                        else:
+                            fh.write(str(row) + "\n")
+                else:
+                    # fallback: just dump each item
+                    for item in history:
+                        fh.write(str(item) + "\n")
+            else:
+                # fallback: print keys from result
+                for k in sorted(res.keys()):
+                    fh.write(f"{k}: {res[k]}\n")
+    except Exception:
+        logger.exception("Failed writing optimization history")
 
     logger.info("Optimization finished. Results written to: %s", outdir)
     return 0
