@@ -323,8 +323,17 @@ def main() -> None:
         description="pyCBS – Complete Basis Set Extrapolation Tool"
     )
     parser.add_argument("-input", "--input", type=Path, required=True)
-    parser.add_argument("-o", "--output", type=Path, default=Path("results.out"))
-    parser.add_argument("-v", "--verbose", action="count", default=0)
+    # default output is a file inside the directory PyCBS-OUTPUTS
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=Path("PyCBS-OUTPUTS") / "pycbs_report.txt",
+        help="Output report file (by default PyCBS-OUTPUTS/pycbs_report.txt)",
+    )
+    # make -v the default minimal verbosity (user receives a minimum of progress info)
+    parser.add_argument("-v", "--verbose", action="count", default=1, help="Increase verbosity")
+
 
     args = parser.parse_args()
     setup_logging(args.verbose)
@@ -371,29 +380,6 @@ def main() -> None:
     total = success = 0
 
     for section_name in config.sections():
-        # handle optimization section specially
-        if section_name.upper() == "OPTIMIZATION":
-            # lazy import (optimizer may have heavy deps)
-            try:
-                # relative import if inside package
-                from .optimization.opt_4 import optimize_from_config
-            except Exception:
-                # fallback import by module name
-                import importlib
-                opt_mod = importlib.import_module("pycbs.optimization.opt_4")
-                optimize_from_config = getattr(opt_mod, "optimize_from_config")
-
-            logger.info("Found OPTIMIZATION section in INI; attempting optimization...")
-            try:
-                cycles = optimize_from_config(config[section_name])
-                if cycles:
-                    opt_cycles.extend(cycles)
-                logger.info("Optimization finished (section: OPTIMIZATION).")
-            except Exception as exc:
-                logger.error(f"Optimization failed: {exc}")
-            continue
-
-        # existing processing for normal calculation sections
         total += 1
         if process_section(section_name, config[section_name], calculations, args.output):
             success += 1
