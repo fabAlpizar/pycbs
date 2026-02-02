@@ -1,27 +1,29 @@
 #!/usr/bin/env python3
 """
-opt_3.py — CBS geometry optimizer using redundant internal coordinates + L-BFGS
+L-BFGS-B-based optimizer module (full implementation).
 
-Usage (from shell):
-    python opt_3.py input.xyz --output optimized.xyz
+This module implements the L-BFGS-B optimization pathway using redundant
+internal coordinates and CBS-extrapolated energies (PySCF). It exposes a
+programmatic API:
 
-Requirements:
-    - numpy
-    - scipy
-    - pyscf
+    run_optimization(params: dict, outputs_dir: pathlib.Path) -> dict
 
-Design goals / notes:
-    - compute_cbs_energy returns SCF energy and correlation energy separately
-      and then the CBS composition is computed from those components.
-    - internal_to_cartesian uses least_squares to reconstruct Cartesian coords
-      from target internals (robust numerical inversion).
-    - caching of energy evaluations to reduce redundant PySCF calculations.
-    - default basis set pair: cc-pVDZ / cc-pVTZ and correlation extrapolation ~ n^-3.
-      These are configurable in the CONFIG block below.
+which is the interface consumed by opt_cli.py.
+
+The implementation is adapted from the opt_3.py optimizer implementation
+and packaged here so that the optimizer can be run either directly from
+the command line or called by the CLI dispatcher.
+
+Notes:
+- params is expected to contain keys normalized by opt_cli.prepare_options_from_params,
+  e.g. 'input_xyz', 'method', 'X1', 'X2', 'Xhf1', 'Xhf2', 'beta', ...
+- outputs_dir is a pathlib.Path pointing to the directory where outputs
+  (cycle CSV and final XYZ) will be written. The function will create the folder
+  if it does not exist.
 """
+from pathlib import Path
 import argparse
 import math
-import copy
 import sys
 from functools import lru_cache
 
@@ -30,10 +32,11 @@ from scipy.optimize import minimize, least_squares
 
 # PySCF imports
 try:
-    from pyscf import gto, scf, mp, cc
+    from pyscf import gto, scf, mp, cc, lib
 except Exception as e:
     raise ImportError("PySCF is required for this script. Install pyscf and retry.") from e
 
+from pycbs.writer import write_cycle_energies, write_final_xyz
 
 # ---------------------
 # CONFIGURATION
@@ -43,10 +46,8 @@ CONFIG = {
     "BASIS_SETS": ("cc-pvdz", "cc-pvtz"),
 
     # CBS extrapolation parameters:
-    # correlation extrapolation using power law ~ X^{-3} (we use X1=2, X2=3 for DZ/TZ)
     "X1_CORR": 1.85,
     "X2_CORR": 2.639,
-    # HF extrapolation model uses an exponential; BETA often ~ 1.60
     "X1_HF": 3.02,
     "X2_HF": 3.64,
     "BETA_HF": 1.62,
@@ -72,13 +73,9 @@ CONFIG = {
 # Utility geometry functions
 # ---------------------
 def read_xyz(filename):
-    """
-    Read a simple XYZ file. Returns (symbols, coords) where coords is an (N,3) float array.
-    """
     with open(filename) as fh:
         lines = [l.rstrip() for l in fh if l.strip()]
     natom = int(lines[0].split()[0])
-    header = lines[1]
     data = lines[2:2 + natom]
     syms = []
     coords = []
@@ -102,16 +99,14 @@ def dist(a, b):
 
 
 def angle(a, b, c):
-    # angle at b given positions a-b-c
     ba = a - b
     bc = c - b
-    cosv = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
+    cosv = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-16)
     cosv = np.clip(cosv, -1.0, 1.0)
     return math.acos(cosv)
 
 
 def dihedral(a, b, c, d):
-    # returns signed dihedral angle between planes (a-b-c) and (b-c-d)
     b1 = a - b
     b2 = c - b
     b3 = d - c
@@ -129,16 +124,6 @@ def dihedral(a, b, c, d):
 # Build redundant internals
 # ---------------------
 def build_internals(symbols, coords, cutoff_factor=1.2):
-    """
-    Build a list of internal coordinate descriptors for a molecule:
-      - bonds: (i, j)
-      - angles: (i, j, k)
-      - dihedrals: (i, j, k, l)
-
-    For robust general use we include all bonds whose distance is less than cutoff_factor * covalent_sum,
-    where covalent radii are estimated by a simple table (defaults otherwise).
-    """
-    # Simple covalent radii table (Å). Extend if needed.
     covrad = {
         "H": 0.31, "C": 0.76, "N": 0.71, "O": 0.66, "F": 0.57, "P": 1.07, "S": 1.05, "Cl": 1.02,
     }
@@ -152,9 +137,7 @@ def build_internals(symbols, coords, cutoff_factor=1.2):
             if dist(coords[i], coords[j]) <= cutoff_factor * rsum:
                 bonds.append((i, j))
 
-    # angles: any connected triplet i-j-k where bonds (i, j) and (j, k)
     angles = []
-    bond_set = set(bonds)
     adjacency = {i: set() for i in range(nat)}
     for i, j in bonds:
         adjacency[i].add(j)
@@ -165,7 +148,6 @@ def build_internals(symbols, coords, cutoff_factor=1.2):
                 if i < k:
                     angles.append((i, j, k))
 
-    # dihedrals: i-j-k-l where bonds (i, j), (j, k), (k, l)
     dihedrals = []
     for (i, j) in bonds:
         for k in adjacency[j]:
@@ -174,11 +156,9 @@ def build_internals(symbols, coords, cutoff_factor=1.2):
             for l in adjacency[k]:
                 if l == j:
                     continue
-                # ensure uniqueness ordering
                 if i < l:
                     dihedrals.append((i, j, k, l))
 
-    # canonical internal descriptor: a list of dicts with 'type' and indices
     internals = []
     for (i, j) in bonds:
         internals.append({"type": "bond", "idx": (i, j)})
@@ -187,7 +167,6 @@ def build_internals(symbols, coords, cutoff_factor=1.2):
     for (i, j, k, l) in dihedrals:
         internals.append({"type": "dihedral", "idx": (i, j, k, l)})
 
-    # compute initial numeric values
     values = internals_to_values(internals, coords)
     return internals, np.array(values)
 
@@ -215,12 +194,6 @@ def internals_to_values(internals, coords):
 # Internal -> Cartesian inversion via least squares
 # ---------------------
 def internal_to_cartesian(initial_cart, internals, target_values, lsq_opts=None):
-    """
-    Given an initial Cartesian guess (N x 3), find Cartesian coordinates whose internals
-    match target_values as closely as possible by minimizing residuals with least_squares.
-
-    Returns the flattened cartesian vector (3N).
-    """
     nat = initial_cart.shape[0]
     x0 = initial_cart.reshape(-1)
 
@@ -235,24 +208,19 @@ def internal_to_cartesian(initial_cart, internals, target_values, lsq_opts=None)
         diffs = []
         for it, v_calc, v_tgt in zip(internals, vals, target_values):
             if it["type"] == "bond":
-                # keep in Å; optionally scale by 1.0 or characteristic length
                 diffs.append(v_calc - v_tgt)
             elif it["type"] == "angle":
-                # angles in radians: wrap into [-pi, pi]
                 d = v_calc - v_tgt
-                d = (d + np.pi) % (2 * np.pi) - np.pi
+                d = (d + math.pi) % (2 * math.pi) - math.pi
                 diffs.append(d)
             elif it["type"] == "dihedral":
                 d = v_calc - v_tgt
-                d = (d + np.pi) % (2 * np.pi) - np.pi
+                d = (d + math.pi) % (2 * math.pi) - math.pi
                 diffs.append(d)
-        # Optionally scale entries here, e.g. bonds by 1.0, angles/dihedrals by 1.0
         return np.array(diffs)
 
-    # Use least_squares with robust method 'trf' or 'dogbox' which handle bounds; no bounds here
     result = least_squares(residuals, x0, method="trf", ftol=tol, xtol=tol, gtol=tol, max_nfev=max_nfev)
     if not result.success:
-        # still return the best found solution, but warn
         print("Warning: internal->cartesian least_squares did not converge: " + result.message, file=sys.stderr)
     return result.x.reshape((nat, 3))
 
@@ -287,13 +255,7 @@ def cbs_compose(corr_small, corr_big, scf_small, scf_big, cfg=CONFIG):
 # Energy evaluation with PySCF (returns scf_energy, corr_energy)
 # ---------------------
 def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd(t)", "mp2")):
-    """
-    Compute SCF energy and correlation energy for a given basis:
-      - returns (scf_energy, corr_energy)
-    Tries CCSD(T) first (if in preference) and falls back to MP2 if needed.
-    """
     nat = len(symbols)
-    # build PySCF molecule
     mol = gto.Mole()
     mol.verbose = 0
     mol.unit = "Angstrom"
@@ -303,12 +265,9 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
     mol.spin = 0
     mol.build()
 
-    # configure resources
     mol.max_memory = CONFIG["PYSCF_MAX_MEMORY"]
     mol.stdout = None
-    # set thread: pyscf uses environment var or internal; don't set global here
 
-    # SCF (RHF assumed)
     mf = scf.RHF(mol)
     mf.conv_tol = 1e-8
     mf.verbose = 0
@@ -318,7 +277,6 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
     except Exception as e:
         raise RuntimeError("SCF failed: " + str(e))
 
-    # attempt correlation methods
     corr_e = None
     last_err = None
     if "ccsd(t)" in method_preference:
@@ -332,10 +290,8 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
                 triples = mycc.ccsd_t()
             except Exception:
                 triples = 0.0
-            # prefer explicit correlation attribute
             ccsd_corr = getattr(mycc, "e_corr", None)
             if ccsd_corr is None:
-                # fallback: total - scf
                 ccsd_corr = float(getattr(mycc, "e_tot", scf_e) - scf_e)
             corr_e = float(ccsd_corr + (triples if triples is not None else 0.0))
         except Exception as e:
@@ -347,7 +303,6 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
             mp2 = mp.MP2(mf)
             mp2.verbose = 0
             res = mp2.kernel()
-            # prefer res.e_corr, then mp2.e_corr, then res.e_tot - scf
             mp2_corr = None
             if hasattr(res, "e_corr"):
                 mp2_corr = float(res.e_corr)
@@ -374,13 +329,8 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
 # High-level CBS energy: evaluate molecule at two basis sets and return CBS energy
 # ---------------------
 def compute_cbs_energy(symbols, coords, basis_pair=None, cfg=CONFIG):
-    """
-    Compute CBS-extrapolated energy for given Cartesian coordinates.
-    Returns: (E_CBS, E_HF_CBS, E_CORR_CBS, debug_dict)
-    """
     if basis_pair is None:
         basis_pair = cfg["BASIS_SETS"]
-    # small basis first
     bs1, bs2 = basis_pair
 
     scf1, corr1 = compute_scf_and_correlation(symbols, coords, bs1)
@@ -407,16 +357,13 @@ class EnergyCache:
         self._cache = {}
 
     def _key_from_internals(self, internal_vector):
-        # Round internal vector to given digits to make the key stable
         return tuple([round(float(x), self.rounding) for x in internal_vector])
 
     def evaluate(self, internal_vector, basis_pair=None):
         k = self._key_from_internals(internal_vector)
         if k in self._cache:
             return self._cache[k]
-        # reconstruct Cartesian
         cart = internal_to_cartesian(self.coords0, self.internals, internal_vector)
-        # compute CBS
         E_cbs, E_hf_cbs, E_corr_cbs, debug = compute_cbs_energy(self.symbols, cart, basis_pair)
         res = {"E_cbs": E_cbs, "E_hf_cbs": E_hf_cbs, "E_corr_cbs": E_corr_cbs, "cart": cart, "debug": debug}
         self._cache[k] = res
@@ -424,13 +371,9 @@ class EnergyCache:
 
 
 # ---------------------
-# Optimization driver
+# Optimization driver (collecting history)
 # ---------------------
 def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
-    """
-    Optimize geometry (internals) with L-BFGS-B, using CBS energy as objective.
-    Returns optimized carts, final energy, and result dict.
-    """
     if options is None:
         options = {}
     cfg = CONFIG
@@ -438,33 +381,38 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
     internals, values0 = build_internals(symbols, coords0)
     energy_cache = EnergyCache(symbols, internals, coords0, rounding=8)
 
-    # bounds: for bonds only, apply a factor to initial distances for bounds
     nvars = len(internals)
     bounds = [(None, None)] * nvars
     for idx, it in enumerate(internals):
         if it["type"] == "bond":
-            i, j = it["idx"]
             r0 = values0[idx]
             bounds[idx] = (cfg["BOND_MIN_FACTOR"] * r0, cfg["BOND_MAX_FACTOR"] * r0)
+        elif it["type"] == "angle":
+            bounds[idx] = (1e-2, math.pi - 1e-2)
+        elif it["type"] == "dihedral":
+            bounds[idx] = (-math.pi, math.pi)
 
-    # objective function for scipy minimize: returns scalar CBS energy
-    def objective(x):
-        res = energy_cache.evaluate(x, basis_pair=basis_pair)
-        return res["E_cbs"]
+    history = []
+    last = {"E": None, "count": 0}
 
-    # provide a simple callback to mirror progress (not too verbose)
-    last = {"E": None}
     def callback(xk):
         E = energy_cache.evaluate(xk, basis_pair=basis_pair)["E_cbs"]
+        last["count"] += 1
+        history.append({'cycle': last["count"], 'energy': float(E)})
         if last["E"] is None or abs(E - last["E"]) > 1e-8:
             print(f"opt step: E_cbs = {E:.10f} Ha")
             last["E"] = E
 
     x0 = np.array(values0, dtype=float)
+    # initial energy entry
+    try:
+        E0 = energy_cache.evaluate(x0, basis_pair=basis_pair)["E_cbs"]
+        history.append({'cycle': 0, 'energy': float(E0)})
+    except Exception:
+        pass
 
-    # run minimizer (L-BFGS-B). Note: we don't provide analytic gradient here; scipy will approximate via finite differences.
     opt_res = minimize(
-        objective,
+        lambda x: energy_cache.evaluate(x, basis_pair=basis_pair)["E_cbs"],
         x0,
         method="L-BFGS-B",
         bounds=bounds,
@@ -490,36 +438,116 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
         "debug": final["debug"],
         "internals": internals,
         "x_opt": x_opt,
+        "history": history,
     }
     return result
 
 
 # ---------------------
-# CLI
+# Helper to update CONFIG from params
 # ---------------------
-def main():
-    parser = argparse.ArgumentParser(description="CBS geometry optimizer (internals + L-BFGS).")
+def _update_config_from_params(params):
+    # params keys: X1, X2, Xhf1, Xhf2, beta, basis1, basis2, pyscf_threads, pyscf_max_memory
+    if params is None:
+        return
+    try:
+        if "X1" in params:
+            CONFIG["X1_CORR"] = float(params["X1"])
+        if "X2" in params:
+            CONFIG["X2_CORR"] = float(params["X2"])
+        if "Xhf1" in params:
+            CONFIG["X1_HF"] = float(params["Xhf1"])
+        if "Xhf2" in params:
+            CONFIG["X2_HF"] = float(params["Xhf2"])
+        if "beta" in params:
+            CONFIG["BETA_HF"] = float(params["beta"])
+        if "pyscf_threads" in params:
+            nt = int(params["pyscf_threads"])
+            CONFIG["PYSCF_NTHREADS"] = nt
+            lib.num_threads(nt)
+        if "pyscf_max_memory" in params:
+            CONFIG["PYSCF_MAX_MEMORY"] = int(params["pyscf_max_memory"])
+        # basis sets overrides
+        if params.get("basis1") and params.get("basis2"):
+            CONFIG["BASIS_SETS"] = (params["basis1"], params["basis2"])
+    except Exception:
+        # non-fatal; ignore invalid values (opt_cli should normalize)
+        pass
+
+
+# ---------------------
+# Programmatic API
+# ---------------------
+def run_optimization(params: dict, outputs_dir: Path):
+    """
+    params: dict normalized by opt_cli.prepare_options_from_params(...)
+    outputs_dir: Path where outputs must be stored (PyCBS-OUTPUTS)
+    Returns: dict with keys 'history', 'final_energy', 'final_cart', 'symbols', 'outputs'
+    """
+    outputs_dir = Path(outputs_dir)
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+
+    _update_config_from_params(params)
+
+    input_xyz = params.get("input_xyz")
+    if not input_xyz:
+        raise ValueError("params must include 'input_xyz' (path to input XYZ)")
+    symbols, coords0 = read_xyz(input_xyz)
+
+    # determine basis pair (params can override)
+    if params.get("basis1") and params.get("basis2"):
+        basis_pair = (params["basis1"], params["basis2"])
+    else:
+        basis_pair = CONFIG["BASIS_SETS"]
+
+    print("Starting L-BFGS-B optimization with basis pair:", basis_pair)
+    res = optimize_geometry(symbols, coords0, basis_pair=basis_pair)
+
+    final_cart = res["final_cart"]
+    final_energy = float(res["final_energy"])
+    history = res.get("history", [])
+
+    prefix = "LBFGS"
+    cycles_file = write_cycle_energies(outputs_dir, prefix, history)
+    xyz_file = write_final_xyz(outputs_dir, prefix, symbols, final_cart, final_energy)
+
+    return {"history": history, "final_energy": final_energy, "final_cart": final_cart, "symbols": symbols, "outputs": {"cycles": str(cycles_file), "xyz": str(xyz_file)}, "opt_result": res.get("opt_result")}
+
+
+# ---------------------
+# CLI entrypoint (backwards compatible)
+# ---------------------
+def _cli_main():
+    parser = argparse.ArgumentParser(description="L-BFGS-B CBS geometry optimizer (internals + L-BFGS).")
     parser.add_argument("input_xyz", help="Input XYZ file")
     parser.add_argument("--output", "-o", default="opt_out.xyz", help="Output optimized XYZ")
     parser.add_argument("--basis1", default=None, help="Smaller basis set override")
     parser.add_argument("--basis2", default=None, help="Larger basis set override")
+    parser.add_argument("--X1", type=float, default=None)
+    parser.add_argument("--X2", type=float, default=None)
+    parser.add_argument("--Xhf1", type=float, default=None)
+    parser.add_argument("--Xhf2", type=float, default=None)
+    parser.add_argument("--beta", type=float, default=None)
     args = parser.parse_args()
 
-    symbols, coords0 = read_xyz(args.input_xyz)
-    basis_pair = None
-    if args.basis1 and args.basis2:
-        basis_pair = (args.basis1, args.basis2)
-    else:
-        basis_pair = CONFIG["BASIS_SETS"]
-
-    print("Starting optimization with basis pair:", basis_pair)
-    res = optimize_geometry(symbols, coords0, basis_pair=basis_pair)
-    write_xyz(args.output, symbols, res["final_cart"], comment=f"CBS opt energy {res['final_energy']:.10f} Ha")
-    print("Optimization finished. Final CBS energy (Ha):", res["final_energy"])
+    params = {
+        "input_xyz": args.input_xyz,
+        "basis1": args.basis1,
+        "basis2": args.basis2,
+        "X1": args.X1,
+        "X2": args.X2,
+        "Xhf1": args.Xhf1,
+        "Xhf2": args.Xhf2,
+        "beta": args.beta,
+    }
+    outputs_dir = Path.cwd() / "PyCBS-OUTPUTS"
+    result = run_optimization(params, outputs_dir)
+    # also write the final single-file xyz from this CLI flag
+    write_xyz(args.output, result["symbols"], result["final_cart"], comment=f"CBS opt energy {result['final_energy']:.10f} Ha")
+    print("Optimization finished. Final CBS energy (Ha):", result["final_energy"])
     print("Wrote optimized geometry to:", args.output)
-    # You may print debug info if desired:
-    # print(res["debug"])
+    print("Cycle energies and final XYZ written to:", outputs_dir)
 
 
 if __name__ == "__main__":
-    main()
+    _cli_main()

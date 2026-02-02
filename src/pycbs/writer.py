@@ -17,8 +17,8 @@ LOGO = """
                             $$  __$$\ $$  __$$\ $$  __$$\ 
         $$$$$$\  $$\   $$\  $$ /  \__|$$ |  $$ |$$ /  \__|
         $$  __$$\ $$ |  $$ |$$ |      $$$$$$$\ |\$$$$$$\  
-        $$ /  $$ |$$ |  $$ |$$ |      $$  __$$\  \____$$\  
-        $$ |  $$ |$$ |  $$ |$$ |  $$\ $$ |  $$ |$$\   $$ |
+        $$  __$$ |$$ |  $$ |$$ |      $$  __$$\  \____$$\  
+        $$ /  $$ |$$ |  $$ |$$ |  $$\ $$ |  $$ |$$\   $$ |
         $$$$$$$  |\$$$$$$$ |\$$$$$$  |$$$$$$$  |\$$$$$$  |
         $$  ____/  \____$$ | \______/ \_______/  \______/ 
         $$ |      $$\   $$ |                              
@@ -83,281 +83,64 @@ def _render_table(headers: List[str], rows: Iterable[List[Any]]) -> str:
     When there are no data rows, render a single row filled with '-' so the
     table body is not empty (user requested).
     """
-    str_rows = [[_format_generic(c) for c in row] for row in rows]
+    # minimal table renderer (original behaviour preserved)
+    cols = len(headers)
+    rows = list(rows)
+    if not rows:
+        rows = [["-"] * cols]
+    # compute widths
+    widths = [len(h) for h in headers]
+    for r in rows:
+        for i, c in enumerate(r):
+            widths[i] = max(widths[i], len(str(c)))
+    sep = " | "
+    header_line = sep.join(h.ljust(widths[i]) for i, h in enumerate(headers))
+    bar = "-+-".join("-" * widths[i] for i in range(len(headers)))
+    body = "\n".join(sep.join(str(c).ljust(widths[i]) for i, c in enumerate(r)) for r in rows)
+    return f"{header_line}\n{bar}\n{body}"
 
-    # If there are no data rows, create one row of '-' placeholders (one per header)
-    if not str_rows:
-        str_rows = [["-" for _ in headers]]
 
-    # Compute columns and widths
-    columns = list(zip(*([headers] + str_rows)))
-    col_widths = [max(len(str(x)) for x in col) + 2 for col in columns]
+# -------------------------
+# Output helpers for optimizations
+# -------------------------
+def ensure_outputs_dir(base: Path | None = None) -> Path:
+    base_path = Path(base) if base is not None else Path.cwd()
+    out = base_path / "PyCBS-OUTPUTS"
+    out.mkdir(parents=True, exist_ok=True)
+    return out
 
-    sep = "+" + "+".join("-" * w for w in col_widths) + "+"
 
-    def render_row(cells: List[str]) -> str:
-        rendered = []
-        for cell, w in zip(cells, col_widths):
-            if cell == "-":
-                rendered.append(" " + cell.center(w - 1) + "|")
+def write_cycle_energies(out_dir: Path, prefix: str, history: list):
+    """
+    Write cycle-by-cycle energies to a CSV-like file under out_dir.
+    history: list of dicts with keys e.g. {'cycle': int, 'energy': float, 'parameters': ...}
+    File name: {prefix}_cycle_energies.csv
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fname = out_dir / f"{prefix}_cycle_energies.csv"
+    with open(fname, "w") as fh:
+        fh.write("cycle,step,E_cbs\n")
+        for entry in history:
+            cycle = entry.get("cycle", "")
+            if "energies" in entry and isinstance(entry["energies"], (list, tuple)):
+                # if entry contains per-step energies, write them
+                for i, e in enumerate(entry["energies"]):
+                    fh.write(f"{cycle},{i},{e:.10f}\n")
             else:
-                rendered.append(" " + cell.ljust(w - 1) + "|")
-        return "|" + "".join(rendered)
-
-    lines = [sep, render_row(headers), sep]
-    for r in str_rows:
-        lines.append(render_row(r))
-    lines.append(sep)
-    return "\n".join(lines)
+                e = entry.get("energy", entry.get("E_cbs"))
+                fh.write(f"{cycle},0,{float(e):.10f}\n")
+    return fname
 
 
-
-# -------------------------
-# Normalization & helpers
-# -------------------------
-def _norm_scheme(scheme: Optional[str]) -> str:
-    if scheme is None:
-        return "unknown"
-    return str(scheme).strip().lower().replace("_", "-")
-
-
-
-def _coerce_entry(entry: Any) -> Dict[str, Any]:
-    if entry is None:
-        return {}
-    if isinstance(entry, dict):
-        return entry
-    try:
-        return dict(entry)
-    except Exception:
-        return {"value": entry}
-
-
-def _classify_and_build_row(
-    entry: Dict[str, Any],
-    hf_components: Iterable[str],
-    corr_components: Iterable[str],
-    mixed_schemes: Iterable[str],
-) -> List[Any]:
-    """
-    Return row in exact column order:
-    ['calculation', 'scheme', 'HF_CBS', 'Corr_CBS', 'Freq_CBS', 'TensProp', 'Total Energy']
-    """
-    label = entry.get("calculation") or entry.get("label") or entry.get("name") or entry.get("section") or "unnamed"
-    scheme_raw = entry.get("scheme", entry.get("method", "unknown"))
-    scheme = _norm_scheme(scheme_raw)
-
-    hf_val = entry.get("hf_cbs") if "hf_cbs" in entry else entry.get("EHF") if "EHF" in entry else entry.get("hf") if "hf" in entry else None
-    corr_val = entry.get("corr_cbs") if "corr_cbs" in entry else entry.get("dc") if "dc" in entry else entry.get("corr") if "corr" in entry else None
-    freq_val = entry.get("freq_cbs") if "freq_cbs" in entry else entry.get("frequency") if "frequency" in entry else entry.get("freq") if "freq" in entry else None
-    tens_val = entry.get("tens_prop") if "tens_prop" in entry else entry.get("tensprop") if "tensprop" in entry else entry.get("tensor") if "tensor" in entry else None
-    total_val = entry.get("total_energy") if "total_energy" in entry else entry.get("energy") if "energy" in entry else entry.get("total") if "total" in entry else None
-    prop_hint = (entry.get("property_type") or entry.get("property") or "").strip().lower()
-
-    hf_set = {s.lower() for s in hf_components}
-    corr_set = {s.lower() for s in corr_components}
-    mixed_set = {s.lower() for s in mixed_schemes}
-
-    # Exact rules as requested:
-    if scheme in hf_set:
-        return [label, scheme_raw, hf_val, None, None, None, None]
-    if scheme in corr_set:
-        return [label, scheme_raw, None, corr_val, None, None, None]
-    if scheme in mixed_set:
-        if prop_hint.startswith("freq") or (freq_val is not None):
-            return [label, scheme_raw, hf_val, corr_val, freq_val, None, None]
-        if prop_hint.startswith("tens") or (tens_val is not None):
-            return [label, scheme_raw, hf_val, corr_val, None, tens_val, None]
-        return [label, scheme_raw, hf_val, corr_val, None, None, total_val]
-    # Unknown: infer from fields (prefer explicit fields)
-    if hf_val is not None and corr_val is None:
-        return [label, scheme_raw, hf_val, None, None, None, None]
-    if corr_val is not None and hf_val is None:
-        return [label, scheme_raw, None, corr_val, None, None, None]
-    return [label, scheme_raw, hf_val, corr_val, freq_val, tens_val, total_val]
-
-
-# -------------------------
-# Primary writer API
-# -------------------------
-def write_header(path: Union[str, Path]) -> None:
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("w", encoding="utf-8") as f:
-        f.write(LOGO + "\n\n")
-        f.write("             pyCBS: Complete Basis Set Extrapolation Tool\n\n")
-        f.write(INFO_BLOCK + "\n\n")
-
-
-def write_error(path: Union[str, Path], section_name: str, message: str) -> None:
-    with Path(path).open("a", encoding="utf-8") as f:
-        f.write(f"\nERROR in [{section_name}]: {message}\n")
-
-
-def write_reports(
-    filename: Union[str, Path],
-    calculations: Iterable[Any],
-    *,
-    hf_components: Optional[Iterable[str]] = None,
-    corr_components: Optional[Iterable[str]] = None,
-    mixed_schemes: Optional[Iterable[str]] = None,
-    detailed_blocks: bool = False,
-) -> Dict[str, str]:
-    """
-    Writes a single file (overwrites) containing:
-      - header
-      - CBS Extrapolations summary table (exact column order)
-      - Geometrical Optimization table (Cycle, CBS Energy)
-
-    No CSV/LaTeX exports. No examples are written.
-    """
-    out = {}
-    path = Path(filename)
-    outdir = path.parent
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    hf_components = set(hf_components) if hf_components is not None else set(DEFAULT_HF_COMPONENTS)
-    corr_components = set(corr_components) if corr_components is not None else set(DEFAULT_CORR_COMPONENTS)
-    mixed_schemes = set(mixed_schemes) if mixed_schemes is not None else set(DEFAULT_MIXED_SCHEMES)
-
-    # Clear previous global summary and write header (overwrite)
-    global RESULTS_SUMMARY
-    RESULTS_SUMMARY = []
-    write_header(path)
-
-    # Prepare calculation rows
-    calc_list = [_coerce_entry(c) for c in calculations] if calculations is not None else []
-    headers = ["calculation", "scheme", "HF_CBS", "Corr_CBS", "Freq_CBS", "TensProp", "Total Energy"]
-    rows: List[List[Any]] = []
-
-    # Optional detailed blocks, if caller wants them
-    if detailed_blocks:
-        for entry in calc_list:
-            scheme = entry.get("scheme") or entry.get("method") or "unknown"
-            EHF = entry.get("hf_cbs") or entry.get("EHF") or entry.get("hf")
-            dc = entry.get("corr_cbs") or entry.get("dc") or entry.get("corr")
-            energy = entry.get("total_energy") or entry.get("energy") or entry.get("total")
-            with path.open("a", encoding="utf-8") as f:
-                f.write("\n" + "=" * 70 + "\n")
-                f.write(f"                       Extrapolation Scheme: {scheme}\n")
-                f.write("=" * 70 + "\n")
-                f.write("Input Parameters:\n")
-                f.write("-" * 70 + "\n")
-                if entry:
-                    for key in sorted(entry.keys()):
-                        try:
-                            f.write(f"{key:>20}: {entry[key]}\n")
-                        except Exception:
-                            f.write(f"{key:>20}: {str(entry[key])}\n")
-                else:
-                    f.write(" (no input parameters)\n")
-                f.write("-" * 70 + "\n")
-                f.write("Extrapolation Results:\n")
-                f.write("-" * 70 + "\n")
-                if (EHF is not None) and (dc is not None):
-                    try:
-                        f.write(f"{'Hartree-Fock (CBS):':>30} {float(EHF):.10f}\n")
-                    except Exception:
-                        f.write(f"{'Hartree-Fock (CBS):':>30} {EHF}\n")
-                    try:
-                        f.write(f"{'Dynamic Correlation:':>30} {float(dc):.10f}\n")
-                    except Exception:
-                        f.write(f"{'Dynamic Correlation:':>30} {dc}\n")
-                    try:
-                        f.write(f"{'Total CBS Energy:':>30} {float(energy):.10f}\n")
-                    except Exception:
-                        f.write(f"{'Total CBS Energy:':>30} {energy}\n")
-                else:
-                    if energy is not None:
-                        try:
-                            f.write(f"{'CBS Extrapolated Energy:':>30} {float(energy):.10f}\n")
-                        except Exception:
-                            f.write(f"{'CBS Extrapolated Energy:':>30} {energy}\n")
-                    elif EHF is not None:
-                        try:
-                            f.write(f"{'HF (CBS):':>30} {float(EHF):.10f}\n")
-                        except Exception:
-                            f.write(f"{'HF (CBS):':>30} {EHF}\n")
-                    elif dc is not None:
-                        try:
-                            f.write(f"{'Dynamic Corr (only):':>30} {float(dc):.10f}\n")
-                        except Exception:
-                            f.write(f"{'Dynamic Corr (only):':>30} {dc}\n")
-                    else:
-                        f.write("No numeric result available\n")
-                f.write("=" * 70 + "\n\n")
-
-    # Build summary rows
-    for e in calc_list:
-        row = _classify_and_build_row(e, hf_components, corr_components, mixed_schemes)
-        rows.append(row)
-        RESULTS_SUMMARY.append({
-            "calculation": row[0],
-            "scheme": row[1],
-            "EHF": row[2],
-            "dc": row[3],
-            "freq": row[4],
-            "tens": row[5],
-            "energy": row[6],
-        })
-
-    # Write CBS summary table
-    with path.open("a", encoding="utf-8") as f:
-        f.write("\n" + "=" * 70 + "\n")
-        f.write("                      CBS EXTRAPOLATIONS\n")
-        f.write("=" * 70 + "\n\n")
-        f.write(_render_table(headers, rows) + "\n\n")
-    return out
-
-
-
-def write_reports1(
-    filename: Union[str, Path],
-    calculations: Iterable[Any],
-    opt_cycles: Iterable[Any]
-) -> Dict[str, str]:
-    """
-    Write a standalone optimization report file containing:
-      - header/logo
-      - GEOMETRICAL OPTIMIZATION table (Cycle, CBS Energy)
-
-    This function creates the parent directory, writes a fresh header
-    (overwrites any existing file of the same name), then appends the
-    optimization table. Returns a small dict with the final filename.
-    """
-    out = {}
-    path = Path(filename)
-    outdir = path.parent
-    outdir.mkdir(parents=True, exist_ok=True)
-
-    # Write header (overwrite existing file with logo + info)
-    write_header(path)
-
-    # Build optimization rows in canonical two-column form
-    opt_headers = ["Cycle", "CBS Energy"]
-    opt_rows: List[List[Any]] = []
-    for itm in opt_cycles:
-        if isinstance(itm, dict):
-            cycle = itm.get("cycle", itm.get("step", "-"))
-            energy = itm.get("cbs_energy", itm.get("energy", itm.get("total_energy", "-")))
-        elif isinstance(itm, (list, tuple)) and len(itm) >= 2:
-            cycle, energy = itm[0], itm[1]
-        else:
-            # ignore malformed entries
-            continue
-        opt_rows.append([cycle, energy])
-
-    # Write optimization table
-    with path.open("a", encoding="utf-8") as f:
-        f.write("\n" + "=" * 70 + "\n")
-        f.write("                      GEOMETRICAL OPTIMIZATION\n")
-        f.write("=" * 70 + "\n\n")
-        f.write(_render_table(opt_headers, opt_rows) + "\n\n")
-
-    out["txt"] = str(path)
-    return out
-
-def clear_results_summary() -> None:
-    """Clear global RESULTS_SUMMARY collector."""
-    global RESULTS_SUMMARY
-    RESULTS_SUMMARY = []
+def write_final_xyz(out_dir: Path, prefix: str, symbols: list, coords: list, final_energy: float):
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fname = out_dir / f"{prefix}_final_opt.xyz"
+    nat = len(symbols)
+    with open(fname, "w") as fh:
+        fh.write(f"{nat}\n")
+        fh.write(f"Optimized by pyCBS, E_CBS = {final_energy:.10f} Ha\n")
+        for s, c in zip(symbols, coords):
+            fh.write(f"{s} {c[0]: .10f} {c[1]: .10f} {c[2]: .10f}\n")
+    return fname

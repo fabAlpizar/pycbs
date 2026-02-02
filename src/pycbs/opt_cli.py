@@ -92,6 +92,9 @@ def prepare_options_from_params(params: Dict[str, Any]) -> Dict[str, Any]:
     method = params.get("method", "ccsd(t)")
     spin = int(params.get("spin", 0)) if params.get("spin") is not None else 0
 
+    # optimizer selection (default 'lbfgs' or 'sqm')
+    optimizer = params.get("optimizer", "lbfgs").strip().lower()
+
     return {
         "method": method,
         "spin": spin,
@@ -99,233 +102,132 @@ def prepare_options_from_params(params: Dict[str, Any]) -> Dict[str, Any]:
         "X2": _f("x2",2.639),
         "Xhf1": _f("xhf1", 3.02),
         "Xhf2": _f("xhf2", 3.64),
+        "beta": _f("beta", 1.62),
+        "optimizer": optimizer,
+        "input_xyz": params.get("input_xyz") or params.get("input") or params.get("geometry"),
+        "output_dir": params.get("output_dir"),  # optional override
     }
 
 
-def find_optimization_module() -> Tuple[str, object]:
-    this_file = Path(__file__).resolve()
-    pkg_dir = this_file.parent
+def find_optimization_module(pkg_dir: Path, optimizer_name: str) -> Tuple[str, Path]:
+    """
+    Search for optimizer implementation files under the repository.
+    Returns (module_name, path_to_file).
+    Recognized names: 'lbfgs', 'sqm' (case-insensitive) mapped to candidate files.
+    """
+    # candidate filenames mapping (lowercase key)
+    mapping = {
+        "lbfgs": ["L-BFSG-B-based.py", "L-BFSG-B-based.py".lower(), "lbfgs-based.py", "lbfgs.py"],
+        "sqm": ["SQM-based.py", "SQM-based.py".lower(), "sqm-based.py", "sqm.py"],
+    }
 
-    candidates = [
-        pkg_dir.parent / "pycbs-opt" / "L-BFGS-B-based.py",
-        pkg_dir / "pycbs-opt" / "L-BFGS-B-based.py",
-    ]
-
-    for p in sys.path:
-        candidates.append(Path(p) / "pycbs-opt" / "L-BFGS-B-based.py")
-
-    for c in candidates:
-        try:
-            if c.exists():
-                spec = importlib.util.spec_from_file_location("pycbs_opt_module", str(c))
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                return str(c), mod
-        except Exception:
+    candidates = mapping.get(optimizer_name, [optimizer_name + ".py"])
+    # first look in pkg_dir / 'pycbs-opt' (some files are in a separate dir), then same folder
+    search_dirs = [pkg_dir / ".." / "pycbs-opt", pkg_dir / "pycbs-opt", pkg_dir]
+    for s in search_dirs:
+        s = s.resolve()
+        if not s.exists():
             continue
+        for cand in candidates:
+            p = s / cand
+            if p.exists():
+                # produce a stable module name from path
+                mod_name = f"pycbs_opt_{optimizer_name}"
+                return mod_name, p
+    # fallback: try direct file name under pkg_dir
+    for s in search_dirs:
+        s = s.resolve()
+        if not s.exists():
+            continue
+        for f in s.iterdir():
+            if f.is_file() and optimizer_name in f.name.lower():
+                return f"pycbs_opt_{optimizer_name}", f
+    raise FileNotFoundError(f"Could not find optimizer implementation for '{optimizer_name}' under {pkg_dir} or its pycbs-opt subfolder.")
 
-    raise FileNotFoundError("Could not locate pycbs-opt/L-BFGS-B-based.py")
+
+def import_module_from_path(module_name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, str(path))
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot import module {module_name} from {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
-# Helper to defensively convert array-like coords to nested lists of floats
-def _coords_to_list(obj) -> list:
-    if obj is None:
-        return []
-    try:
-        if not hasattr(obj, "__len__") or len(obj) == 0:
-            return []
-    except Exception:
-        return []
-    out = []
-    try:
-        for row in obj:
-            if row is None:
-                continue
-            try:
-                coords = [float(x) for x in row]
-                if len(coords) >= 3:
-                    out.append([coords[0], coords[1], coords[2]])
-                else:
-                    continue
-            except Exception:
-                continue
-    except Exception:
-        return []
+def ensure_pycb_outputs(base_dir: Path | None) -> Path:
+    """Create and return the PyCBS-OUTPUTS directory path"""
+    base = Path(base_dir) if base_dir else Path.cwd()
+    out = base / "PyCBS-OUTPUTS"
+    ensure_output_dir(out)
     return out
 
 
-# ---------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="pycbs-opt",
-        description="Run pyCBS geometry optimization from an INI file",
-    )
-    parser.add_argument("config", type=Path, help="Optimization input INI file")
-    parser.add_argument("-v", "--verbose", action="count", default=1)
-    args = parser.parse_args(argv)
+def main():
+    parser = argparse.ArgumentParser(description="pycbs optimizer CLI (select optimization pathway)")
+    parser.add_argument("config", help="INI-style configuration file describing the job")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    args = parser.parse_args()
 
-    logging.basicConfig(
-        level=logging.INFO if args.verbose else logging.WARNING,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-    )
+    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+
+    cfg_path = Path(args.config)
+    if not cfg_path.exists():
+        print("Config file not found:", cfg_path, file=sys.stderr)
+        sys.exit(2)
 
     try:
-        params = load_params_from_ini(args.config)
-    except Exception as e:
-        logger.error("Failed to read config: %s", e)
-        return 2
+        raw_params = load_params_from_ini(cfg_path)
+        params = prepare_options_from_params(raw_params)
 
-    if "xyz_file" not in params and "xyz" not in params:
-        logger.error("Missing 'xyz_file' entry in INI")
-        return 2
+        pkg_dir = Path(__file__).resolve().parent
+        optimizer_name = params.get("optimizer", "lbfgs")
+        mod_name, mod_path = find_optimization_module(pkg_dir, optimizer_name)
 
-    xyz_file = Path(params.get("xyz_file", params.get("xyz"))).expanduser()
-    if not xyz_file.exists():
-        logger.error("XYZ file does not exist: %s", xyz_file)
-        return 2
+        mod = import_module_from_path(mod_name, mod_path)
 
-    basis1 = map_basis(params.get("basis1", "vdz"))
-    basis2 = map_basis(params.get("basis2", "vtz"))
-    basis_pair = (basis1, basis2)
+        # outputs directory: prefer config output_dir if provided, else project cwd
+        base_out = Path(params["output_dir"]) if params.get("output_dir") else Path.cwd()
+        outputs_dir = ensure_pycb_outputs(base_out)
 
-    outdir = Path(params.get("output_dir", "PyCBS-OUTPUTS"))
-    ensure_output_dir(outdir)
-
-    try:
-        _, opt_mod = find_optimization_module()
-    except Exception as e:
-        logger.error("Cannot locate optimization module: %s", e)
-        traceback.print_exc()
-        return 3
-
-    if not hasattr(opt_mod, "read_xyz") or not hasattr(opt_mod, "optimize_geometry"):
-        logger.error("L-BFGS-B-based.py missing required API")
-        return 4
-
-    symbols, coords0 = opt_mod.read_xyz(str(xyz_file))
-    options = prepare_options_from_params(params)
-
-    logger.info(
-        "Starting geometry optimization (basis pair: %s, %s)",
-        basis1,
-        basis2,
-    )
-
-    # Call optimizer (signature expected: optimize_geometry(symbols, coords0, basis_pair=basis_pair, options=options))
-    res = opt_mod.optimize_geometry(
-        symbols,
-        coords0,
-        basis_pair=basis_pair,
-        options=options,
-    )
-
-    # -----------------------------------------------------------------
-    # Postprocessing: XYZ + optimization history (CANONICAL)
-    # -----------------------------------------------------------------
-    # Use package writer for formatted output
-    from . import writer as _writer
-
-    # ---- XYZ ----
-    opt_xyz = unique_path(outdir / params.get("output_xyz", "optimized.xyz"))
-
-    coords = []
-    if isinstance(res, dict):
-        # prefer final_cart, then coords
-        fc = res.get("final_cart", None)
-        cc = res.get("coords", None)
-
-        if fc is not None and (hasattr(fc, "__len__") and len(fc) > 0):
-            coords = _coords_to_list(fc)
-        elif cc is not None and (hasattr(cc, "__len__") and len(cc) > 0):
-            coords = _coords_to_list(cc)
-
-    # If coords is still empty, do not try to write internals as cartesian
-    if not coords:
-        logger.warning("No cartesian coordinates found in optimizer result (final_cart/coords). Writing empty geometry file placeholder.")
-        coords = []
-
-    # Write optimized geometry using module writer if present, with fallback
-    try:
-        if hasattr(opt_mod, "write_xyz"):
-            try:
-                opt_mod.write_xyz(str(opt_xyz), symbols, coords, comment="Optimized by pycbs-opt")
-            except TypeError:
-                opt_mod.write_xyz(str(opt_xyz), symbols, coords)
-        else:
-            with opt_xyz.open("w", encoding="utf-8") as fh:
-                fh.write(f"{len(symbols)}\n")
-                fh.write("Optimized by pycbs-opt\n")
-                for s, c in zip(symbols, coords):
-                    fh.write(f"{s} {c[0]} {c[1]} {c[2]}\n")
-    except Exception:
-        logger.exception("Failed to write optimized XYZ using optimization module; attempting simple fallback writer.")
-        try:
-            with opt_xyz.open("w", encoding="utf-8") as fh:
-                fh.write(f"{len(symbols)}\n")
-                fh.write("Optimized by pycbs-opt\n")
-                for s, c in zip(symbols, coords):
-                    fh.write(f"{s} {c[0]} {c[1]} {c[2]}\n")
-        except Exception:
-            logger.exception("Final fallback failed to write optimized.xyz. File may be missing or empty.")
-
-    # ---- Optimization history ----
-    opt_cycles = []
-    hist = None
-    if isinstance(res, dict):
-        hist = res.get("history") or res.get("opt_history") or res.get("cycles") or res.get("cycle_history")
-
-    if isinstance(hist, list) and hist:
-        for i, h in enumerate(hist, start=1):
-            if isinstance(h, dict):
-                e = h.get("cbs_energy") or h.get("energy") or h.get("total_energy")
-                cycle = int(h.get("cycle", i))
-                opt_cycles.append({
-                    "cycle": cycle,
-                    "cbs_energy": float(e) if e is not None else None
-                })
-
-            elif isinstance(h, (list, tuple)) and len(h) >= 2:
-                opt_cycles.append({"cycle": h[0], "cbs_energy": h[1]})
+        # Standardized entry point expected: run_optimization(params: dict, outputs_dir: Path) -> dict
+        if not hasattr(mod, "run_optimization"):
+            # attempt to find 'main' or 'optimize' functions as fallbacks
+            if hasattr(mod, "main"):
+                # wrap into run_optimization by calling main with environment variables
+                def _fallback_run(params_in, out_dir):
+                    # create a minimal args replacement if script expects CLI; not recommended.
+                    return mod.main()
+                run_func = _fallback_run
+            elif hasattr(mod, "optimize") and callable(getattr(mod, "optimize")):
+                run_func = getattr(mod, "optimize")
             else:
-                opt_cycles.append({"cycle": i, "cbs_energy": h})
-    else:
-        final_energy = None
-        if isinstance(res, dict):
-            final_energy = res.get("final_energy")
-            if final_energy is None:
-                hf = res.get("final_hf_cbs")
-                corr = res.get("final_corr_cbs")
-                if hf is not None and corr is not None:
-                    try:
-                        final_energy = float(hf) + float(corr)
-                    except Exception:
-                        final_energy = None
-            if final_energy is None and isinstance(res.get("opt_result"), dict):
-                final_energy = res["opt_result"].get("fun")
-        opt_cycles = [{"cycle": 0, "cbs_energy": final_energy}]
+                raise AttributeError(f"Selected optimizer module {mod_path} does not expose run_optimization(params, outputs_dir). Please update the module to provide that API.")
+        else:
+            run_func = getattr(mod, "run_optimization")
 
-    history_path = unique_path(outdir / params.get("summary_file", "opt_history.txt"))
-    try:
-        _writer.write_reports1(str(history_path), calculations=[], opt_cycles=opt_cycles)
-    except Exception:
-        logger.exception("writer.write_reports1 failed; writing compact history fallback.")
-        try:
-            with history_path.open("w", encoding="utf-8") as fh:
-                fh.write("pycbs-opt history / summary\n")
-                fh.write(f"config: {args.config}\n")
-                fh.write(f"xyz: {xyz_file}\n")
-                fh.write(f"basis_pair: {basis_pair}\n")
-                fh.write(f"method: {options.get('method')}\n\n")
-                for row in opt_cycles:
-                    fh.write(f"{row.get('cycle')}\t{row.get('cbs_energy')}\n")
-        except Exception:
-            logger.exception("Fallback history write failed.")
+        print(f"Using optimizer module: {mod_path}")
+        print("Starting optimization... outputs will be written to:", outputs_dir)
 
-    logger.info("Optimization finished. Results written to: %s", outdir)
-    return 0
+        result = run_func(params, outputs_dir)
+
+        # result is expected to be a dict with keys: 'history' (list), 'final_xyz' or 'final_cart' and 'final_energy'
+        if isinstance(result, dict):
+            # basic reporting
+            hist = result.get("history")
+            fe = result.get("final_energy")
+            print("Optimization finished.")
+            if hist is not None:
+                print(f"Cycles performed: {len(hist)}")
+            if fe is not None:
+                print(f"Final CBS energy (Ha): {fe:.10f}")
+        else:
+            print("Optimizer returned no structured result (not a dict).")
+
+    except Exception as exc:
+        logger.error("Optimization failed: %s", exc)
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    main()

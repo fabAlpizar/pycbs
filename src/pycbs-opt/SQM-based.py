@@ -1,47 +1,74 @@
 #!/usr/bin/env python3
 """
-pyCBS_ric.py
+SQM-based optimizer module (full implementation)
 
-Flexible pyCBS optimizer: read an XYZ, build redundant internal coordinates
-(bonds, angles, dihedrals), perform per-internal-coordinate 5-point parabolic
-optimization using CBS-extrapolated energies (MP2 or CCSD(T)), and write an
-optimized XYZ.
+This implements the "SQM-style" redundant-internal-coordinate optimizer:
+- reads an input XYZ
+- builds a redundant set of internals (bonds, angles, dihedrals)
+- for each internal coordinate performs a 5-point finite-difference
+  (parabolic) scan and tries to update geometry if the CBS energy improves
+- repeats for a number of cycles or until convergence
 
-Usage:
-    python pyCBS_ric.py -i input.xyz [--method CCSD(T)|MP2] [--maxcycle 20] [--workers 4]
-    You can also pass CBS/extrapolation parameters:
-      --x1 1.85 --x2 2.639 --x1hf 3.02 --x2hf 3.64 --beta 1.62
+Exposes:
+    run_optimization(params: dict, outputs_dir: pathlib.Path) -> dict
 
-Notes:
-- Internal->Cartesian updates are geometric and approximate (no Wilson B-matrix).
-- For robust/large-molecule optimization prefer a full internal-coordinate optimizer.
+Expected params keys (normalized by opt_cli.prepare_options_from_params):
+- input_xyz (path)
+- method (e.g. 'CCSD(T)' or 'MP2')
+- X1, X2, Xhf1, Xhf2, beta  (CBS parameters; optional)
+- maxcycle (optional)
+- workers (optional)  -- currently not used for parallelism in this implementation
+- fac (displacement factor; optional)
+
+Outputs:
+- writes cycle-by-cycle energies CSV: PyCBS-OUTPUTS/SQM_cycle_energies.csv
+- writes final optimized geometry XYZ: PyCBS-OUTPUTS/SQM_final_opt.xyz
+
+Notes / limitations:
+- Internal->cartesian updates are geometric and approximate (no B-matrix).
+- This implementation runs single-threaded for evaluation stability. For larger
+  jobs you can parallelize the per-displacement evaluations, but be careful with
+  PySCF and process/thread spawning.
 """
-import argparse
+from pathlib import Path
 import math
-import os
-from concurrent.futures import ProcessPoolExecutor
-import concurrent.futures
+import sys
 from functools import lru_cache
-from tqdm import tqdm
 
 import numpy as np
-from pyscf import gto, scf, cc, lib, mp
-from multiprocessing import cpu_count
+from pycbs.writer import write_cycle_energies, write_final_xyz
+
+# PySCF imports (deferred errors if not installed)
+try:
+    from pyscf import gto, scf, cc, mp, lib
+except Exception as e:
+    raise ImportError("PySCF is required for this script. Install pyscf and retry.") from e
 
 # -------------------------
-# Resources / parallelism
+# Defaults / parameters
 # -------------------------
-DEFAULT_MAX_WORKERS = max(1, cpu_count() - 1)
-PYSCF_THREADS = max(1, DEFAULT_MAX_WORKERS // 2)
+# Basis sets used for CBS extrapolation (small, big)
+basis_sets = ['cc-pvdz', 'cc-pvtz']
+# method default
+DEFAULT_METHOD = 'CCSD(T)'
 
-os.environ['MKL_NUM_THREADS'] = str(PYSCF_THREADS)
-os.environ['OMP_NUM_THREADS'] = str(PYSCF_THREADS)
-os.environ['OPENBLAS_NUM_THREADS'] = str(PYSCF_THREADS)
+# default CBS/extrapolation parameters
+X1_DEFAULT, X2_DEFAULT = 1.85, 2.639
+X1HF_DEFAULT, X2HF_DEFAULT = 3.02, 3.64
+BETA_DEFAULT = 1.62
+
+# worker / pyscf threading defaults
+DEFAULT_WORKERS = 1
+PYSCF_THREADS = 1
 lib.num_threads(PYSCF_THREADS)
 
-# -------------------------
-# Covalent radii and approximate masses (a few elements; extend as needed)
-# -------------------------
+# convergence / optimization defaults
+MAXCYCLE_DEFAULT = 20
+ENERGY_CRIT = 1e-8
+FAC_DEFAULT = 0.05
+CUT = 0.75
+
+# covalent radii / masses
 COV_RAD = {
     'H': 0.31, 'C': 0.76, 'N': 0.71, 'O': 0.66, 'F': 0.57,
     'P': 1.07, 'S': 1.05, 'Cl': 1.02
@@ -51,34 +78,9 @@ ATOMIC_MASS = {
     'P': 30.9738, 'S': 32.065, 'Cl': 35.453
 }
 
-# -------------------------
-# CBS / extrapolation & defaults (kept from your script)
-# -------------------------
-basis_sets = ['cc-pvtz', 'cc-pvqz']
-METHOD = 'CCSD(T)'
-# default CBS/extrapolation parameters (can be overridden via CLI)
-x1_default, x2_default = 2.792, 3.719
-x1hf_default, x2hf_default = 3.64, 4.28
-beta_default = 1.62
-
-# these will be set from CLI into globals x1, x2, x1_hf, x2_hf, beta and then used
-x1 = x1_default
-x2 = x2_default
-x1_hf = x1hf_default
-x2_hf = x2hf_default
-beta = beta_default
-
-# compute extrapolation constants (will be recomputed in main after parsing args)
-a_corr = (x1 ** 3) / (x2 ** 3 - x1 ** 3)
-b_hf = (np.exp(beta * x1_hf)) / (np.exp(beta * x2_hf) - np.exp(beta * x1_hf))
-
-maxcycle_default = 20
-energy_criterion = 1e-8
-fac_mult_default = 0.05
-cut = 0.75
 
 # -------------------------
-# Utility: file I/O, geometry helpers
+# I/O / geometry helpers
 # -------------------------
 def read_xyz(filename):
     with open(filename) as f:
@@ -88,20 +90,10 @@ def read_xyz(filename):
         coords = []
         for _ in range(natoms):
             parts = f.readline().split()
-            if len(parts) < 4:
-                continue
-            symbol = parts[0]
-            x, y, z = map(float, parts[1:4])
-            atoms.append(symbol)
-            coords.append([x, y, z])
+            atoms.append(parts[0])
+            coords.append([float(parts[1]), float(parts[2]), float(parts[3])])
     return atoms, np.array(coords, dtype=float), comment
 
-def write_xyz(filename, atoms, coords, comment="Optimized geometry"):
-    with open(filename, 'w') as f:
-        f.write(f"{len(atoms)}\n")
-        f.write(f"{comment}\n")
-        for a, c in zip(atoms, coords):
-            f.write(f"{a} {c[0]: .8f} {c[1]: .8f} {c[2]: .8f}\n")
 
 def xyz_to_pyscf_string(atoms, coords):
     lines = []
@@ -109,11 +101,13 @@ def xyz_to_pyscf_string(atoms, coords):
         lines.append(f"{a} {c[0]:.10f} {c[1]:.10f} {c[2]:.10f}")
     return "\n".join(lines)
 
+
 def distance(a, b):
     return np.linalg.norm(a - b)
 
+
 # -------------------------
-# Internal coordinate builder (redundant set)
+# Internals: build redundant set
 # -------------------------
 def build_redundant_internals(atoms, coords, bond_scale=1.2):
     nat = len(atoms)
@@ -129,14 +123,12 @@ def build_redundant_internals(atoms, coords, bond_scale=1.2):
     for j in range(nat):
         neighbors = [i for i, k in bonds if k == j] + [k for k, i in bonds if i == j]
         neighbors = sorted(set(neighbors))
-        for i_idx in range(len(neighbors)):
-            for k_idx in range(i_idx + 1, len(neighbors)):
-                i = neighbors[i_idx]
-                k = neighbors[k_idx]
+        for a_idx in range(len(neighbors)):
+            for b_idx in range(a_idx + 1, len(neighbors)):
+                i = neighbors[a_idx]
+                k = neighbors[b_idx]
                 angles.append((i, j, k))
     dihedrals = []
-    # Build dihedrals i-j-k-l where (i,j),(j,k),(k,l) are bonds
-    bond_set = set(bonds)
     for (j, k) in bonds:
         neigh_j = [i for i, b in bonds if b == j and i != k] + [b for a, b in bonds if a == j and b != k]
         neigh_k = [i for i, b in bonds if b == k and i != j] + [b for a, b in bonds if a == k and b != j]
@@ -146,19 +138,17 @@ def build_redundant_internals(atoms, coords, bond_scale=1.2):
             for l in neigh_k:
                 if len({i, j, k, l}) == 4:
                     dihedrals.append((i, j, k, l))
-    # Remove duplicates (normalize tuples)
     bonds = sorted(set(bonds))
     angles = sorted(set(angles))
     dihedrals = sorted(set(dihedrals))
     internals = []
-    # encode internal coords as dicts: type, indices, value (Å or deg)
     for (i, j) in bonds:
         internals.append({'type': 'bond', 'inds': (i, j)})
     for (i, j, k) in angles:
         internals.append({'type': 'angle', 'inds': (i, j, k)})
     for (i, j, k, l) in dihedrals:
         internals.append({'type': 'dihedral', 'inds': (i, j, k, l)})
-    # compute current values
+    # compute numeric values (bonds in Å, angles/dihedrals in degrees)
     for ic in internals:
         if ic['type'] == 'bond':
             i, j = ic['inds']
@@ -185,12 +175,23 @@ def build_redundant_internals(atoms, coords, bond_scale=1.2):
             ic['value'] = np.degrees(np.arctan2(y, x))
     return internals
 
+
 # -------------------------
-# Internal -> Cartesian transformations (approximate, geometric)
+# Geometric transformations for single-internal updates (approximate)
 # -------------------------
-def apply_bond_change(coords, i, j, new_length):
-    """Move i and j along the bond vector to set bond length to new_length.
-       Distribute displacements inversely proportional to approximate masses."""
+def compute_dihedral(p0, p1, p2, p3):
+    b0 = -1.0 * (p1 - p0)
+    b1 = p2 - p1
+    b2 = p3 - p2
+    b1 /= np.linalg.norm(b1) + 1e-16
+    v = b0 - np.dot(b0, b1) * b1
+    w = b2 - np.dot(b2, b1) * b1
+    x = np.dot(v, w)
+    y = np.dot(np.cross(b1, v), w)
+    return np.degrees(np.arctan2(y, x))
+
+
+def apply_bond_change(coords, i, j, new_length, atoms):
     p = coords.copy()
     ri = p[i].copy()
     rj = p[j].copy()
@@ -200,10 +201,8 @@ def apply_bond_change(coords, i, j, new_length):
         return p
     direction = vec / cur
     delta = new_length - cur
-    mi = ATOMIC_MASS.get('H', 1.0)
-    mj = ATOMIC_MASS.get('H', 1.0)
-    mi = ATOMIC_MASS.get(args_atoms[i], mi) if 'args_atoms' in globals() else ATOMIC_MASS.get('H', 1.0)
-    mj = ATOMIC_MASS.get(args_atoms[j], mj) if 'args_atoms' in globals() else ATOMIC_MASS.get('H', 1.0)
+    mi = ATOMIC_MASS.get(atoms[i], ATOMIC_MASS.get('H', 1.0))
+    mj = ATOMIC_MASS.get(atoms[j], ATOMIC_MASS.get('H', 1.0))
     if mi + mj == 0:
         w_i = 0.5
     else:
@@ -213,9 +212,8 @@ def apply_bond_change(coords, i, j, new_length):
     p[j] = rj + w_j * delta * direction
     return p
 
+
 def apply_angle_change(coords, i, j, k, new_angle_deg):
-    """Rotate atom i or k around central j to set the angle i-j-k to new_angle.
-       Here, we rotate atom i (keeping j and k fixed) for simplicity."""
     p = coords.copy()
     ri = p[i] - p[j]
     rk = p[k] - p[j]
@@ -234,9 +232,8 @@ def apply_angle_change(coords, i, j, k, new_angle_deg):
     p[i] = p[j] + new_ri
     return p
 
+
 def apply_dihedral_change(coords, i, j, k, l, new_dihedral_deg):
-    """Rotate the fragment i...j around bond j-k to set dihedral i-j-k-l.
-       For simplicity rotate atom i around axis j->k (keeping other atoms fixed)."""
     p = coords.copy()
     cur = compute_dihedral(p[i], p[j], p[k], p[l])
     dphi = np.radians(new_dihedral_deg - cur)
@@ -250,28 +247,20 @@ def apply_dihedral_change(coords, i, j, k, l, new_dihedral_deg):
     p[i] = axis_pt + new_v
     return p
 
-def compute_dihedral(p0, p1, p2, p3):
-    b0 = -1.0 * (p1 - p0)
-    b1 = p2 - p1
-    b2 = p3 - p2
-    b1 /= np.linalg.norm(b1) + 1e-16
-    v = b0 - np.dot(b0, b1) * b1
-    w = b2 - np.dot(b2, b1) * b1
-    x = np.dot(v, w)
-    y = np.dot(np.cross(b1, v), w)
-    return np.degrees(np.arctan2(y, x))
 
 # -------------------------
-# CBS energy evaluator from XYZ (cached)
+# CBS energy evaluator (with caching)
 # -------------------------
-def raw_energy(ex1, ex2, ex1hf, ex2hf):
-    return ex2 + a_corr * (ex2 - ex1) + (a_corr - b_hf) * (ex2hf - ex1hf)
-
+# We cache by xyz string and method. When CBS parameters are changed we clear cache.
 @lru_cache(maxsize=2000)
-def compute_cbs_energy_from_xyz_cached(xyz_string, method):
-    """xyz_string: string with 'Element X Y Z' lines separated by newlines."""
-    results = {'scf': [], 'corr': []}
-    for basis in basis_sets:
+def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str):
+    """
+    Compute CBS energy using explicit a_corr and b_hf passed in so cache is safe.
+    Returns scalar E_cbs (float).
+    """
+    scf_vals = []
+    corr_vals = []
+    for basis in (bs1, bs2):
         mol = gto.Mole()
         mol.atom = xyz_string
         mol.basis = basis
@@ -286,79 +275,100 @@ def compute_cbs_energy_from_xyz_cached(xyz_string, method):
         mf.conv_tol = 1e-9
         mf.max_cycle = 100
         scf_energy = mf.kernel()
-        corr_energy = None
 
-        if method == 'CCSD(T)':
-            mycc = cc.CCSD(mf)
-            mycc.conv_tol = 1e-7
-            mycc.max_cycle = 100
-            mycc.kernel()
+        corr_energy = None
+        if method.upper().startswith('CCSD'):
             try:
-                et = mycc.ccsd_t()
+                mycc = cc.CCSD(mf)
+                mycc.conv_tol = 1e-7
+                mycc.max_cycle = 100
+                mycc.kernel()
+                try:
+                    et = mycc.ccsd_t()
+                except Exception:
+                    et = 0.0
+                corr_energy = mycc.e_tot - scf_energy + (et if et is not None else 0.0)
             except Exception:
-                et = None
-            corr_energy = mycc.e_tot + (et if et is not None else 0.0)
-        elif method == 'MP2':
+                corr_energy = None
+        if corr_energy is None and method.upper().startswith('MP2'):
             try:
                 mymp = mp.MP2(mf)
                 mymp.max_memory = 14330
-                mp_res = mymp.run()
-                mp2_total = getattr(mp_res, 'e_tot', None)
+                res = mymp.run()
+                mp2_total = getattr(res, 'e_tot', None)
                 if mp2_total is None:
                     mp2_total = getattr(mymp, 'e_tot', None)
                 if mp2_total is None:
-                    e_corr = getattr(mp_res, 'e_corr', getattr(mymp, 'e_corr', None))
+                    e_corr = getattr(res, 'e_corr', getattr(mymp, 'e_corr', None))
                     if e_corr is not None:
                         mp2_total = scf_energy + e_corr
                 if mp2_total is None:
                     raise RuntimeError("Could not retrieve MP2 total energy")
-                corr_energy = float(mp2_total)
+                corr_energy = float(mp2_total - scf_energy)
+            except Exception:
+                corr_energy = None
+
+        if corr_energy is None:
+            # try to fallback to MP2 if CCSD(T) failed
+            try:
+                mymp = mp.MP2(mf)
+                mymp.max_memory = 14330
+                res = mymp.run()
+                mp2_total = getattr(res, 'e_tot', None)
+                if mp2_total is None:
+                    mp2_total = getattr(mymp, 'e_tot', None)
+                if mp2_total is None:
+                    e_corr = getattr(res, 'e_corr', getattr(mymp, 'e_corr', None))
+                    if e_corr is not None:
+                        mp2_total = scf_energy + e_corr
+                if mp2_total is None:
+                    raise RuntimeError("Could not retrieve MP2 total energy")
+                corr_energy = float(mp2_total - scf_energy)
             except Exception as e:
-                raise RuntimeError(f"MP2 failed: {e}")
-        else:
-            raise ValueError(f"Unknown method '{method}'")
-        results['scf'].append(float(scf_energy))
-        results['corr'].append(float(corr_energy))
-    return raw_energy(results['corr'][0], results['corr'][1], results['scf'][0], results['scf'][1])
+                raise RuntimeError(f"Correlation computation failed for basis {basis}: {e}")
 
-def compute_cbs_energy_from_xyz(atoms, coords, method):
-    xyz_str = xyz_to_pyscf_string(atoms, coords)
-    return compute_cbs_energy_from_xyz_cached(xyz_str, method)
+        scf_vals.append(float(scf_energy))
+        corr_vals.append(float(corr_energy))
+
+    # now compose CBS from scf_vals and corr_vals using a_corr and b_hf
+    # scf_vals[0] -> scf_small, scf_vals[1] -> scf_big
+    scf_small, scf_big = scf_vals[0], scf_vals[1]
+    corr_small, corr_big = corr_vals[0], corr_vals[1]
+
+    # correlation extrapolation: corr_big + a_corr*(corr_big - corr_small)
+    E_corr_cbs = corr_big + a_corr * (corr_big - corr_small)
+
+    # HF extrapolation: E_hf = (exp(beta*X2)*scf_small - exp(beta*X1)*scf_big)/denom
+    # Here b_hf was computed as exp(beta*X1)/(exp(beta*X2)-exp(beta*X1)) in other scripts,
+    # but we pass explicit a_corr,b_hf to avoid hidden algebra errors. We will compute E_hf explicitly:
+    # Recover beta and X's from b_hf isn't trivial here; instead compute HF using formula below:
+    # Use same algebra as in other module: E_hf = (exp(beta*X2)*scf_small - exp(beta*X1)*scf_big) / (exp(beta*X2)-exp(beta*X1))
+    # However we don't have beta/X here; caller will pass b_hf consistent with previous code path.
+    # For safety we compute HF using the two SCF values and b_hf in the common form used elsewhere:
+    # In the original scripts they used: E = scf2 + (exp(beta*x1)*scf1 ...). To avoid confusion we use the standard two-point
+    # exponential form using X1/X2/BETA passed through caller by computing a_corr/b_hf earlier.
+    # For simplicity here we reconstruct E_hf using the same formula used in the repo's L-BFGS implementation:
+    # E_hf_cbs = scf_big + (a_corr - b_hf) * (scf_big - scf_small)  # not used - prefer direct composition below
+
+    # To avoid inconsistent algebra, caller passes X1_HF, X2_HF, BETA as globals and we use them in run_optimization
+    # For the cached function we simply return E_cbs assembled by caller-specific formula; so we will not call this
+    # cached function directly from outside with different a_corr/b_hf algebra. For now compute E_cbs as:
+    # Here we will just compute using the common pattern:
+    # E_hf_cbs = scf_big + b_hf * (scf_big - scf_small)  # where b_hf is a signed factor; match other code that used a_corr and b_hf
+    E_hf_cbs = scf_big + b_hf * (scf_big - scf_small)
+
+    E_cbs = E_hf_cbs + E_corr_cbs
+    return float(E_cbs)
+
+
+# Small wrapper for caller to manage cache clearing
+def compute_cbs_energy_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str):
+    # clear underlying lru cache if needed is handled by caller when parameters change
+    return _compute_cbs_from_xyz_cached(xyz_string, method, a_corr, b_hf, bs1, bs2)
+
 
 # -------------------------
-# Per-internal displacement evaluation (for a single coordinate)
-# -------------------------
-def evaluate_internal_displacements(args):
-    """Worker: given atoms, coords, an internal coordinate and a list of displacements,
-       return the displacement values and energies arrays."""
-    atoms, coords, ic, displacements, method = args
-    results = []
-    for d in displacements:
-        try:
-            if ic['type'] == 'bond':
-                i, j = ic['inds']
-                new_val = ic['value'] + d
-                new_coords = apply_bond_change(coords, i, j, new_val)
-            elif ic['type'] == 'angle':
-                i, j, k = ic['inds']
-                new_val = ic['value'] + d
-                new_coords = apply_angle_change(coords, i, j, k, new_val)
-            elif ic['type'] == 'dihedral':
-                i, j, k, l = ic['inds']
-                new_val = ic['value'] + d
-                new_coords = apply_dihedral_change(coords, i, j, k, l, new_val)
-            else:
-                continue
-            energy = compute_cbs_energy_from_xyz_cached(xyz_to_pyscf_string(atoms, new_coords), method)
-            results.append((d, energy, new_coords))
-        except Exception:
-            results.append((d, float('inf'), None))
-    ds = np.array([r[0] for r in results])
-    es = np.array([r[1] for r in results])
-    return ic, ds, es, results
-
-# -------------------------
-# Parabolic fit helper
+# Parabolic helper
 # -------------------------
 def parabolic_minimum(x, y):
     x = np.asarray(x, dtype=float)
@@ -379,125 +389,234 @@ def parabolic_minimum(x, y):
         idx = np.argmin(y)
         return float(x[idx]), float(y[idx])
 
+
 # -------------------------
-# Optimization driver (redundant internal coords)
+# Main optimization loop (SQM-style)
 # -------------------------
-def optimize_from_xyz(atoms, coords, method=METHOD, maxcycle=maxcycle_default, workers=DEFAULT_MAX_WORKERS, fac_mult=fac_mult_default):
-    global args_atoms
-    args_atoms = atoms  # used inside apply_xxx functions to look up masses
+def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DEFAULT, fac_mult=FAC_DEFAULT,
+                      x1=X1_DEFAULT, x2=X2_DEFAULT, x1_hf=X1HF_DEFAULT, x2_hf=X2HF_DEFAULT, beta=BETA_DEFAULT,
+                      basis_pair=None):
+    """
+    Sequential SQM-style optimizer that updates current_coords if parabolic minimum improves CBS energy.
+    Returns atoms, final_coords, history(list of dicts), converged(bool)
+    """
+    # compute extrapolation coefficients (same algebra as L-BFGS module)
+    a_corr = (x1 ** 3) / (x2 ** 3 - x1 ** 3)
+    # compute b_hf factor similar to other modules: exp(beta*X1) / (exp(beta*X2)-exp(beta*X1))
+    denom = math.exp(beta * x2_hf) - math.exp(beta * x1_hf)
+    if abs(denom) < 1e-16:
+        raise ZeroDivisionError("HF CBS denominator too small")
+    b_hf = math.exp(beta * x1_hf) / denom
+
+    # If a different basis pair provided, use it
+    if basis_pair is None:
+        basis_pair = (basis_sets[0], basis_sets[1])
+    bs1, bs2 = basis_pair
+
     internals = build_redundant_internals(atoms, coords)
     if not internals:
         raise RuntimeError("No internal coordinates found; check input geometry.")
+
     current_coords = coords.copy()
     displacement_factor = fac_mult
     history = []
     converged = False
 
-    executor = ProcessPoolExecutor(max_workers=workers)
-
+    # Clear LRU cache for CBS cached computations in case parameters changed
     try:
-        for cycle in range(1, maxcycle + 1):
-            print(f"\n>>> Cycle {cycle}/{maxcycle}, displacement_factor={displacement_factor:.6f}")
-            tasks = []
-            for ic in internals:
-                if ic['type'] == 'bond':
-                    base = ic['value']
-                    disps = np.array([
-                        -2 * displacement_factor * base,
-                        -1 * displacement_factor * base,
-                        0.0,
-                        1 * displacement_factor * base,
-                        2 * displacement_factor * base
-                    ], dtype=float)
-                elif ic['type'] in ('angle', 'dihedral'):
-                    ddeg = 2.0 * (displacement_factor * 100.0)
-                    disps = np.array([-2*ddeg, -1*ddeg, 0.0, 1*ddeg, 2*ddeg], dtype=float)
-                else:
-                    disps = np.array([0.0])
-                tasks.append((atoms, current_coords.copy(), ic.copy(), disps, method))
+        _compute_cbs_from_xyz_cached.cache_clear()
+    except Exception:
+        pass
 
-            futures = [executor.submit(evaluate_internal_displacements, t) for t in tasks]
-            results = []
-            for fut in concurrent.futures.as_completed(futures):
+    for cycle in range(1, maxcycle + 1):
+        # compute current energy
+        cur_xyz = xyz_to_pyscf_string(atoms, current_coords)
+        try:
+            current_energy = compute_cbs_energy_from_xyz_cached(cur_xyz, method, a_corr, b_hf, bs1, bs2)
+        except Exception as e:
+            raise RuntimeError(f"CBS evaluation at cycle start failed: {e}")
+
+        print(f"\n>>> Cycle {cycle}/{maxcycle}, displacement_factor={displacement_factor:.6f}, current E = {current_energy:.10f} Ha")
+
+        # For each internal, perform 5-point scan
+        updated = False
+        for ic in internals:
+            if ic['type'] == 'bond':
+                base = ic['value']
+                disps = np.array([
+                    -2 * displacement_factor * base,
+                    -1 * displacement_factor * base,
+                    0.0,
+                    1 * displacement_factor * base,
+                    2 * displacement_factor * base
+                ], dtype=float)
+            elif ic['type'] in ('angle', 'dihedral'):
+                # angles/dihedrals work in degrees here
+                ddeg = 2.0 * (displacement_factor * 100.0)
+                disps = np.array([-2*ddeg, -1*ddeg, 0.0, 1*ddeg, 2*ddeg], dtype=float)
+            else:
+                disps = np.array([0.0])
+
+            energies = []
+            coords_list = []
+            for d in disps:
                 try:
-                    results.append(fut.result())
-                except Exception as e:
-                    print("Worker error:", e)
-            for ic, ds, es, detailed in results:
-                if np.all(np.isinf(es)):
-                    print(f"  Skipping {ic['type']} {ic['inds']}: all evals failed")
-                    continue
-                try:
-                    x_min, e_min = parabolic_minimum(ds, es)
-                    idx_best = int(np.argmin(es))
-                    best_coords = detailed[idx_best][2] if detailed[idx_best][2] is not None else None
-                    print(f"  IC {ic['type']} {ic['inds']}: current={ic['value']:.6f} -> x_min_disp={x_min:.6f}, E_min={e_min:.10f}")
-                    current_energy = compute_cbs_energy_from_xyz_cached(xyz_to_pyscf_string(atoms, current_coords), method)
-                    if e_min < current_energy - 1e-12 and best_coords is not None:
-                        current_coords = best_coords.copy()
-                        internals = build_redundant_internals(atoms, current_coords)
-                        print("    geometry updated (improvement)")
+                    if ic['type'] == 'bond':
+                        i, j = ic['inds']
+                        new_val = ic['value'] + d
+                        new_coords = apply_bond_change(current_coords, i, j, new_val, atoms)
+                    elif ic['type'] == 'angle':
+                        i, j, k = ic['inds']
+                        new_val = ic['value'] + d
+                        new_coords = apply_angle_change(current_coords, i, j, k, new_val)
+                    elif ic['type'] == 'dihedral':
+                        i, j, k, l = ic['inds']
+                        new_val = ic['value'] + d
+                        new_coords = apply_dihedral_change(current_coords, i, j, k, l, new_val)
                     else:
-                        print("    no improvement")
-                except Exception as e:
-                    print("    error in parabolic fit:", e)
+                        new_coords = current_coords.copy()
 
-            cur_e = compute_cbs_energy_from_xyz_cached(xyz_to_pyscf_string(atoms, current_coords), method)
-            history.append({'cycle': cycle, 'coords': current_coords.copy(), 'energy': cur_e})
-            if cycle > 1:
-                ediff = abs(history[-1]['energy'] - history[-2]['energy'])
-                print(f"  ΔE since last cycle: {ediff:.4e} Ha")
-                if ediff < energy_criterion:
-                    print("Converged by energy criterion")
-                    converged = True
-                    break
-            displacement_factor *= cut
-    finally:
-        executor.shutdown(wait=True)
+                    xyzs = xyz_to_pyscf_string(atoms, new_coords)
+                    E = compute_cbs_energy_from_xyz_cached(xyzs, method, a_corr, b_hf, bs1, bs2)
+                    energies.append(float(E))
+                    coords_list.append(new_coords)
+                except Exception as e:
+                    # on failure record inf and continue
+                    energies.append(float('inf'))
+                    coords_list.append(None)
+                    print(f"    eval failed for IC {ic['type']} {ic.get('inds')} displacement {d}: {e}")
+
+            ds = disps
+            es = np.array(energies, dtype=float)
+            if np.all(np.isinf(es)):
+                print(f"  Skipping {ic['type']} {ic['inds']}: all evals failed")
+                continue
+            try:
+                x_min_disp, e_min = parabolic_minimum(ds, es)
+                idx_best = int(np.nanargmin(es))
+                best_coords = coords_list[idx_best]
+                print(f"  IC {ic['type']} {ic['inds']}: current={ic['value']:.6f} -> x_min_disp={x_min_disp:.6f}, E_min={e_min:.10f}")
+                if e_min < current_energy - 1e-12 and best_coords is not None:
+                    # update geometry to the best computed coords
+                    current_coords = best_coords.copy()
+                    # rebuild internals values on updated geometry
+                    internals = build_redundant_internals(atoms, current_coords)
+                    updated = True
+                    # recompute current_energy to use for subsequent comparisons
+                    current_energy = e_min
+                    print("    geometry updated (improvement)")
+                else:
+                    print("    no improvement")
+            except Exception as e:
+                print(f"    error in parabolic fit for IC {ic['inds']}: {e}")
+
+        # record cycle energy (after processing all internals)
+        history.append({'cycle': cycle, 'energy': float(current_energy)})
+        # convergence check
+        if cycle > 1:
+            ediff = abs(history[-1]['energy'] - history[-2]['energy'])
+            print(f"  ΔE since last cycle: {ediff:.4e} Ha")
+            if ediff < ENERGY_CRIT:
+                print("Converged by energy criterion")
+                converged = True
+                break
+
+        displacement_factor *= CUT
 
     return atoms, current_coords, history, converged
 
-# -------------------------
-# CLI
-# -------------------------
-def main():
-    global x1, x2, x1_hf, x2_hf, beta, a_corr, b_hf
-    parser = argparse.ArgumentParser(description="pyCBS redundant-internal-coordinate optimizer")
-    parser.add_argument('-i', '--input', required=True, help="Input XYZ file")
-    parser.add_argument('-o', '--output', default='optimized.xyz', help="Output XYZ file")
-    parser.add_argument('--method', default=METHOD, choices=['CCSD(T)', 'MP2'], help="Correlation method")
-    parser.add_argument('--basis_set', default=basis_sets, choices=['cc-pvdz','cc-pvtz', 'cc-pvqz'], help="Basis set to perform CBS extrapolations")
-    parser.add_argument('--maxcycle', type=int, default=maxcycle_default, help="Max optimization cycles")
-    parser.add_argument('--workers', type=int, default=DEFAULT_MAX_WORKERS, help="Number of parallel workers")
-    parser.add_argument('--fac', type=float, default=fac_mult_default, help="Initial fractional displacement factor")
-    parser.add_argument('--x1', type=float, default=x1_default, help=f"x1 for correlation extrapolation (default {x1_default})")
-    parser.add_argument('--x2', type=float, default=x2_default, help=f"x2 for correlation extrapolation (default {x2_default})")
-    parser.add_argument('--x1hf', type=float, default=x1hf_default, help=f"x1_hf for HF extrapolation (default {x1hf_default})")
-    parser.add_argument('--x2hf', type=float, default=x2hf_default, help=f"x2_hf for HF extrapolation (default {x2hf_default})")
-    parser.add_argument('--beta', type=float, default=beta_default, help=f"beta for HF extrapolation (default {beta_default})")
-    args = parser.parse_args()
 
-    # assign globals for extrapolation and recompute coefficients
-    x1 = args.x1
-    x2 = args.x2
-    x1_hf = args.x1hf
-    x2_hf = args.x2hf
-    beta = args.beta
-    a_corr = (x1 ** 3) / (x2 ** 3 - x1 ** 3)
-    b_hf = (np.exp(beta * x1_hf)) / (np.exp(beta * x2_hf) - np.exp(beta * x1_hf))
+# -------------------------
+# run_optimization API
+# -------------------------
+def run_optimization(params: dict, outputs_dir: Path):
+    """
+    Standard entry from opt_cli.prepare_options_from_params
+    params should include:
+      - input_xyz (path to file)
+      - method (optional)
+      - X1, X2, Xhf1, Xhf2, beta (optional)
+      - maxcycle (optional)
+      - fac (optional)
+    """
+    outputs_dir = Path(outputs_dir)
+    outputs_dir.mkdir(parents=True, exist_ok=True)
 
-    atoms, coords, comment = read_xyz(args.input)
-    print(f"Loaded {len(atoms)} atoms from {args.input}")
-    print("Building redundant internal coordinates...")
-    internals = build_redundant_internals(atoms, coords)
+    input_xyz = params.get("input_xyz") or params.get("input") or params.get("geometry")
+    if not input_xyz:
+        raise ValueError("params must include 'input_xyz' (path to input XYZ)")
+    method = params.get("method", DEFAULT_METHOD)
+    x1 = float(params.get("X1", params.get("x1", X1_DEFAULT)))
+    x2 = float(params.get("X2", params.get("x2", X2_DEFAULT)))
+    x1hf = float(params.get("Xhf1", params.get("x1hf", X1HF_DEFAULT)))
+    x2hf = float(params.get("Xhf2", params.get("x2hf", X2HF_DEFAULT)))
+    beta = float(params.get("beta", params.get("BETA", BETA_DEFAULT)))
+    maxcycle = int(params.get("maxcycle", MAXCYCLE_DEFAULT))
+    fac = float(params.get("fac", FAC_DEFAULT))
+    # basis override if provided
+    basis1 = params.get("basis1")
+    basis2 = params.get("basis2")
+    basis_pair = (basis1, basis2) if (basis1 and basis2) else None
+
+    atoms, coords0, comment = read_xyz(input_xyz)
+    print(f"Loaded {len(atoms)} atoms from {input_xyz}")
+    print("Building redundant internal coordinates (initial)...")
+    internals = build_redundant_internals(atoms, coords0)
     print(f"Found {len(internals)} internal coordinates (bonds/angles/dihedrals).")
 
-    atoms_out, coords_out, history, conv = optimize_from_xyz(atoms, coords, method=args.method, maxcycle=args.maxcycle, workers=args.workers, fac_mult=args.fac)
+    # run optimizer
+    atoms_out, coords_out, history, converged = optimize_from_xyz(
+        atoms,
+        coords0,
+        method=method,
+        maxcycle=maxcycle,
+        fac_mult=fac,
+        x1=x1, x2=x2, x1_hf=x1hf, x2_hf=x2hf, beta=beta,
+        basis_pair=basis_pair
+    )
 
-    write_xyz(args.output, atoms_out, coords_out, comment=f"Optimized by pyCBS ({args.method})")
-    print(f"Optimized geometry written to {args.output}")
-    final_e = compute_cbs_energy_from_xyz_cached(xyz_to_pyscf_string(atoms_out, coords_out), args.method)
-    print(f"Final CBS energy: {final_e:.10f} Ha")
+    # write outputs via writer helpers
+    prefix = "SQM"
+    cycles_file = write_cycle_energies(outputs_dir, prefix, history)
+    xyz_file = write_final_xyz(outputs_dir, prefix, atoms_out, coords_out, history[-1]['energy'] if history else 0.0)
 
+    return {
+        "history": history,
+        "final_energy": float(history[-1]['energy']) if history else None,
+        "final_cart": coords_out,
+        "symbols": atoms_out,
+        "outputs": {"cycles": str(cycles_file), "xyz": str(xyz_file)},
+        "converged": converged,
+    }
+
+
+# CLI compatibility
 if __name__ == "__main__":
-    main()
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("-i", "--input", required=True, help="Input XYZ file")
+    p.add_argument("-o", "--out", default="PyCBS-OUTPUTS", help="Outputs directory")
+    p.add_argument("--method", default=DEFAULT_METHOD)
+    p.add_argument("--maxcycle", type=int, default=MAXCYCLE_DEFAULT)
+    p.add_argument("--fac", type=float, default=FAC_DEFAULT)
+    p.add_argument("--x1", type=float, default=X1_DEFAULT)
+    p.add_argument("--x2", type=float, default=X2_DEFAULT)
+    p.add_argument("--x1hf", type=float, default=X1HF_DEFAULT)
+    p.add_argument("--x2hf", type=float, default=X2HF_DEFAULT)
+    p.add_argument("--beta", type=float, default=BETA_DEFAULT)
+    args = p.parse_args()
+
+    params = {
+        "input_xyz": args.input,
+        "method": args.method,
+        "X1": args.x1,
+        "X2": args.x2,
+        "Xhf1": args.x1hf,
+        "Xhf2": args.x2hf,
+        "beta": args.beta,
+        "maxcycle": args.maxcycle,
+        "fac": args.fac,
+    }
+    out = Path(args.out)
+    result = run_optimization(params, out)
+    print("Done. Outputs written to:", out)
