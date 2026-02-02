@@ -403,10 +403,6 @@ def main() -> None:
         if process_section(section_name, config[section_name], calculations, args.output):
             success += 1
 
-    writer.write_reports(
-        str(args.output),
-        calculations=calculations
-    )
 
     logger.info(f"Completed {success}/{total} calculations")
     sys.exit(0 if success == total else 1)
