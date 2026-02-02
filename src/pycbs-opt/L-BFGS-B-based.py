@@ -44,12 +44,12 @@ CONFIG = {
 
     # CBS extrapolation parameters:
     # correlation extrapolation using power law ~ X^{-3} (we use X1=2, X2=3 for DZ/TZ)
-    "X1_CORR": 2.00,
-    "X2_CORR": 3.00,
+    "X1_CORR": 1.85,
+    "X2_CORR": 2.639,
     # HF extrapolation model uses an exponential; BETA often ~ 1.60
-    "X1_HF": 2.00,
-    "X2_HF": 3.00,
-    "BETA_HF": 1.63,
+    "X1_HF": 3.02,
+    "X2_HF": 3.64,
+    "BETA_HF": 1.62,
 
     # PySCF settings
     "PYSCF_MAX_MEMORY": 4 * 1024,  # in MB
@@ -393,13 +393,11 @@ def compute_cbs_energy(symbols, coords, basis_pair=None, cfg=CONFIG):
 # Caching wrapper for energy evaluations (keyed by rounded internal coordinates)
 # ---------------------
 class EnergyCache:
-    def __init__(self, symbols, internals, coords0, rounding=8, cfg=None):
+    def __init__(self, symbols, internals, coords0, rounding=8):
         self.symbols = symbols
         self.internals = internals
         self.coords0 = np.array(coords0)
         self.rounding = rounding
-        # cfg is a dict-like configuration controlling extrapolation formula
-        self.cfg = cfg if cfg is not None else CONFIG
         self._cache = {}
 
     def _key_from_internals(self, internal_vector):
@@ -412,12 +410,11 @@ class EnergyCache:
             return self._cache[k]
         # reconstruct Cartesian
         cart = internal_to_cartesian(self.coords0, self.internals, internal_vector)
-        # compute CBS using the cached cfg
-        E_cbs, E_hf_cbs, E_corr_cbs, debug = compute_cbs_energy(self.symbols, cart, basis_pair, cfg=self.cfg)
+        # compute CBS
+        E_cbs, E_hf_cbs, E_corr_cbs, debug = compute_cbs_energy(self.symbols, cart, basis_pair)
         res = {"E_cbs": E_cbs, "E_hf_cbs": E_hf_cbs, "E_corr_cbs": E_corr_cbs, "cart": cart, "debug": debug}
         self._cache[k] = res
         return res
-
 
 
 # ---------------------
@@ -428,40 +425,25 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
     Optimize geometry (internals) with L-BFGS-B, using CBS energy as objective.
     Returns optimized carts, final energy, and result dict.
     """
-    opt_history = []
-    cycle_counter = {"i": 0}
-
     if options is None:
         options = {}
-
-    # Build a working copy of CONFIG and override with options if provided.
-    # Options keys expected: X1, X2, Xhf1, Xhf2 (floats). Map them into internal names.
-    cfg = copy.deepcopy(CONFIG)
-    # map option names to CONFIG keys
-    if "X1" in options and options["X1"] is not None:
-        cfg["X1_CORR"] = float(options["X1"])
-    if "X2" in options and options["X2"] is not None:
-        cfg["X2_CORR"] = float(options["X2"])
-    if "Xhf1" in options and options["Xhf1"] is not None:
-        cfg["X1_HF"] = float(options["Xhf1"])
-    if "Xhf2" in options and options["Xhf2"] is not None:
-        cfg["X2_HF"] = float(options["Xhf2"])
+    cfg = CONFIG
 
     internals, values0 = build_internals(symbols, coords0)
-    # pass cfg to the EnergyCache so compute_cbs_energy uses these parameters
-    energy_cache = EnergyCache(symbols, internals, coords0, rounding=8, cfg=cfg)
+    energy_cache = EnergyCache(symbols, internals, coords0, rounding=8)
 
+    # bounds: for bonds only, apply a factor to initial distances for bounds
+    nvars = len(internals)
+    bounds = [(None, None)] * nvars
+    for idx, it in enumerate(internals):
+        if it["type"] == "bond":
+            i, j = it["idx"]
+            r0 = values0[idx]
+            bounds[idx] = (cfg["BOND_MIN_FACTOR"] * r0, cfg["BOND_MAX_FACTOR"] * r0)
 
     # objective function for scipy minimize: returns scalar CBS energy
     def objective(x):
         res = energy_cache.evaluate(x, basis_pair=basis_pair)
-        # record per-evaluation history (cycle index + CBS energy)
-        E_cbs = res["E_cbs"]
-        cycle_counter["i"] += 1
-        opt_history.append({
-            "cycle": int(cycle_counter["i"]),
-            "cbs_energy": float(E_cbs),
-        })
         return res["E_cbs"]
 
     # provide a simple callback to mirror progress (not too verbose)
@@ -502,7 +484,6 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
         "debug": final["debug"],
         "internals": internals,
         "x_opt": x_opt,
-        "history": opt_history,
     }
     return result
 
