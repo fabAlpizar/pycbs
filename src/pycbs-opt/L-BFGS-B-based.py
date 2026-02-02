@@ -229,6 +229,7 @@ def internal_to_cartesian(initial_cart, internals, target_values, lsq_opts=None)
 # CBS composition
 # ---------------------
 def cbs_compose(corr_small, corr_big, scf_small, scf_big, cfg=CONFIG):
+
     X1 = cfg["X1_CORR"]
     X2 = cfg["X2_CORR"]
     X1_HF = cfg["X1_HF"]
@@ -236,16 +237,17 @@ def cbs_compose(corr_small, corr_big, scf_small, scf_big, cfg=CONFIG):
     BETA = cfg["BETA_HF"]
 
     # correlation extrapolation coefficient using power -3
-    A_corr = (X1 ** 3) / (X2 ** 3 - X1 ** 3)
-    E_corr_cbs = corr_big + A_corr * (corr_big - corr_small)
+    a_corr = (X1 ** 3) / (X2 ** 3 - X1 ** 3)
+    E_corr_cbs = corr_big + a_corr * (corr_big - corr_small)
 
-    # HF exponential extrapolation (two-point)
-    exp1 = math.exp(BETA * X1_HF)
-    exp2 = math.exp(BETA * X2_HF)
-    denom = exp2 - exp1
+    # HF prefactor b_hf as used in the SQM path:
+    denom = math.exp(BETA * X2_HF) - math.exp(BETA * X1_HF)
     if abs(denom) < 1e-16:
         raise ZeroDivisionError("HF CBS denominator too small")
-    E_hf_cbs = (exp2 * scf_small - exp1 * scf_big) / denom
+    b_hf = math.exp(BETA * X1_HF) / denom
+
+    # SQM-style HF composition (matches SQM module)
+    E_hf_cbs = scf_big + b_hf * (scf_big - scf_small)
 
     E_cbs = E_hf_cbs + E_corr_cbs
     return float(E_cbs), float(E_hf_cbs), float(E_corr_cbs)
