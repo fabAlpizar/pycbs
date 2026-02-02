@@ -150,18 +150,6 @@ def write_final_xyz(out_dir: Path, prefix: str, symbols: list, coords: list, fin
 # -------------------------
 # New: Write a top-level header file (output.txt)
 # -------------------------
-def write_extrapolations(out_path: Path, extrap: Dict[str, Any]):
-    """
-    Write a small extrapolation summary table to the given path (appends).
-    extrap is a dict like:
-      {'a_corr': 0.123, 'b_hf': 0.456, 'E_hf_cbs': -76.1, 'E_corr_cbs': -0.05}
-    """
-    out_path = Path(out_path)
-    with open(out_path, "a") as fh:
-        fh.write("\nEXTRAPOLATION SUMMARY\n")
-        for k, v in extrap.items():
-            fh.write(f"{k:20s} : {_format_generic(v)}\n")
-    return out_path
 
 
 def write_header(output_path: Union[str, Path], metadata: Optional[Dict[str, Any]] = None, title: Optional[str] = None):
@@ -185,7 +173,5 @@ def write_header(output_path: Union[str, Path], metadata: Optional[Dict[str, Any
             for k, v in metadata.items():
                 fh.write(f"{k:20s} : {_format_generic(v)}\n")
             fh.write("\n")
-        fh.write("Notes:\n")
-        fh.write(" - Cycle-by-cycle energies are written as CSV files: <PREFIX>_cycle_energies.csv\n")
-        fh.write(" - Final geometries are written as XYZ: <PREFIX>_final_opt.xyz\n")
+
     return out
