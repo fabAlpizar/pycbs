@@ -263,8 +263,13 @@ def main(argv=None) -> int:
     if isinstance(hist, list) and hist:
         for i, h in enumerate(hist, start=1):
             if isinstance(h, dict):
-                e = h.get("cbs_energy") or h.get("energy") or h.get("total_energy") or h.get("E_total")
-                opt_cycles.append({"cycle": h.get("cycle", i), "cbs_energy": e})
+                e = h.get("cbs_energy") or h.get("energy") or h.get("total_energy")
+                cycle = int(h.get("cycle", i))
+                opt_cycles.append({
+                    "cycle": cycle,
+                    "cbs_energy": float(e) if e is not None else None
+                })
+
             elif isinstance(h, (list, tuple)) and len(h) >= 2:
                 opt_cycles.append({"cycle": h[0], "cbs_energy": h[1]})
             else:
