@@ -395,7 +395,6 @@ def main() -> None:
     writer.write_header(str(args.output))
 
     calculations: List[Dict[str, Any]] = []
-    opt_cycles: List[Dict[str, Any]] = []
 
     total = success = 0
 
