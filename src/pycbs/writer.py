@@ -10,6 +10,7 @@ Writer utilities for pyCBS results.
 from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Optional, List, Iterable, Tuple, Union
+import datetime
 
 # Visual header / info block (keeps similarity to your prior writer)
 LOGO = """
@@ -17,8 +18,8 @@ LOGO = """
                             $$  __$$\ $$  __$$\ $$  __$$\ 
         $$$$$$\  $$\   $$\  $$ /  \__|$$ |  $$ |$$ /  \__|
         $$  __$$\ $$ |  $$ |$$ |      $$$$$$$\ |\$$$$$$\  
-        $$  __$$ |$$ |  $$ |$$ |      $$  __$$\  \____$$\  
-        $$ /  $$ |$$ |  $$ |$$ |  $$\ $$ |  $$ |$$\   $$ |
+        $$ /  $$ |$$ |  $$ |$$ |      $$  __$$\  \____$$\  
+        $$ |  $$ |$$ |  $$ |$$ |  $$\ $$ |  $$ |$$\   $$ |
         $$$$$$$  |\$$$$$$$ |\$$$$$$  |$$$$$$$  |\$$$$$$  |
         $$  ____/  \____$$ | \______/ \_______/  \______/ 
         $$ |      $$\   $$ |                              
@@ -144,3 +145,47 @@ def write_final_xyz(out_dir: Path, prefix: str, symbols: list, coords: list, fin
         for s, c in zip(symbols, coords):
             fh.write(f"{s} {c[0]: .10f} {c[1]: .10f} {c[2]: .10f}\n")
     return fname
+
+
+# -------------------------
+# New: Write a top-level header file (output.txt)
+# -------------------------
+def write_extrapolations(out_path: Path, extrap: Dict[str, Any]):
+    """
+    Write a small extrapolation summary table to the given path (appends).
+    extrap is a dict like:
+      {'a_corr': 0.123, 'b_hf': 0.456, 'E_hf_cbs': -76.1, 'E_corr_cbs': -0.05}
+    """
+    out_path = Path(out_path)
+    with open(out_path, "a") as fh:
+        fh.write("\nEXTRAPOLATION SUMMARY\n")
+        for k, v in extrap.items():
+            fh.write(f"{k:20s} : {_format_generic(v)}\n")
+    return out_path
+
+
+def write_header(output_path: Union[str, Path], metadata: Optional[Dict[str, Any]] = None, title: Optional[str] = None):
+    """
+    Write a human-readable header file (overwrites existing file).
+    output_path: path to the header/output file (e.g. PyCBS-OUTPUTS/output.txt or path passed by CLI)
+    metadata: optional dict of key->value pairs to include (method, bases, params...)
+    title: optional title line
+    Returns the Path written.
+    """
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with open(out, "w") as fh:
+        fh.write(LOGO + "\n")
+        fh.write(INFO_BLOCK + "\n")
+        fh.write(f"pyCBS results generated: {datetime.datetime.utcnow().isoformat()} UTC\n\n")
+        if title:
+            fh.write(f"{title}\n\n")
+        if metadata:
+            fh.write("RUN METADATA\n")
+            for k, v in metadata.items():
+                fh.write(f"{k:20s} : {_format_generic(v)}\n")
+            fh.write("\n")
+        fh.write("Notes:\n")
+        fh.write(" - Cycle-by-cycle energies are written as CSV files: <PREFIX>_cycle_energies.csv\n")
+        fh.write(" - Final geometries are written as XYZ: <PREFIX>_final_opt.xyz\n")
+    return out
