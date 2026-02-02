@@ -16,7 +16,7 @@ the command line or called by the CLI dispatcher.
 
 Notes:
 - params is expected to contain keys normalized by opt_cli.prepare_options_from_params,
-  e.g. 'input_xyz', 'method', 'X1', 'X2', 'Xhf1', 'Xhf2', 'beta', ...
+  e.g. 'input_xyz', 'method', 'X1', 'X2', 'X1hf', 'X2hf', 'beta', ...
 - outputs_dir is a pathlib.Path pointing to the directory where outputs
   (cycle CSV and final XYZ) will be written. The function will create the folder
   if it does not exist.
@@ -447,7 +447,7 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
 # Helper to update CONFIG from params
 # ---------------------
 def _update_config_from_params(params):
-    # params keys: X1, X2, Xhf1, Xhf2, beta, basis1, basis2, pyscf_threads, pyscf_max_memory
+    # params keys: X1, X2, X1hf, X2hf, beta, basis1, basis2, pyscf_threads, pyscf_max_memory
     if params is None:
         return
     try:
@@ -455,10 +455,10 @@ def _update_config_from_params(params):
             CONFIG["X1_CORR"] = float(params["X1"])
         if "X2" in params:
             CONFIG["X2_CORR"] = float(params["X2"])
-        if "Xhf1" in params:
-            CONFIG["X1_HF"] = float(params["Xhf1"])
-        if "Xhf2" in params:
-            CONFIG["X2_HF"] = float(params["Xhf2"])
+        if "X1hf" in params:
+            CONFIG["X1_HF"] = float(params["X1hf"])
+        if "X2hf" in params:
+            CONFIG["X2_HF"] = float(params["X2hf"])
         if "beta" in params:
             CONFIG["BETA_HF"] = float(params["beta"])
         if "pyscf_threads" in params:
@@ -525,8 +525,8 @@ def _cli_main():
     parser.add_argument("--basis2", default=None, help="Larger basis set override")
     parser.add_argument("--X1", type=float, default=None)
     parser.add_argument("--X2", type=float, default=None)
-    parser.add_argument("--Xhf1", type=float, default=None)
-    parser.add_argument("--Xhf2", type=float, default=None)
+    parser.add_argument("--X1hf", type=float, default=None)
+    parser.add_argument("--X2hf", type=float, default=None)
     parser.add_argument("--beta", type=float, default=None)
     args = parser.parse_args()
 
@@ -536,8 +536,8 @@ def _cli_main():
         "basis2": args.basis2,
         "X1": args.X1,
         "X2": args.X2,
-        "Xhf1": args.Xhf1,
-        "Xhf2": args.Xhf2,
+        "X1hf": args.X1hf,
+        "X2hf": args.X2hf,
         "beta": args.beta,
     }
     outputs_dir = Path.cwd() / "PyCBS-OUTPUTS"

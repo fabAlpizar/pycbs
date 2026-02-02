@@ -548,8 +548,8 @@ def run_optimization(params: dict, outputs_dir: Path):
     method = params.get("method", DEFAULT_METHOD)
     x1 = float(params.get("X1", params.get("x1", X1_DEFAULT)))
     x2 = float(params.get("X2", params.get("x2", X2_DEFAULT)))
-    x1hf = float(params.get("Xhf1", params.get("x1hf", X1HF_DEFAULT)))
-    x2hf = float(params.get("Xhf2", params.get("x2hf", X2HF_DEFAULT)))
+    x1hf = float(params.get("X1hf", params.get("x1hf", X1HF_DEFAULT)))
+    x2hf = float(params.get("X2hf", params.get("x2hf", X2HF_DEFAULT)))
     beta = float(params.get("beta", params.get("BETA", BETA_DEFAULT)))
     maxcycle = int(params.get("maxcycle", MAXCYCLE_DEFAULT))
     fac = float(params.get("fac", FAC_DEFAULT))
@@ -611,8 +611,8 @@ if __name__ == "__main__":
         "method": args.method,
         "X1": args.x1,
         "X2": args.x2,
-        "Xhf1": args.x1hf,
-        "Xhf2": args.x2hf,
+        "X1hf": args.x1hf,
+        "X2hf": args.x2hf,
         "beta": args.beta,
         "maxcycle": args.maxcycle,
         "fac": args.fac,
