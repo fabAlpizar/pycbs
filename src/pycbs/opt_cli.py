@@ -79,10 +79,10 @@ def prepare_options_from_params(params: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "method": params.get("method", "ccsd(t)"),
         "spin": int(params.get("spin", 0)),
-        "X1": float(params.get("x1", 2)),
-        "X2": float(params.get("x2", 3)),
-        "Xhf1": float(params.get("xhf1", 2)),
-        "Xhf2": float(params.get("xhf2", 3)),
+        "X1": float(params.get("x1")),
+        "X2": float(params.get("x2")),
+        "Xhf1": float(params.get("xhf1")),
+        "Xhf2": float(params.get("xhf2")),
     }
 
 
