@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
-pyCBS CLI entry point
-"""
+pyCBS CLI entry point (adapted to writer API)
 
+This version:
+ - calls writer.write_header(...) to create the output file
+ - for each processed section appends extrapolation details via writer.write_extrapolations(...)
+ - after all sections writes a RESULTS SUMMARY table (using writer._render_table)
+ - avoids calling writer.write_reports (not present in the writer module)
+"""
 import argparse
 import configparser
 import logging
@@ -17,9 +22,11 @@ from .module_loader import SchemeModuleLoader
 
 logger = logging.getLogger(__name__)
 
+
 def ensure_parent_dir(path: Path) -> None:
     """Make sure parent directory of a path exists."""
     path.parent.mkdir(parents=True, exist_ok=True)
+
 
 def unique_path(path: Path) -> Path:
     """
@@ -37,9 +44,12 @@ def unique_path(path: Path) -> Path:
         if not candidate.exists():
             return candidate
         i += 1
+
+
 # ----------------------------------------------------------------------
 # Logging
 # ----------------------------------------------------------------------
+
 
 def setup_logging(verbosity: int = 0) -> None:
     level = logging.WARNING
@@ -58,6 +68,7 @@ def setup_logging(verbosity: int = 0) -> None:
 # Central execution entry point
 # ----------------------------------------------------------------------
 
+
 def run(params: dict):
     scheme = params["scheme"]
     module = SchemeModuleLoader.load_scheme(scheme)
@@ -73,6 +84,7 @@ def run(params: dict):
 # ----------------------------------------------------------------------
 # Config handling
 # ----------------------------------------------------------------------
+
 
 def read_config(input_path: Path) -> configparser.ConfigParser:
     if not input_path.exists():
@@ -91,6 +103,7 @@ def read_config(input_path: Path) -> configparser.ConfigParser:
 # ----------------------------------------------------------------------
 # Normalization
 # ----------------------------------------------------------------------
+
 
 def normalize_params(raw: dict) -> dict:
     params = {}
@@ -123,6 +136,7 @@ def normalize_params(raw: dict) -> dict:
 # ----------------------------------------------------------------------
 # Section processing
 # ----------------------------------------------------------------------
+
 
 def process_section(
     section_name: str,
@@ -271,6 +285,19 @@ def process_section(
             if prop_hint:
                 record["property_type"] = prop_hint
 
+            # --- WRITE extrapolation details for this section (append to output file) ---
+            extrap = {}
+            if EHFf is not None:
+                extrap["hf_cbs"] = EHFf
+            if dcf is not None:
+                extrap["corr_cbs"] = dcf
+            if energyf is not None:
+                extrap["total_energy"] = energyf
+            # include label / section name for traceability
+            if extrap:
+                extrap["label"] = raw.get("label", section_name)
+                writer.write_extrapolations(Path(output_file), extrap)
+
         elif isinstance(result, (tuple, list)):
             if len(result) == 3:
                 record["hf_cbs"] = _to_float(result[0])
@@ -308,6 +335,19 @@ def process_section(
                         else:
                             record["total_energy"] = nv
                         break
+
+            # write extrapolations for tuple/list returns if numeric values present
+            extrap = {}
+            if "hf_cbs" in record:
+                extrap["hf_cbs"] = record["hf_cbs"]
+            if "corr_cbs" in record:
+                extrap["corr_cbs"] = record["corr_cbs"]
+            if "total_energy" in record:
+                extrap["total_energy"] = record["total_energy"]
+            if extrap:
+                extrap["label"] = raw.get("label", section_name)
+                writer.write_extrapolations(Path(output_file), extrap)
+
         else:
             # scalar
             val = _to_float(result)
@@ -319,6 +359,16 @@ def process_section(
                 else:
                     record["total_energy"] = val
 
+                extrap = {}
+                if scheme_low in corr_set:
+                    extrap["corr_cbs"] = val
+                elif scheme_low in hf_set:
+                    extrap["hf_cbs"] = val
+                else:
+                    extrap["total_energy"] = val
+                extrap["label"] = raw.get("label", section_name)
+                writer.write_extrapolations(Path(output_file), extrap)
+
         calculations.append(record)
         return True
 
@@ -328,13 +378,10 @@ def process_section(
         return False
 
 
-
-
-
-
 # ----------------------------------------------------------------------
 # Main
 # ----------------------------------------------------------------------
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -352,37 +399,12 @@ def main() -> None:
     )
     parser.add_argument("-v", "--verbose", action="count", default=1, help="Increase verbosity")
 
-
     args = parser.parse_args()
     setup_logging(args.verbose)
 
-    print("""
-                                 $$$$$$\  $$$$$$$\   $$$$$$\  
-                                $$  __$$\ $$  __$$\ $$  __$$\ 
-            $$$$$$\  $$\   $$\  $$ /  \__|$$ |  $$ |$$ /  \__|
-            $$  __$$\ $$ |  $$ |$$ |      $$$$$$$\ |\$$$$$$\  
-            $$ /  $$ |$$ |  $$ |$$ |      $$  __$$\  \____$$\  
-            $$ |  $$ |$$ |  $$ |$$ |  $$\ $$ |  $$ |$$\   $$ |
-            $$$$$$$  |\$$$$$$$ |\$$$$$$  |$$$$$$$  |\$$$$$$  |
-            $$  ____/  \____$$ | \______/ \_______/  \______/ 
-            $$ |      $$\   $$ |                              
-            $$ |      \$$$$$$  |                              
-            \__|       \______/                               
-    """)
-    print("""
-            *******************************************************
-            *               Alberto Guerra-Barroso,               *
-            *              Fabio J. Delgado-Alpízar               *
-            *    Lab of Computational and Theoretical Chemistry   *
-            *      Faculty of Chemistry, University of Havana     *
-            *                                                     *
-            *                        and                          *
-            *                                                     *
-            *              Antonio J. C. Varandas                 *
-            *    Department of Chemistry, and Chemistry Centre    *
-            *                University of Coimbra                *                    
-            *******************************************************
-    """)
+    print(writer.LOGO)
+    print(writer.INFO_BLOCK)
+
     try:
         config = read_config(args.input)
     except Exception as e:
@@ -391,8 +413,11 @@ def main() -> None:
 
     ensure_parent_dir(args.output)
     args.output = unique_path(args.output)
-    args.output.write_text("")
-    writer.write_header(str(args.output))
+    # create/overwrite output file and write header
+    writer.write_header(str(args.output), metadata={
+        "config_file": str(args.input),
+        "created_by": "pyCBS",
+    }, title="pyCBS Extrapolation Results")
 
     calculations: List[Dict[str, Any]] = []
 
@@ -403,6 +428,23 @@ def main() -> None:
         if process_section(section_name, config[section_name], calculations, args.output):
             success += 1
 
+    # After processing all sections, append a results summary table to the output file
+    headers = ["calculation", "scheme", "hf_cbs", "corr_cbs", "total_energy"]
+    rows: List[List[Any]] = []
+    for rec in calculations:
+        rows.append([
+            rec.get("calculation", "-"),
+            rec.get("scheme", "-"),
+            writer._format_generic(rec.get("hf_cbs")),
+            writer._format_generic(rec.get("corr_cbs")),
+            writer._format_generic(rec.get("total_energy")),
+        ])
+
+    table_text = writer._render_table(headers, rows)
+    with open(args.output, "a") as fh:
+        fh.write("\nRESULTS SUMMARY\n")
+        fh.write(table_text)
+        fh.write("\n")
 
     logger.info(f"Completed {success}/{total} calculations")
     sys.exit(0 if success == total else 1)
