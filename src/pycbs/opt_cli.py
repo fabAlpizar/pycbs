@@ -95,10 +95,10 @@ def prepare_options_from_params(params: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "method": method,
         "spin": spin,
-        "X1": _f("x1"),
-        "X2": _f("x2"),
-        "Xhf1": _f("xhf1"),
-        "Xhf2": _f("xhf2"),
+        "X1": _f("x1",  1.85),
+        "X2": _f("x2",2.639),
+        "Xhf1": _f("xhf1", 3.02),
+        "Xhf2": _f("xhf2", 3.64),
     }
 
 
