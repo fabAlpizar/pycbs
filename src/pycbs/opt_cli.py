@@ -115,9 +115,7 @@ def find_optimization_module() -> Tuple[str, object]:
 def _coords_to_list(obj) -> list:
     if obj is None:
         return []
-    # If it's already a list of lists of floats, just try to coerce
     try:
-        # try length check first (works with lists, tuples, numpy arrays)
         if not hasattr(obj, "__len__") or len(obj) == 0:
             return []
     except Exception:
@@ -125,19 +123,15 @@ def _coords_to_list(obj) -> list:
     out = []
     try:
         for row in obj:
-            # row might be a scalar (bad) or an iterable of length 3
             if row is None:
                 continue
-            # Try to iterate over row and convert to floats
             try:
                 coords = [float(x) for x in row]
                 if len(coords) >= 3:
                     out.append([coords[0], coords[1], coords[2]])
                 else:
-                    # not a valid cartesian triple; skip
                     continue
             except Exception:
-                # row may be something not iterable (skip)
                 continue
     except Exception:
         return []
@@ -231,8 +225,7 @@ def main(argv=None) -> int:
         elif cc is not None and (hasattr(cc, "__len__") and len(cc) > 0):
             coords = _coords_to_list(cc)
 
-    # If coords is still empty, try x_opt / x but these are usually internals and not safe to write.
-    # We prefer writing nothing than writing incorrect internals as Cartesian coords.
+    # If coords is still empty, do not try to write internals as cartesian
     if not coords:
         logger.warning("No cartesian coordinates found in optimizer result (final_cart/coords). Writing empty geometry file placeholder.")
         coords = []
@@ -240,11 +233,9 @@ def main(argv=None) -> int:
     # Write optimized geometry using module writer if present, with fallback
     try:
         if hasattr(opt_mod, "write_xyz"):
-            # opt_mod.write_xyz should accept (path, symbols, coords, comment=...)
             try:
                 opt_mod.write_xyz(str(opt_xyz), symbols, coords, comment="Optimized by pycbs-opt")
             except TypeError:
-                # some implementations might not accept comment kw — try positional
                 opt_mod.write_xyz(str(opt_xyz), symbols, coords)
         else:
             with opt_xyz.open("w", encoding="utf-8") as fh:
@@ -296,9 +287,9 @@ def main(argv=None) -> int:
 
     history_path = unique_path(outdir / params.get("summary_file", "opt_history.txt"))
     try:
-        _writer.write_reports(str(history_path), calculations=[], opt_cycles=opt_cycles)
+        _writer.write_reports1(str(history_path), calculations=[], opt_cycles=opt_cycles)
     except Exception:
-        logger.exception("writer.write_reports failed; writing compact history fallback.")
+        logger.exception("writer.write_reports1 failed; writing compact history fallback.")
         try:
             with history_path.open("w", encoding="utf-8") as fh:
                 fh.write("pycbs-opt history / summary\n")
