@@ -107,12 +107,12 @@ def find_optimization_module() -> Tuple[str, object]:
     pkg_dir = this_file.parent
 
     candidates = [
-        pkg_dir.parent / "pycbs-opt" / "optimization.py",
-        pkg_dir / "pycbs-opt" / "optimization.py",
+        pkg_dir.parent / "pycbs-opt" / "L-BFGS-B-based.py",
+        pkg_dir / "pycbs-opt" / "L-BFGS-B-based.py",
     ]
 
     for p in sys.path:
-        candidates.append(Path(p) / "pycbs-opt" / "optimization.py")
+        candidates.append(Path(p) / "pycbs-opt" / "L-BFGS-B-based.py")
 
     for c in candidates:
         try:
@@ -124,7 +124,7 @@ def find_optimization_module() -> Tuple[str, object]:
         except Exception:
             continue
 
-    raise FileNotFoundError("Could not locate pycbs-opt/optimization.py")
+    raise FileNotFoundError("Could not locate pycbs-opt/L-BFGS-B-based.py")
 
 
 # Helper to defensively convert array-like coords to nested lists of floats
@@ -201,7 +201,7 @@ def main(argv=None) -> int:
         return 3
 
     if not hasattr(opt_mod, "read_xyz") or not hasattr(opt_mod, "optimize_geometry"):
-        logger.error("optimization.py missing required API")
+        logger.error("L-BFGS-B-based.py missing required API")
         return 4
 
     symbols, coords0 = opt_mod.read_xyz(str(xyz_file))
