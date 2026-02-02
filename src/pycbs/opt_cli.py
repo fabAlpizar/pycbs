@@ -28,7 +28,6 @@ BASIS_MAP = {
 # ---------------------------------------------------------------------
 # Utilities
 # ---------------------------------------------------------------------
-
 def map_basis(name: str) -> str | None:
     if not name:
         return None
@@ -112,10 +111,42 @@ def find_optimization_module() -> Tuple[str, object]:
     raise FileNotFoundError("Could not locate pycbs-opt/optimization.py")
 
 
+# Helper to defensively convert array-like coords to nested lists of floats
+def _coords_to_list(obj) -> list:
+    if obj is None:
+        return []
+    # If it's already a list of lists of floats, just try to coerce
+    try:
+        # try length check first (works with lists, tuples, numpy arrays)
+        if not hasattr(obj, "__len__") or len(obj) == 0:
+            return []
+    except Exception:
+        return []
+    out = []
+    try:
+        for row in obj:
+            # row might be a scalar (bad) or an iterable of length 3
+            if row is None:
+                continue
+            # Try to iterate over row and convert to floats
+            try:
+                coords = [float(x) for x in row]
+                if len(coords) >= 3:
+                    out.append([coords[0], coords[1], coords[2]])
+                else:
+                    # not a valid cartesian triple; skip
+                    continue
+            except Exception:
+                # row may be something not iterable (skip)
+                continue
+    except Exception:
+        return []
+    return out
+
+
 # ---------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------
-
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="pycbs-opt",
@@ -172,6 +203,7 @@ def main(argv=None) -> int:
         basis2,
     )
 
+    # Call optimizer (signature expected: optimize_geometry(symbols, coords0, basis_pair=basis_pair, options=options))
     res = opt_mod.optimize_geometry(
         symbols,
         coords0,
@@ -182,7 +214,7 @@ def main(argv=None) -> int:
     # -----------------------------------------------------------------
     # Postprocessing: XYZ + optimization history (CANONICAL)
     # -----------------------------------------------------------------
-
+    # Use package writer for formatted output
     from . import writer as _writer
 
     # ---- XYZ ----
@@ -190,59 +222,94 @@ def main(argv=None) -> int:
 
     coords = []
     if isinstance(res, dict):
-        if res.get("final_cart"):
-            coords = res["final_cart"]
-        elif res.get("coords"):
-            coords = res["coords"]
+        # prefer final_cart, then coords
+        fc = res.get("final_cart", None)
+        cc = res.get("coords", None)
 
-    if hasattr(opt_mod, "write_xyz"):
-        opt_mod.write_xyz(
-            str(opt_xyz),
-            symbols,
-            coords,
-            comment="Optimized by pycbs-opt",
-        )
-    else:
-        with opt_xyz.open("w", encoding="utf-8") as fh:
-            fh.write(f"{len(symbols)}\n")
-            fh.write("Optimized by pycbs-opt\n")
-            for s, c in zip(symbols, coords):
-                fh.write(f"{s} {c[0]} {c[1]} {c[2]}\n")
+        if fc is not None and (hasattr(fc, "__len__") and len(fc) > 0):
+            coords = _coords_to_list(fc)
+        elif cc is not None and (hasattr(cc, "__len__") and len(cc) > 0):
+            coords = _coords_to_list(cc)
+
+    # If coords is still empty, try x_opt / x but these are usually internals and not safe to write.
+    # We prefer writing nothing than writing incorrect internals as Cartesian coords.
+    if not coords:
+        logger.warning("No cartesian coordinates found in optimizer result (final_cart/coords). Writing empty geometry file placeholder.")
+        coords = []
+
+    # Write optimized geometry using module writer if present, with fallback
+    try:
+        if hasattr(opt_mod, "write_xyz"):
+            # opt_mod.write_xyz should accept (path, symbols, coords, comment=...)
+            try:
+                opt_mod.write_xyz(str(opt_xyz), symbols, coords, comment="Optimized by pycbs-opt")
+            except TypeError:
+                # some implementations might not accept comment kw — try positional
+                opt_mod.write_xyz(str(opt_xyz), symbols, coords)
+        else:
+            with opt_xyz.open("w", encoding="utf-8") as fh:
+                fh.write(f"{len(symbols)}\n")
+                fh.write("Optimized by pycbs-opt\n")
+                for s, c in zip(symbols, coords):
+                    fh.write(f"{s} {c[0]} {c[1]} {c[2]}\n")
+    except Exception:
+        logger.exception("Failed to write optimized XYZ using optimization module; attempting simple fallback writer.")
+        try:
+            with opt_xyz.open("w", encoding="utf-8") as fh:
+                fh.write(f"{len(symbols)}\n")
+                fh.write("Optimized by pycbs-opt\n")
+                for s, c in zip(symbols, coords):
+                    fh.write(f"{s} {c[0]} {c[1]} {c[2]}\n")
+        except Exception:
+            logger.exception("Final fallback failed to write optimized.xyz. File may be missing or empty.")
 
     # ---- Optimization history ----
     opt_cycles = []
-    hist = res.get("history") or res.get("opt_history") or res.get("cycles")
+    hist = None
+    if isinstance(res, dict):
+        hist = res.get("history") or res.get("opt_history") or res.get("cycles") or res.get("cycle_history")
 
     if isinstance(hist, list) and hist:
         for i, h in enumerate(hist, start=1):
             if isinstance(h, dict):
-                e = (
-                    h.get("cbs_energy")
-                    or h.get("energy")
-                    or h.get("total_energy")
-                )
+                e = h.get("cbs_energy") or h.get("energy") or h.get("total_energy") or h.get("E_total")
                 opt_cycles.append({"cycle": h.get("cycle", i), "cbs_energy": e})
+            elif isinstance(h, (list, tuple)) and len(h) >= 2:
+                opt_cycles.append({"cycle": h[0], "cbs_energy": h[1]})
             else:
                 opt_cycles.append({"cycle": i, "cbs_energy": h})
     else:
-        final_energy = (
-            res.get("final_energy")
-            or (
-                res.get("final_hf_cbs")
-                and res.get("final_corr_cbs")
-                and res["final_hf_cbs"] + res["final_corr_cbs"]
-            )
-            or res.get("opt_result", {}).get("fun")
-        )
+        final_energy = None
+        if isinstance(res, dict):
+            final_energy = res.get("final_energy")
+            if final_energy is None:
+                hf = res.get("final_hf_cbs")
+                corr = res.get("final_corr_cbs")
+                if hf is not None and corr is not None:
+                    try:
+                        final_energy = float(hf) + float(corr)
+                    except Exception:
+                        final_energy = None
+            if final_energy is None and isinstance(res.get("opt_result"), dict):
+                final_energy = res["opt_result"].get("fun")
         opt_cycles = [{"cycle": 0, "cbs_energy": final_energy}]
 
     history_path = unique_path(outdir / params.get("summary_file", "opt_history.txt"))
-
-    _writer.write_reports(
-        str(history_path),
-        calculations=[],
-        opt_cycles=opt_cycles,
-    )
+    try:
+        _writer.write_reports(str(history_path), calculations=[], opt_cycles=opt_cycles)
+    except Exception:
+        logger.exception("writer.write_reports failed; writing compact history fallback.")
+        try:
+            with history_path.open("w", encoding="utf-8") as fh:
+                fh.write("pycbs-opt history / summary\n")
+                fh.write(f"config: {args.config}\n")
+                fh.write(f"xyz: {xyz_file}\n")
+                fh.write(f"basis_pair: {basis_pair}\n")
+                fh.write(f"method: {options.get('method')}\n\n")
+                for row in opt_cycles:
+                    fh.write(f"{row.get('cycle')}\t{row.get('cbs_energy')}\n")
+        except Exception:
+            logger.exception("Fallback history write failed.")
 
     logger.info("Optimization finished. Results written to: %s", outdir)
     return 0
