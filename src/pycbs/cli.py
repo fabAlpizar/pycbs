@@ -395,7 +395,6 @@ def main() -> None:
     writer.write_header(str(args.output))
 
     calculations: List[Dict[str, Any]] = []
-    opt_cycles: List[Dict[str, Any]] = []
 
     total = success = 0
 
@@ -406,8 +405,7 @@ def main() -> None:
 
     writer.write_reports(
         str(args.output),
-        calculations=calculations,
-        opt_cycles=opt_cycles
+        calculations=calculations
     )
 
     logger.info(f"Completed {success}/{total} calculations")
