@@ -406,8 +406,7 @@ def main() -> None:
 
     writer.write_reports(
         str(args.output),
-        calculations=calculations,
-        opt_cycles=opt_cycles
+        calculations=calculations
     )
 
     logger.info(f"Completed {success}/{total} calculations")
