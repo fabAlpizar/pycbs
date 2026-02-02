@@ -197,7 +197,6 @@ def write_error(path: Union[str, Path], section_name: str, message: str) -> None
 def write_reports(
     filename: Union[str, Path],
     calculations: Iterable[Any],
-    opt_cycles: Iterable[Any],
     *,
     hf_components: Optional[Iterable[str]] = None,
     corr_components: Optional[Iterable[str]] = None,
@@ -308,17 +307,43 @@ def write_reports(
         f.write("                      CBS EXTRAPOLATIONS\n")
         f.write("=" * 70 + "\n\n")
         f.write(_render_table(headers, rows) + "\n\n")
+    return out
 
-    # Build optimization rows
+
+
+def write_reports1(
+    filename: Union[str, Path],
+    calculations: Iterable[Any],
+    opt_cycles: Iterable[Any]
+) -> Dict[str, str]:
+    """
+    Write a standalone optimization report file containing:
+      - header/logo
+      - GEOMETRICAL OPTIMIZATION table (Cycle, CBS Energy)
+
+    This function creates the parent directory, writes a fresh header
+    (overwrites any existing file of the same name), then appends the
+    optimization table. Returns a small dict with the final filename.
+    """
+    out = {}
+    path = Path(filename)
+    outdir = path.parent
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    # Write header (overwrite existing file with logo + info)
+    write_header(path)
+
+    # Build optimization rows in canonical two-column form
     opt_headers = ["Cycle", "CBS Energy"]
     opt_rows: List[List[Any]] = []
     for itm in opt_cycles:
         if isinstance(itm, dict):
-            cycle = itm.get("cycle", itm.get("step", None))
-            energy = itm.get("cbs_energy", itm.get("energy", itm.get("total_energy", None)))
+            cycle = itm.get("cycle", itm.get("step", "-"))
+            energy = itm.get("cbs_energy", itm.get("energy", itm.get("total_energy", "-")))
         elif isinstance(itm, (list, tuple)) and len(itm) >= 2:
             cycle, energy = itm[0], itm[1]
         else:
+            # ignore malformed entries
             continue
         opt_rows.append([cycle, energy])
 
@@ -331,7 +356,6 @@ def write_reports(
 
     out["txt"] = str(path)
     return out
-
 
 def clear_results_summary() -> None:
     """Clear global RESULTS_SUMMARY collector."""
