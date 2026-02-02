@@ -117,7 +117,7 @@ def find_optimization_module(pkg_dir: Path, optimizer_name: str) -> Tuple[str, P
     """
     # candidate filenames mapping (lowercase key)
     mapping = {
-        "lbfgs": ["L-BFSG-B-based.py", "L-BFSG-B-based.py".lower(), "lbfgs-based.py", "lbfgs.py"],
+        "lbfgs": ["L-BFGS-B-based.py", "L-BFGS-B-based.py".lower(), "lbfgs-based.py", "lbfgs.py"],
         "sqm": ["SQM-based.py", "SQM-based.py".lower(), "sqm-based.py", "sqm.py"],
     }
 
