@@ -232,7 +232,22 @@ def internal_to_cartesian(initial_cart, internals, target_values, lsq_opts=None)
     def residuals(x):
         coords = x.reshape((nat, 3))
         vals = internals_to_values(internals, coords)
-        return np.array(vals) - np.array(target_values)
+        diffs = []
+        for it, v_calc, v_tgt in zip(internals, vals, target_values):
+            if it["type"] == "bond":
+                # keep in Å; optionally scale by 1.0 or characteristic length
+                diffs.append(v_calc - v_tgt)
+            elif it["type"] == "angle":
+                # angles in radians: wrap into [-pi, pi]
+                d = v_calc - v_tgt
+                d = (d + np.pi) % (2 * np.pi) - np.pi
+                diffs.append(d)
+            elif it["type"] == "dihedral":
+                d = v_calc - v_tgt
+                d = (d + np.pi) % (2 * np.pi) - np.pi
+                diffs.append(d)
+        # Optionally scale entries here, e.g. bonds by 1.0, angles/dihedrals by 1.0
+        return np.array(diffs)
 
     # Use least_squares with robust method 'trf' or 'dogbox' which handle bounds; no bounds here
     result = least_squares(residuals, x0, method="trf", ftol=tol, xtol=tol, gtol=tol, max_nfev=max_nfev)
@@ -246,13 +261,6 @@ def internal_to_cartesian(initial_cart, internals, target_values, lsq_opts=None)
 # CBS composition
 # ---------------------
 def cbs_compose(corr_small, corr_big, scf_small, scf_big, cfg=CONFIG):
-    """
-    Compose extrapolated CBS energy from:
-      corr_small, corr_big : correlation energies at basis sets 1 and 2
-      scf_small, scf_big   : SCF energies at basis sets 1 and 2
-
-    Uses the standard separation: HF extrapolated with exponential, correlation with power law n^-3.
-    """
     X1 = cfg["X1_CORR"]
     X2 = cfg["X2_CORR"]
     X1_HF = cfg["X1_HF"]
@@ -261,19 +269,17 @@ def cbs_compose(corr_small, corr_big, scf_small, scf_big, cfg=CONFIG):
 
     # correlation extrapolation coefficient using power -3
     A_corr = (X1 ** 3) / (X2 ** 3 - X1 ** 3)
+    E_corr_cbs = corr_big + A_corr * (corr_big - corr_small)
 
-    # HF exponential coefficient
-    denom = math.exp(BETA * X2_HF) - math.exp(BETA * X1_HF)
+    # HF exponential extrapolation (two-point)
+    exp1 = math.exp(BETA * X1_HF)
+    exp2 = math.exp(BETA * X2_HF)
+    denom = exp2 - exp1
     if abs(denom) < 1e-16:
         raise ZeroDivisionError("HF CBS denominator too small")
-    B_hf = math.exp(BETA * X1_HF) / denom
+    E_hf_cbs = (exp2 * scf_small - exp1 * scf_big) / denom
 
-    # Extrapolate
-    E_corr_cbs = corr_big + A_corr * (corr_big - corr_small)
-    E_hf_cbs = scf_big + (math.exp(BETA * X2_HF) * (scf_big - scf_small)) / denom - (math.exp(BETA * X1_HF) * (scf_big - scf_small)) / denom
-    # The algebra above is equivalent to the common form; combine:
-    # But to match previous code style, use a clear expression:
-    E_cbs = E_corr_cbs + E_hf_cbs
+    E_cbs = E_hf_cbs + E_corr_cbs
     return float(E_cbs), float(E_hf_cbs), float(E_corr_cbs)
 
 
