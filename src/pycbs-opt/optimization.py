@@ -393,11 +393,13 @@ def compute_cbs_energy(symbols, coords, basis_pair=None, cfg=CONFIG):
 # Caching wrapper for energy evaluations (keyed by rounded internal coordinates)
 # ---------------------
 class EnergyCache:
-    def __init__(self, symbols, internals, coords0, rounding=8):
+    def __init__(self, symbols, internals, coords0, rounding=8, cfg=None):
         self.symbols = symbols
         self.internals = internals
         self.coords0 = np.array(coords0)
         self.rounding = rounding
+        # cfg is a dict-like configuration controlling extrapolation formula
+        self.cfg = cfg if cfg is not None else CONFIG
         self._cache = {}
 
     def _key_from_internals(self, internal_vector):
@@ -410,11 +412,12 @@ class EnergyCache:
             return self._cache[k]
         # reconstruct Cartesian
         cart = internal_to_cartesian(self.coords0, self.internals, internal_vector)
-        # compute CBS
-        E_cbs, E_hf_cbs, E_corr_cbs, debug = compute_cbs_energy(self.symbols, cart, basis_pair)
+        # compute CBS using the cached cfg
+        E_cbs, E_hf_cbs, E_corr_cbs, debug = compute_cbs_energy(self.symbols, cart, basis_pair, cfg=self.cfg)
         res = {"E_cbs": E_cbs, "E_hf_cbs": E_hf_cbs, "E_corr_cbs": E_corr_cbs, "cart": cart, "debug": debug}
         self._cache[k] = res
         return res
+
 
 
 # ---------------------
@@ -430,19 +433,24 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
 
     if options is None:
         options = {}
-    cfg = CONFIG
+
+    # Build a working copy of CONFIG and override with options if provided.
+    # Options keys expected: X1, X2, Xhf1, Xhf2 (floats). Map them into internal names.
+    cfg = copy.deepcopy(CONFIG)
+    # map option names to CONFIG keys
+    if "X1" in options and options["X1"] is not None:
+        cfg["X1_CORR"] = float(options["X1"])
+    if "X2" in options and options["X2"] is not None:
+        cfg["X2_CORR"] = float(options["X2"])
+    if "Xhf1" in options and options["Xhf1"] is not None:
+        cfg["X1_HF"] = float(options["Xhf1"])
+    if "Xhf2" in options and options["Xhf2"] is not None:
+        cfg["X2_HF"] = float(options["Xhf2"])
 
     internals, values0 = build_internals(symbols, coords0)
-    energy_cache = EnergyCache(symbols, internals, coords0, rounding=8)
+    # pass cfg to the EnergyCache so compute_cbs_energy uses these parameters
+    energy_cache = EnergyCache(symbols, internals, coords0, rounding=8, cfg=cfg)
 
-    # bounds: for bonds only, apply a factor to initial distances for bounds
-    nvars = len(internals)
-    bounds = [(None, None)] * nvars
-    for idx, it in enumerate(internals):
-        if it["type"] == "bond":
-            i, j = it["idx"]
-            r0 = values0[idx]
-            bounds[idx] = (cfg["BOND_MIN_FACTOR"] * r0, cfg["BOND_MAX_FACTOR"] * r0)
 
     # objective function for scipy minimize: returns scalar CBS energy
     def objective(x):

@@ -76,13 +76,29 @@ def load_params_from_ini(ini_path: Path) -> Dict[str, Any]:
 
 
 def prepare_options_from_params(params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize options coming from the INI file into a dict passed to the optimizer.
+    Provides safe defaults so the caller can omit keys.
+    """
+    def _f(key, default):
+        v = params.get(key)
+        if v is None:
+            return float(default)
+        try:
+            return float(v)
+        except Exception:
+            return float(default)
+
+    method = params.get("method", "ccsd(t)")
+    spin = int(params.get("spin", 0)) if params.get("spin") is not None else 0
+
     return {
-        "method": params.get("method", "ccsd(t)"),
-        "spin": int(params.get("spin", 0)),
-        "X1": float(params.get("x1")),
-        "X2": float(params.get("x2")),
-        "Xhf1": float(params.get("xhf1")),
-        "Xhf2": float(params.get("xhf2")),
+        "method": method,
+        "spin": spin,
+        "X1": _f("x1"),
+        "X2": _f("x2"),
+        "Xhf1": _f("xhf1"),
+        "Xhf2": _f("xhf2"),
     }
 
 
