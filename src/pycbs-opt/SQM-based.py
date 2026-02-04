@@ -63,7 +63,7 @@ PYSCF_THREADS = 1
 lib.num_threads(PYSCF_THREADS)
 
 # convergence / optimization defaults
-MAXCYCLE_DEFAULT = 20
+MAXCYCLE_DEFAULT = 50
 ENERGY_CRIT = 1e-8
 FAC_DEFAULT = 0.05
 CUT = 0.75
