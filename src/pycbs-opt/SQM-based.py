@@ -163,22 +163,45 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
     try to extract type and atom indices accordingly. If extraction fails we
     raise an informative error.
     """
-    # PrimitiveInternalCoordinates constructor signatures may vary; try common ones.
     pic = None
     tried = []
-    # Attempt several plausible constructor signatures
-    for args in (
-        (atoms, coords.tolist()),
-        (atoms, coords),
-        (coords.tolist(), atoms),
-        (coords, atoms),
-    ):
-        try:
-            pic = PrimitiveInternalCoordinates(*args)
-            break
-        except Exception as exc:
-            tried.append((args, exc))
-            pic = None
+
+    # Preferred: construct a geomeTRIC Molecule object if available.
+    try:
+        from geometric.molecule import Molecule as GeometricMolecule
+
+        gm = GeometricMolecule()
+        gm.Data = {
+            "resname": ["UNK"] * len(atoms),
+            "resid": [0] * len(atoms),
+            "elem": list(atoms),
+            "bonds": [],
+            "name": "pycbs_tmp",
+            # geomeTRIC expects a list of frames; supply one frame (Angstroms)
+            "xyzs": [coords.tolist()]
+        }
+        # Some geomeTRIC internals expect gm.elem or gm.Data['elem'] — having Data set
+        # is the most compatible minimal Molecule.
+        pic = PrimitiveInternalCoordinates(gm)
+    except Exception as exc_gm:
+        # record attempt and fall back to other common signatures
+        tried.append((("GeometricMolecule",), exc_gm))
+        pic = None
+
+    # If we didn't get a pic yet, try several plausible constructor signatures
+    if pic is None:
+        for args in (
+            (atoms, coords.tolist()),
+            (atoms, coords),
+            (coords.tolist(), atoms),
+            (coords, atoms),
+        ):
+            try:
+                pic = PrimitiveInternalCoordinates(*args)
+                break
+            except Exception as exc:
+                tried.append((args, exc))
+                pic = None
 
     if pic is None:
         # Provide diagnostic info
@@ -482,8 +505,10 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
 
     internals_trace = []
     # cycle 0 initial values
-    init_map = {lbl: _value_for_internal({'type': tp, 'inds': inds}, current_coords)
-                for lbl, tp, inds in zip(baseline_labels, baseline_kinds, baseline_inds)}
+    init_map = {
+        lbl: _value_for_internal(tp, inds, current_coords)
+        for lbl, tp, inds in zip(baseline_labels, baseline_kinds, baseline_inds)
+    }
     internals_trace.append(init_map)
 
     try:
@@ -572,8 +597,10 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
 
         history.append({'cycle': cycle, 'energy': float(current_energy)})
 
-        cyc_map = {lbl: _value_for_internal({'type': tp, 'inds': inds}, current_coords)
-                   for lbl, tp, inds in zip(baseline_labels, baseline_kinds, baseline_inds)}
+        cyc_map = {
+            lbl: _value_for_internal(tp, inds, current_coords)
+            for lbl, tp, inds in zip(baseline_labels, baseline_kinds, baseline_inds)
+        }
         internals_trace.append(cyc_map)
 
         if cycle > 1:
