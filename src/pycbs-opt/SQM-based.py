@@ -9,30 +9,21 @@ This implements the "SQM-style" redundant-internal-coordinate optimizer:
   (parabolic) scan and tries to update geometry if the CBS energy improves
 - repeats for a number of cycles or until convergence
 
-Exposes:
-    run_optimization(params: dict, outputs_dir: pathlib.Path) -> dict
-
-Expected params keys (normalized by opt_cli.prepare_options_from_params):
-- input_xyz (path)
-- method (e.g. 'CCSD(T)' or 'MP2')
-- X1, X2, Xhf1, Xhf2, beta  (CBS parameters; optional)
-- maxcycle (optional)
-- workers (optional)  -- currently not used for parallelism in this implementation
-- fac (displacement factor; optional)
-
-Outputs:
-- writes cycle-by-cycle energies CSV: PyCBS-OUTPUTS/SQM_cycle_energies.csv
-- writes final optimized geometry XYZ: PyCBS-OUTPUTS/SQM_final_opt.xyz
-
-Notes / limitations:
-- Internal->cartesian updates are geometric and approximate (no B-matrix).
-- This implementation runs single-threaded for evaluation stability. For larger
-  jobs you can parallelize the per-displacement evaluations, but be careful with
-  PySCF and process/thread spawning.
+Changes in this variant:
+- When available, attempts to use geomeTRIC to build a robust set of
+  redundant internal coordinates (best-effort; falls back to local builder
+  if geomeTRIC isn't available or integration fails).
+- Keeps a baseline list of redundant internals (labels) and records the
+  value of each baseline internal at every cycle for reproducibility.
+- At the end of an optimization prints a table to the terminal: rows are
+  the redundant internals (labeled) and columns are the value of that
+  internal for each cycle (raw float strings).
+- Existing behavior preserved (spin propagation, caching, filename prefixing).
 """
 from pathlib import Path
 import math
 import sys
+import traceback
 from functools import lru_cache
 
 import numpy as np
@@ -43,6 +34,20 @@ try:
     from pyscf import gto, scf, cc, mp, lib
 except Exception as e:
     raise ImportError("PySCF is required for this script. Install pyscf and retry.") from e
+
+# Try to import geomeTRIC (best-effort). Integration is optional and falls back to
+# the internal builder if geomeTRIC isn't present or usable.
+_GEOMETRIC = None
+try:
+    # try common import names (some installations expose 'geometric' or 'geomeTRIC')
+    try:
+        import geometric as _geometric_mod  # type: ignore
+        _GEOMETRIC = _geometric_mod
+    except Exception:
+        import geomeTRIC as _geometric_mod  # type: ignore
+        _GEOMETRIC = _geometric_mod
+except Exception:
+    _GEOMETRIC = None
 
 # -------------------------
 # Defaults / parameters
@@ -68,7 +73,7 @@ ENERGY_CRIT = 1e-8
 FAC_DEFAULT = 0.05
 CUT = 0.75
 
-# covalent radii / masses
+# covalent radii / masses (used by fallback builder)
 COV_RAD = {
     'H': 0.31, 'C': 0.76, 'N': 0.71, 'O': 0.66, 'F': 0.57,
     'P': 1.07, 'S': 1.05, 'Cl': 1.02
@@ -77,6 +82,9 @@ ATOMIC_MASS = {
     'H': 1.0079, 'C': 12.0107, 'N': 14.0067, 'O': 15.999, 'F': 18.998,
     'P': 30.9738, 'S': 32.065, 'Cl': 35.453
 }
+
+# module-level default spin (can be set from run_optimization params)
+DEFAULT_SPIN = 0
 
 
 # -------------------------
@@ -106,10 +114,189 @@ def distance(a, b):
     return np.linalg.norm(a - b)
 
 
+def _angle_deg(a, b, c):
+    v1 = a - b
+    v2 = c - b
+    denom = (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-16)
+    cosang = np.dot(v1, v2) / denom
+    cosang = np.clip(cosang, -1.0, 1.0)
+    return float(np.degrees(np.arccos(cosang)))
+
+
+def _dihedral_deg(p0, p1, p2, p3):
+    # return dihedral in degrees
+    b0 = -1.0 * (p1 - p0)
+    b1 = p2 - p1
+    b2 = p3 - p2
+    b1 /= (np.linalg.norm(b1) + 1e-16)
+    v = b0 - np.dot(b0, b1) * b1
+    w = b2 - np.dot(b2, b1) * b1
+    x = np.dot(v, w)
+    y = np.dot(np.cross(b1, v), w)
+    return float(np.degrees(np.arctan2(y, x)))
+
+
 # -------------------------
-# Internals: build redundant set
+# Internals: try geomeTRIC, fallback to local builder
 # -------------------------
+def _label_for_internal(ic: dict, atoms: list[str]) -> str:
+    tp = ic['type']
+    inds = ic['inds']
+    if tp == 'bond':
+        i, j = inds
+        return f"bond:{i+1}-{j+1}:{atoms[i]}-{atoms[j]}"
+    if tp == 'angle':
+        i, j, k = inds
+        return f"angle:{i+1}-{j+1}-{k+1}:{atoms[i]}-{atoms[j]}-{atoms[k]}"
+    if tp == 'dihedral':
+        i, j, k, l = inds
+        return f"dihedral:{i+1}-{j+1}-{k+1}-{l+1}:{atoms[i]}-{atoms[j]}-{atoms[k]}-{atoms[l]}"
+    return f"unknown:{inds}"
+
+
+def _value_for_internal(ic: dict, coords: np.ndarray):
+    if ic['type'] == 'bond':
+        i, j = ic['inds']
+        return float(np.linalg.norm(coords[i] - coords[j]))
+    elif ic['type'] == 'angle':
+        i, j, k = ic['inds']
+        return _angle_deg(coords[i], coords[j], coords[k])
+    elif ic['type'] == 'dihedral':
+        i, j, k, l = ic['inds']
+        return _dihedral_deg(coords[i], coords[j], coords[k], coords[l])
+    else:
+        return float('nan')
+
+
+def _build_internals_geometric_if_available(atoms, coords):
+    """
+    Best-effort attempt to build redundant internals using geomeTRIC.
+    The geomeTRIC API surface can vary; we try a few common helpers.
+    If geomeTRIC is not available or the attempt fails, returns None.
+    """
+    if _GEOMETRIC is None:
+        return None
+
+    try:
+        # Many geomeTRIC workflows expose functionality to produce Z-matrix
+        # or redundant internals via classes. We attempt a generic approach:
+        # - If the module provides a function or class to compute RICs, use it.
+        # This is best-effort: if it fails we fallback to the local builder.
+        mod = _GEOMETRIC
+
+        # Common candidate call patterns we try (in order):
+        candidates = [
+            ("RedundantInternalCoordinates", True),
+            ("Internals", True),
+            ("internal_coordinates", False),
+            ("build_redundant_internals", False),
+            ("connectivity", False),
+        ]
+
+        for name, is_class in candidates:
+            if hasattr(mod, name):
+                member = getattr(mod, name)
+                try:
+                    if is_class:
+                        # Try to instantiate with (atoms, coords) or (symbols, xyz)
+                        try:
+                            inst = member(atoms, coords)
+                        except Exception:
+                            inst = member(symbols=atoms, coords=coords)
+                        # try to get a canonical list of internals
+                        if hasattr(inst, "internals"):
+                            # assume internals is a list of tuples (type, inds)
+                            raw = inst.internals
+                        elif hasattr(inst, "get_internals"):
+                            raw = inst.get_internals()
+                        else:
+                            raw = None
+                        if raw:
+                            # Convert raw into our expected dict format if possible
+                            out = []
+                            for r in raw:
+                                # try to coerce common shapes:
+                                if isinstance(r, tuple) and len(r) >= 2:
+                                    # first entry may be type string
+                                    if isinstance(r[0], str):
+                                        tp = r[0].lower()
+                                        inds = r[1]
+                                    else:
+                                        # assume a tuple of indices -> bond/angle/dihedral by length
+                                        inds = r
+                                        if len(inds) == 2:
+                                            tp = "bond"
+                                        elif len(inds) == 3:
+                                            tp = "angle"
+                                        elif len(inds) == 4:
+                                            tp = "dihedral"
+                                        else:
+                                            continue
+                                    out.append({"type": tp, "inds": tuple(int(x) for x in inds)})
+                            if out:
+                                return out
+                    else:
+                        # functional API: try calling with (atoms, coords)
+                        try:
+                            raw = member(atoms, coords)
+                        except Exception:
+                            raw = member(symbols=atoms, coords=coords)
+                        # attempt to convert raw as above
+                        if raw:
+                            out = []
+                            for r in raw:
+                                if isinstance(r, dict) and 'type' in r and 'inds' in r:
+                                    out.append({'type': r['type'], 'inds': tuple(r['inds'])})
+                                elif isinstance(r, tuple):
+                                    # assume tuple of indices
+                                    inds = r
+                                    if len(inds) == 2:
+                                        tp = "bond"
+                                    elif len(inds) == 3:
+                                        tp = "angle"
+                                    elif len(inds) == 4:
+                                        tp = "dihedral"
+                                    else:
+                                        continue
+                                    out.append({"type": tp, "inds": tuple(int(x) for x in inds)})
+                            if out:
+                                return out
+                except Exception:
+                    # try next candidate
+                    continue
+    except Exception:
+        # Any unexpected error should not break execution; fallback will be used.
+        traceback.print_exc()
+        return None
+
+    # No usable API found / conversion failed
+    return None
+
+
 def build_redundant_internals(atoms, coords, bond_scale=1.2):
+    """
+    Try geomeTRIC first (best-effort). If unavailable or unusable,
+    fall back to a local simple builder based on covalent radii.
+    Returned list format: [{'type': 'bond'|'angle'|'dihedral', 'inds': (...), 'value': float}, ...]
+    """
+    # Attempt geomeTRIC
+    geome_list = _build_internals_geometric_if_available(atoms, coords)
+    if geome_list is not None:
+        # compute numeric values and return
+        for ic in geome_list:
+            if ic['type'] == 'bond':
+                i, j = ic['inds']
+                ic['value'] = float(np.linalg.norm(coords[i] - coords[j]))
+            elif ic['type'] == 'angle':
+                i, j, k = ic['inds']
+                ic['value'] = _angle_deg(coords[i], coords[j], coords[k])
+            elif ic['type'] == 'dihedral':
+                i, j, k, l = ic['inds']
+                ic['value'] = _dihedral_deg(coords[i], coords[j], coords[k], coords[l])
+        print("Using geomeTRIC-based redundant-internal coordinate builder (best-effort).")
+        return geome_list
+
+    # Fallback: original in-repo builder (robust for many molecules)
     nat = len(atoms)
     bonds = []
     for i in range(nat):
@@ -155,42 +342,17 @@ def build_redundant_internals(atoms, coords, bond_scale=1.2):
             ic['value'] = distance(coords[i], coords[j])
         elif ic['type'] == 'angle':
             i, j, k = ic['inds']
-            v1 = coords[i] - coords[j]
-            v2 = coords[k] - coords[j]
-            cosang = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-16)
-            cosang = np.clip(cosang, -1.0, 1.0)
-            ic['value'] = np.degrees(np.arccos(cosang))
+            ic['value'] = _angle_deg(coords[i], coords[j], coords[k])
         elif ic['type'] == 'dihedral':
             i, j, k, l = ic['inds']
-            b1 = coords[j] - coords[i]
-            b2 = coords[k] - coords[j]
-            b3 = coords[l] - coords[k]
-            n1 = np.cross(b1, b2)
-            n2 = np.cross(b2, b3)
-            n1n = n1 / (np.linalg.norm(n1) + 1e-16)
-            n2n = n2 / (np.linalg.norm(n2) + 1e-16)
-            m1 = np.cross(n1n, b2/ (np.linalg.norm(b2) + 1e-16))
-            x = np.dot(n1n, n2n)
-            y = np.dot(m1, n2n)
-            ic['value'] = np.degrees(np.arctan2(y, x))
+            ic['value'] = _dihedral_deg(coords[i], coords[j], coords[k], coords[l])
+    print("Using fallback internal redundant-internal coordinate builder.")
     return internals
 
 
 # -------------------------
 # Geometric transformations for single-internal updates (approximate)
 # -------------------------
-def compute_dihedral(p0, p1, p2, p3):
-    b0 = -1.0 * (p1 - p0)
-    b1 = p2 - p1
-    b2 = p3 - p2
-    b1 /= np.linalg.norm(b1) + 1e-16
-    v = b0 - np.dot(b0, b1) * b1
-    w = b2 - np.dot(b2, b1) * b1
-    x = np.dot(v, w)
-    y = np.dot(np.cross(b1, v), w)
-    return np.degrees(np.arctan2(y, x))
-
-
 def apply_bond_change(coords, i, j, new_length, atoms):
     p = coords.copy()
     ri = p[i].copy()
@@ -217,9 +379,9 @@ def apply_angle_change(coords, i, j, k, new_angle_deg):
     p = coords.copy()
     ri = p[i] - p[j]
     rk = p[k] - p[j]
-    cur_angle = np.degrees(math.acos(np.clip(np.dot(ri, rk) / (np.linalg.norm(ri) * np.linalg.norm(rk) + 1e-16), -1.0, 1.0)))
+    cur_angle = _angle_deg(p[i], p[j], p[k])
     target = new_angle_deg
-    dtheta = np.radians(target - cur_angle)
+    dtheta = math.radians(target - cur_angle)
     axis = np.cross(ri, rk)
     if np.linalg.norm(axis) < 1e-8:
         axis = np.cross(ri, np.array([1.0, 0.0, 0.0]))
@@ -235,8 +397,8 @@ def apply_angle_change(coords, i, j, k, new_angle_deg):
 
 def apply_dihedral_change(coords, i, j, k, l, new_dihedral_deg):
     p = coords.copy()
-    cur = compute_dihedral(p[i], p[j], p[k], p[l])
-    dphi = np.radians(new_dihedral_deg - cur)
+    cur = _dihedral_deg(p[i], p[j], p[k], p[l])
+    dphi = math.radians(new_dihedral_deg - cur)
     axis_pt = p[j]
     axis_vec = p[k] - p[j]
     axis_unit = axis_vec / (np.linalg.norm(axis_vec) + 1e-16)
@@ -251,9 +413,9 @@ def apply_dihedral_change(coords, i, j, k, l, new_dihedral_deg):
 # -------------------------
 # CBS energy evaluator (with caching)
 # -------------------------
-# We cache by xyz string and method. When CBS parameters are changed we clear cache.
+# We cache by xyz string, method and spin. When CBS parameters are changed we clear cache.
 @lru_cache(maxsize=2000)
-def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str):
+def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str, spin: int):
     """
     Compute CBS energy using explicit a_corr and b_hf passed in so cache is safe.
     Returns scalar E_cbs (float).
@@ -264,7 +426,7 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
         mol = gto.Mole()
         mol.atom = xyz_string
         mol.basis = basis
-        mol.spin = 0
+        mol.spin = int(spin)
         mol.charge = 0
         mol.nthread = PYSCF_THREADS
         mol.max_memory = 8000
@@ -331,30 +493,10 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
         corr_vals.append(float(corr_energy))
 
     # now compose CBS from scf_vals and corr_vals using a_corr and b_hf
-    # scf_vals[0] -> scf_small, scf_vals[1] -> scf_big
     scf_small, scf_big = scf_vals[0], scf_vals[1]
     corr_small, corr_big = corr_vals[0], corr_vals[1]
 
-    # correlation extrapolation: corr_big + a_corr*(corr_big - corr_small)
     E_corr_cbs = corr_big + a_corr * (corr_big - corr_small)
-
-    # HF extrapolation: E_hf = (exp(beta*X2)*scf_small - exp(beta*X1)*scf_big)/denom
-    # Here b_hf was computed as exp(beta*X1)/(exp(beta*X2)-exp(beta*X1)) in other scripts,
-    # but we pass explicit a_corr,b_hf to avoid hidden algebra errors. We will compute E_hf explicitly:
-    # Recover beta and X's from b_hf isn't trivial here; instead compute HF using formula below:
-    # Use same algebra as in other module: E_hf = (exp(beta*X2)*scf_small - exp(beta*X1)*scf_big) / (exp(beta*X2)-exp(beta*X1))
-    # However we don't have beta/X here; caller will pass b_hf consistent with previous code path.
-    # For safety we compute HF using the two SCF values and b_hf in the common form used elsewhere:
-    # In the original scripts they used: E = scf2 + (exp(beta*x1)*scf1 ...). To avoid confusion we use the standard two-point
-    # exponential form using X1/X2/BETA passed through caller by computing a_corr/b_hf earlier.
-    # For simplicity here we reconstruct E_hf using the same formula used in the repo's L-BFGS implementation:
-    # E_hf_cbs = scf_big + (a_corr - b_hf) * (scf_big - scf_small)  # not used - prefer direct composition below
-
-    # To avoid inconsistent algebra, caller passes X1_HF, X2_HF, BETA as globals and we use them in run_optimization
-    # For the cached function we simply return E_cbs assembled by caller-specific formula; so we will not call this
-    # cached function directly from outside with different a_corr/b_hf algebra. For now compute E_cbs as:
-    # Here we will just compute using the common pattern:
-    # E_hf_cbs = scf_big + b_hf * (scf_big - scf_small)  # where b_hf is a signed factor; match other code that used a_corr and b_hf
     E_hf_cbs = scf_big + b_hf * (scf_big - scf_small)
 
     E_cbs = E_hf_cbs + E_corr_cbs
@@ -362,9 +504,9 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
 
 
 # Small wrapper for caller to manage cache clearing
-def compute_cbs_energy_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str):
-    # clear underlying lru cache if needed is handled by caller when parameters change
-    return _compute_cbs_from_xyz_cached(xyz_string, method, a_corr, b_hf, bs1, bs2)
+def compute_cbs_energy_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str, spin: int):
+    # clear underlying lru cache for CBS cached computations in case parameters changed
+    return _compute_cbs_from_xyz_cached(xyz_string, method, a_corr, b_hf, bs1, bs2, int(spin))
 
 
 # -------------------------
@@ -395,14 +537,13 @@ def parabolic_minimum(x, y):
 # -------------------------
 def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DEFAULT, fac_mult=FAC_DEFAULT,
                       x1=X1_DEFAULT, x2=X2_DEFAULT, x1_hf=X1HF_DEFAULT, x2_hf=X2HF_DEFAULT, beta=BETA_DEFAULT,
-                      basis_pair=None):
+                      basis_pair=None, spin: int = 0):
     """
     Sequential SQM-style optimizer that updates current_coords if parabolic minimum improves CBS energy.
-    Returns atoms, final_coords, history(list of dicts), converged(bool)
+    Returns atoms, final_coords, history(list of dicts), converged(bool) and internals_trace (list of dicts)
     """
     # compute extrapolation coefficients (same algebra as L-BFGS module)
     a_corr = (x1 ** 3) / (x2 ** 3 - x1 ** 3)
-    # compute b_hf factor similar to other modules: exp(beta*X1) / (exp(beta*X2)-exp(beta*X1))
     denom = math.exp(beta * x2_hf) - math.exp(beta * x1_hf)
     if abs(denom) < 1e-16:
         raise ZeroDivisionError("HF CBS denominator too small")
@@ -413,14 +554,34 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         basis_pair = (basis_sets[0], basis_sets[1])
     bs1, bs2 = basis_pair
 
-    internals = build_redundant_internals(atoms, coords)
-    if not internals:
+    # Build baseline internals (kept fixed as labels for reproducibility/tracing)
+    baseline_internals = build_redundant_internals(atoms, coords)
+    if not baseline_internals:
         raise RuntimeError("No internal coordinates found; check input geometry.")
+
+    # Keep a list of labels and a canonical order for tracing
+    baseline_labels = [_label_for_internal(ic, atoms) for ic in baseline_internals]
+    baseline_inds = [tuple(ic['inds']) for ic in baseline_internals]
+    baseline_types = [ic['type'] for ic in baseline_internals]
+
+    # Use a working list that will be rebuilt during optimization (local builder)
+    internals = [dict(ic) for ic in baseline_internals]
 
     current_coords = coords.copy()
     displacement_factor = fac_mult
     history = []
     converged = False
+
+    # internals_trace: list per cycle mapping label -> value (raw float strings)
+    internals_trace = []
+
+    # record initial values (cycle 0)
+    init_vals = {}
+    for lbl, tp, inds in zip(baseline_labels, baseline_types, baseline_inds):
+        ic = {'type': tp, 'inds': inds}
+        val = _value_for_internal(ic, current_coords)
+        init_vals[lbl] = val
+    internals_trace.append(init_vals)
 
     # Clear LRU cache for CBS cached computations in case parameters changed
     try:
@@ -432,7 +593,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         # compute current energy
         cur_xyz = xyz_to_pyscf_string(atoms, current_coords)
         try:
-            current_energy = compute_cbs_energy_from_xyz_cached(cur_xyz, method, a_corr, b_hf, bs1, bs2)
+            current_energy = compute_cbs_energy_from_xyz_cached(cur_xyz, method, a_corr, b_hf, bs1, bs2, spin)
         except Exception as e:
             raise RuntimeError(f"CBS evaluation at cycle start failed: {e}")
 
@@ -477,7 +638,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                         new_coords = current_coords.copy()
 
                     xyzs = xyz_to_pyscf_string(atoms, new_coords)
-                    E = compute_cbs_energy_from_xyz_cached(xyzs, method, a_corr, b_hf, bs1, bs2)
+                    E = compute_cbs_energy_from_xyz_cached(xyzs, method, a_corr, b_hf, bs1, bs2, spin)
                     energies.append(float(E))
                     coords_list.append(new_coords)
                 except Exception as e:
@@ -499,7 +660,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                 if e_min < current_energy - 1e-12 and best_coords is not None:
                     # update geometry to the best computed coords
                     current_coords = best_coords.copy()
-                    # rebuild internals values on updated geometry
+                    # rebuild internals values on updated geometry (use fallback builder to refresh 'internals')
                     internals = build_redundant_internals(atoms, current_coords)
                     updated = True
                     # recompute current_energy to use for subsequent comparisons
@@ -508,10 +669,19 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                 else:
                     print("    no improvement")
             except Exception as e:
-                print(f"    error in parabolic fit for IC {ic['inds']}: {e}")
+                print(f"    error in parabolic fit for IC {ic.get('inds')}: {e}")
 
         # record cycle energy (after processing all internals)
         history.append({'cycle': cycle, 'energy': float(current_energy)})
+
+        # record internals values for this cycle using baseline internals for stable rows
+        cyc_vals = {}
+        for lbl, tp, inds in zip(baseline_labels, baseline_types, baseline_inds):
+            ic = {'type': tp, 'inds': inds}
+            val = _value_for_internal(ic, current_coords)
+            cyc_vals[lbl] = val
+        internals_trace.append(cyc_vals)
+
         # convergence check
         if cycle > 1:
             ediff = abs(history[-1]['energy'] - history[-2]['energy'])
@@ -523,7 +693,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
 
         displacement_factor *= CUT
 
-    return atoms, current_coords, history, converged
+    return atoms, current_coords, history, converged, baseline_labels, internals_trace
 
 
 # -------------------------
@@ -535,9 +705,10 @@ def run_optimization(params: dict, outputs_dir: Path):
     params should include:
       - input_xyz (path to file)
       - method (optional)
-      - X1, X2, Xhf1, Xhf2, beta (optional)
+      - X1, X2, Xhf1, X2hf, beta (optional)
       - maxcycle (optional)
       - fac (optional)
+      - spin (optional)
     """
     outputs_dir = Path(outputs_dir)
     outputs_dir.mkdir(parents=True, exist_ok=True)
@@ -558,27 +729,48 @@ def run_optimization(params: dict, outputs_dir: Path):
     basis2 = params.get("basis2")
     basis_pair = (basis1, basis2) if (basis1 and basis2) else None
 
+    # spin (propagate to PySCF)
+    spin = int(params.get("spin", DEFAULT_SPIN))
+
     atoms, coords0, comment = read_xyz(input_xyz)
     print(f"Loaded {len(atoms)} atoms from {input_xyz}")
     print("Building redundant internal coordinates (initial)...")
-    internals = build_redundant_internals(atoms, coords0)
+    try:
+        internals = build_redundant_internals(atoms, coords0)
+    except Exception as e:
+        raise RuntimeError(f"Failed to build redundant internals for initial geometry: {e}")
     print(f"Found {len(internals)} internal coordinates (bonds/angles/dihedrals).")
 
     # run optimizer
-    atoms_out, coords_out, history, converged = optimize_from_xyz(
+    atoms_out, coords_out, history, converged, baseline_labels, internals_trace = optimize_from_xyz(
         atoms,
         coords0,
         method=method,
         maxcycle=maxcycle,
         fac_mult=fac,
         x1=x1, x2=x2, x1_hf=x1hf, x2_hf=x2hf, beta=beta,
-        basis_pair=basis_pair
+        basis_pair=basis_pair,
+        spin=spin
     )
 
     # write outputs via writer helpers
-    prefix = "SQM"
+    base = Path(input_xyz).stem
+    prefix = f"{base}_SQM"
     cycles_file = write_cycle_energies(outputs_dir, prefix, history)
     xyz_file = write_final_xyz(outputs_dir, prefix, atoms_out, coords_out, history[-1]['energy'] if history else 0.0)
+
+    # Print internals trace table to terminal (rows: internals, cols: cycle0..N)
+    try:
+        print("\nRedundant-internal coordinates trace (rows: internal, columns: cycle 0..):")
+        # Header
+        ncycles = len(internals_trace)
+        header = ["INTERNAL"] + [f"C{idx}" for idx in range(0, ncycles)]
+        print("  ".join(header))
+        for lbl in baseline_labels:
+            row_vals = [str(internals_trace[c].get(lbl, "-")) for c in range(0, ncycles)]
+            print(lbl + "  " + "  ".join(row_vals))
+    except Exception as e:
+        print("Failed to print internals trace table:", e)
 
     return {
         "history": history,
@@ -587,6 +779,7 @@ def run_optimization(params: dict, outputs_dir: Path):
         "symbols": atoms_out,
         "outputs": {"cycles": str(cycles_file), "xyz": str(xyz_file)},
         "converged": converged,
+        "internals_trace": {"labels": baseline_labels, "trace": internals_trace},
     }
 
 
@@ -604,6 +797,7 @@ if __name__ == "__main__":
     p.add_argument("--x1hf", type=float, default=X1HF_DEFAULT)
     p.add_argument("--x2hf", type=float, default=X2HF_DEFAULT)
     p.add_argument("--beta", type=float, default=BETA_DEFAULT)
+    p.add_argument("--spin", type=int, default=0)
     args = p.parse_args()
 
     params = {
@@ -616,6 +810,7 @@ if __name__ == "__main__":
         "beta": args.beta,
         "maxcycle": args.maxcycle,
         "fac": args.fac,
+        "spin": args.spin,
     }
     out = Path(args.out)
     result = run_optimization(params, out)

@@ -152,15 +152,19 @@ def write_final_xyz(out_dir: Path, prefix: str, symbols: list, coords: list, fin
 # -------------------------
 def write_extrapolations(out_path: Path, extrap: Dict[str, Any]):
     """
-    Write a small extrapolation summary table to the given path (appends).
+    Write a small extrapolation summary table to the given path (overwrites).
     extrap is a dict like:
       {'a_corr': 0.123, 'b_hf': 0.456, 'E_hf_cbs': -76.1, 'E_corr_cbs': -0.05}
+
+    NOTE: This function now writes a compact key,value table only (no extra
+    heading lines), to make the output easier to parse/merge.
     """
     out_path = Path(out_path)
-    with open(out_path, "a") as fh:
-        fh.write("\nEXTRAPOLATION SUMMARY\n")
+    # Overwrite existing file and write simple CSV-like key,value pairs
+    with open(out_path, "w") as fh:
+        fh.write("key,value\n")
         for k, v in extrap.items():
-            fh.write(f"{k:20s} : {_format_generic(v)}\n")
+            fh.write(f"{k},{_format_generic(v)}\n")
     return out_path
 
 

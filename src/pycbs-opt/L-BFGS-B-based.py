@@ -61,12 +61,15 @@ CONFIG = {
     "LSQRMAXITER": 200,
 
     # Optimization (L-BFGS-B) options
-    "ENERGY_TOL": 1e-8,    # Hartree stopping criterion for CBS energy change
-    "X_TOL": 1e-4,         # step tolerance for internal coordinates
+    "ENERGY_TOL": 1e-8,  # Hartree stopping criterion for CBS energy change
+    "X_TOL": 1e-4,  # step tolerance for internal coordinates
     "LBFGSB_MAXITER": 200,
     "BOND_MIN_FACTOR": 0.5,  # lower bound for bond length relative to initial
     "BOND_MAX_FACTOR": 2.0,  # upper bound for bond length relative to initial
 }
+
+# module-level default spin (can be set via _update_config_from_params)
+DEFAULT_SPIN = 0
 
 
 # ---------------------
@@ -229,7 +232,6 @@ def internal_to_cartesian(initial_cart, internals, target_values, lsq_opts=None)
 # CBS composition
 # ---------------------
 def cbs_compose(corr_small, corr_big, scf_small, scf_big, cfg=CONFIG):
-
     X1 = cfg["X1_CORR"]
     X2 = cfg["X2_CORR"]
     X1_HF = cfg["X1_HF"]
@@ -264,7 +266,8 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
     mol.atom = [(symbols[i], tuple(coords[i].tolist())) for i in range(nat)]
     mol.basis = basis
     mol.charge = 0
-    mol.spin = 0
+    # Set spin from module-level default (can be changed by _update_config_from_params)
+    mol.spin = int(DEFAULT_SPIN)
     mol.build()
 
     mol.max_memory = CONFIG["PYSCF_MAX_MEMORY"]
@@ -449,7 +452,8 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
 # Helper to update CONFIG from params
 # ---------------------
 def _update_config_from_params(params):
-    # params keys: X1, X2, X1hf, X2hf, beta, basis1, basis2, pyscf_threads, pyscf_max_memory
+    # params keys: X1, X2, X1hf, X2hf, beta, basis1, basis2, pyscf_threads, pyscf_max_memory, spin
+    global DEFAULT_SPIN
     if params is None:
         return
     try:
@@ -472,6 +476,9 @@ def _update_config_from_params(params):
         # basis sets overrides
         if params.get("basis1") and params.get("basis2"):
             CONFIG["BASIS_SETS"] = (params["basis1"], params["basis2"])
+        # spin override
+        if "spin" in params:
+            DEFAULT_SPIN = int(params["spin"])
     except Exception:
         # non-fatal; ignore invalid values (opt_cli should normalize)
         pass
@@ -509,11 +516,13 @@ def run_optimization(params: dict, outputs_dir: Path):
     final_energy = float(res["final_energy"])
     history = res.get("history", [])
 
-    prefix = "LBFGS"
+    base = Path(input_xyz).stem
+    prefix = f"{base}_LBFGS"
     cycles_file = write_cycle_energies(outputs_dir, prefix, history)
     xyz_file = write_final_xyz(outputs_dir, prefix, symbols, final_cart, final_energy)
 
-    return {"history": history, "final_energy": final_energy, "final_cart": final_cart, "symbols": symbols, "outputs": {"cycles": str(cycles_file), "xyz": str(xyz_file)}, "opt_result": res.get("opt_result")}
+    return {"history": history, "final_energy": final_energy, "final_cart": final_cart, "symbols": symbols,
+            "outputs": {"cycles": str(cycles_file), "xyz": str(xyz_file)}, "opt_result": res}
 
 
 # ---------------------
@@ -530,6 +539,7 @@ def _cli_main():
     parser.add_argument("--X1hf", type=float, default=None)
     parser.add_argument("--X2hf", type=float, default=None)
     parser.add_argument("--beta", type=float, default=None)
+    parser.add_argument("--spin", type=int, default=0)
     args = parser.parse_args()
 
     params = {
@@ -541,11 +551,13 @@ def _cli_main():
         "X1hf": args.X1hf,
         "X2hf": args.X2hf,
         "beta": args.beta,
+        "spin": args.spin,
     }
     outputs_dir = Path.cwd() / "PyCBS-OUTPUTS"
     result = run_optimization(params, outputs_dir)
     # also write the final single-file xyz from this CLI flag
-    write_xyz(args.output, result["symbols"], result["final_cart"], comment=f"CBS opt energy {result['final_energy']:.10f} Ha")
+    write_xyz(args.output, result["symbols"], result["final_cart"],
+              comment=f"CBS opt energy {result['final_energy']:.10f} Ha")
     print("Optimization finished. Final CBS energy (Ha):", result["final_energy"])
     print("Wrote optimized geometry to:", args.output)
     print("Cycle energies and final XYZ written to:", outputs_dir)

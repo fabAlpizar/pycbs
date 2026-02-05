@@ -7,7 +7,7 @@ import logging
 import sys
 import traceback
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 import importlib.util
 
 logger = logging.getLogger(__name__)
@@ -58,21 +58,29 @@ def unique_path(path: Path) -> Path:
         i += 1
 
 
-def load_params_from_ini(ini_path: Path) -> Dict[str, Any]:
+def load_params_from_ini(ini_path: Path) -> List[Dict[str, Any]]:
+    """
+    Read INI and return a list of param dicts (one per section).
+    If the file contains a single section it returns a list with a single dict.
+    Keys are lower-cased.
+    """
     cfg = configparser.ConfigParser()
     cfg.optionxform = str
     if not cfg.read(str(ini_path)):
         raise FileNotFoundError(f"Cannot read config file: {ini_path}")
 
-    if "OPTIMIZATION" in cfg:
-        section = "OPTIMIZATION"
-    elif cfg.sections():
-        section = cfg.sections()[0]
-    else:
+    sections = cfg.sections()
+    # If there are no explicit sections but defaults are present, use default_section
+    if not sections:
         section = cfg.default_section
+        raw = dict(cfg[section])
+        return [{k.lower(): v for k, v in raw.items()}]
 
-    raw = dict(cfg[section])
-    return {k.lower(): v for k, v in raw.items()}
+    params_list = []
+    for section in sections:
+        raw = dict(cfg[section])
+        params_list.append({k.lower(): v for k, v in raw.items()})
+    return params_list
 
 
 def prepare_options_from_params(params: Dict[str, Any]) -> Dict[str, Any]:
@@ -106,6 +114,8 @@ def prepare_options_from_params(params: Dict[str, Any]) -> Dict[str, Any]:
         "optimizer": optimizer,
         "input_xyz": params.get("input_xyz") or params.get("input") or params.get("geometry"),
         "output_dir": params.get("output_dir"),  # optional override
+        # Keep original params around for additional overrides (e.g. basis1/basis2, maxcycle, fac...)
+        "raw_params": params,
     }
 
 
@@ -164,7 +174,7 @@ def ensure_pycb_outputs(base_dir: Path | None) -> Path:
 
 def main():
     parser = argparse.ArgumentParser(description="pycbs optimizer CLI (select optimization pathway)")
-    parser.add_argument("config", help="INI-style configuration file describing the job")
+    parser.add_argument("config", help="INI-style configuration file describing the job(s)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
 
@@ -176,57 +186,85 @@ def main():
         sys.exit(2)
 
     try:
-        raw_params = load_params_from_ini(cfg_path)
-        params = prepare_options_from_params(raw_params)
-
-        pkg_dir = Path(__file__).resolve().parent
-        optimizer_name = params.get("optimizer", "lbfgs")
-        mod_name, mod_path = find_optimization_module(pkg_dir, optimizer_name)
-
-        mod = import_module_from_path(mod_name, mod_path)
-
-        # outputs directory: prefer config output_dir if provided, else project cwd
-        base_out = Path(params["output_dir"]) if params.get("output_dir") else Path.cwd()
-        outputs_dir = ensure_pycb_outputs(base_out)
-
-        # Standardized entry point expected: run_optimization(params: dict, outputs_dir: Path) -> dict
-        if not hasattr(mod, "run_optimization"):
-            # attempt to find 'main' or 'optimize' functions as fallbacks
-            if hasattr(mod, "main"):
-                # wrap into run_optimization by calling main with environment variables
-                def _fallback_run(params_in, out_dir):
-                    # create a minimal args replacement if script expects CLI; not recommended.
-                    return mod.main()
-                run_func = _fallback_run
-            elif hasattr(mod, "optimize") and callable(getattr(mod, "optimize")):
-                run_func = getattr(mod, "optimize")
-            else:
-                raise AttributeError(f"Selected optimizer module {mod_path} does not expose run_optimization(params, outputs_dir). Please update the module to provide that API.")
-        else:
-            run_func = getattr(mod, "run_optimization")
-
-        print(f"Using optimizer module: {mod_path}")
-        print("Starting optimization... outputs will be written to:", outputs_dir)
-
-        result = run_func(params, outputs_dir)
-
-        # result is expected to be a dict with keys: 'history' (list), 'final_xyz' or 'final_cart' and 'final_energy'
-        if isinstance(result, dict):
-            # basic reporting
-            hist = result.get("history")
-            fe = result.get("final_energy")
-            print("Optimization finished.")
-            if hist is not None:
-                print(f"Cycles performed: {len(hist)}")
-            if fe is not None:
-                print(f"Final CBS energy (Ha): {fe:.10f}")
-        else:
-            print("Optimizer returned no structured result (not a dict).")
-
+        raw_params_list = load_params_from_ini(cfg_path)
     except Exception as exc:
-        logger.error("Optimization failed: %s", exc)
-        traceback.print_exc()
+        print("Failed to read config:", exc, file=sys.stderr)
+        sys.exit(2)
+
+    failures = 0
+    pkg_dir = Path(__file__).resolve().parent
+
+    for job_idx, raw_params in enumerate(raw_params_list, start=1):
+        print(f"\n=== Starting job {job_idx}/{len(raw_params_list)} ===")
+        try:
+            prepared = prepare_options_from_params(raw_params)
+            params = prepared
+            # keep raw params merged so optimizer modules can read extra keys
+            params.update(prepared.get("raw_params", {}))
+            # ensure input exists
+            input_xyz = params.get("input_xyz")
+            if not input_xyz:
+                raise ValueError("No input_xyz specified for this job")
+
+            optimizer_name = params.get("optimizer", "lbfgs").strip().lower()
+            mod_name, mod_path = find_optimization_module(pkg_dir, optimizer_name)
+
+            mod = import_module_from_path(mod_name, mod_path)
+
+            # Determine outputs base directory per job (config can override)
+            base_out = Path(params["output_dir"]) if params.get("output_dir") else Path.cwd()
+            outputs_dir = ensure_pycb_outputs(base_out)
+
+            # Standardized entry point expected: run_optimization(params: dict, outputs_dir: Path) -> dict
+            if not hasattr(mod, "run_optimization"):
+                # attempt to find 'main' or 'optimize' functions as fallbacks
+                if hasattr(mod, "main"):
+                    # wrap into run_optimization by calling main with environment variables
+                    def _fallback_run(params_in, out_dir):
+                        # create a minimal args replacement if script expects CLI; not recommended.
+                        return mod.main()
+                    run_func = _fallback_run
+                elif hasattr(mod, "optimize") and callable(getattr(mod, "optimize")):
+                    run_func = getattr(mod, "optimize")
+                else:
+                    raise AttributeError(f"Selected optimizer module {mod_path} does not expose run_optimization(params, outputs_dir). Please update the module to provide that API.")
+            else:
+                run_func = getattr(mod, "run_optimization")
+
+            print(f"Using optimizer module: {mod_path}")
+            print("Starting optimization... outputs will be written to:", outputs_dir)
+
+            # ensure the optimizer receives spin and any raw params (we passed them via 'params')
+            result = run_func(params, outputs_dir)
+
+            # result is expected to be a dict with keys: 'history' (list), 'final_xyz' or 'final_cart' and 'final_energy'
+            if isinstance(result, dict):
+                # basic reporting
+                hist = result.get("history")
+                fe = result.get("final_energy")
+                print("Optimization finished.")
+                if hist is not None:
+                    print(f"Cycles performed: {len(hist)}")
+                if fe is not None:
+                    try:
+                        print(f"Final CBS energy (Ha): {fe:.10f}")
+                    except Exception:
+                        print(f"Final CBS energy: {fe}")
+            else:
+                print("Optimizer returned no structured result (not a dict).")
+        except Exception as exc:
+            failures += 1
+            logger.error("Optimization job failed: %s", exc)
+            traceback.print_exc()
+            print(f"Job {job_idx} failed; continuing to next job (if any).", file=sys.stderr)
+            continue
+
+    if failures:
+        print(f"\nCompleted with {failures} failed job(s).", file=sys.stderr)
         sys.exit(1)
+    else:
+        print("\nAll jobs completed successfully.")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
