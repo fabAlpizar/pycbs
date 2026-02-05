@@ -1,38 +1,27 @@
 #!/usr/bin/env python3
 """
-SQM-based optimizer module (geomeTRIC-backed implementation)
+SQM-based optimizer module (no geomeTRIC; robust RIC manager + 3-point fit)
 
-This variant uses geomeTRIC's PrimitiveInternalCoordinates when available
-and falls back to a geometry-derived redundant internal set (bonds/angles/dihedrals)
-if geomeTRIC does not expose usable internals for the provided Molecule.
-
-Enhancements in this version:
- - Best-improvement subiterations per cycle (evaluate all internals, apply only the single best improvement).
- - ENERGY_ACCEPT_TOL and MIN_CURVATURE thresholds (reject tiny/noisy moves).
- - Per-evaluation diagnostics: SCF convergence checks, numeric gradient & curvature prints,
-   predicted vs actual internal values, candidate selection debug prints.
- - A `debug` flag can be set in params to increase terminal output.
+Features:
+ - Robust geometry-derived redundant internal coordinates (bonds / angles / dihedrals).
+ - 3-point parabolic fit per-internal (points: -h, 0, +h).
+ - Best-improvement subiterations: evaluate all internals, apply only the single best validated improvement,
+   and repeat until no acceptable candidate remains.
+ - Validation: predicted parabolic minimum is converted to Cartesian, its true CBS energy is computed,
+   and acceptance is only performed if the **evaluated** energy at that geometry improves sufficiently.
+ - ENERGY_ACCEPT_TOL and MIN_CURVATURE thresholds to reject tiny/noisy moves.
+ - Per-cycle debug summary printing all applied changes and final status.
+ - Compatible with your existing `pycbs.writer.write_cycle_energies` and `write_final_xyz`.
 """
 
 from pathlib import Path
 import math
 import sys
-from functools import lru_cache
 import traceback
+from functools import lru_cache
 
 import numpy as np
 from pycbs.writer import write_cycle_energies, write_final_xyz
-
-
-
-
-# Require geomeTRIC's geometric module (we handle if import fails later)
-try:
-    from geometric.internal import PrimitiveInternalCoordinates
-except Exception as e:
-    raise ImportError("This SQM implementation requires the 'geometric' package "
-                      "and specifically PrimitiveInternalCoordinates from "
-                      "geometric.internal. Install geometric/geomeTRIC and retry.") from e
 
 # PySCF imports (deferred errors if not installed)
 try:
@@ -73,7 +62,6 @@ COVALENT_RADII = {
 DEFAULT_COV_RAD = 0.77  # fallback if element not in dict
 
 DEFAULT_SPIN = 0
-
 
 # -------------------------
 # I/O / geometry helpers
@@ -148,7 +136,7 @@ def _label_internal(kind: str, inds: tuple[int, ...], atoms: list[str]) -> str:
 
 
 # -------------------------
-# Geometry-derived internals fallback
+# Geometry-derived internals (robust RIC manager)
 # -------------------------
 def _covalent_radius(elem: str) -> float:
     return COVALENT_RADII.get(elem, DEFAULT_COV_RAD)
@@ -156,10 +144,10 @@ def _covalent_radius(elem: str) -> float:
 
 def generate_internals_from_geometry(atoms: list[str], coords: np.ndarray, scale: float = 1.2):
     """
-    Build a simple redundant internal set from geometry:
-      - bonds: distance < scale * (rcov_i + rcov_j)
-      - angles: any triplet i - j - k where i and k are bonded to j (i < k to avoid duplicates)
-      - dihedrals: any quadruplet i - j - k - l where i bonded to j, j bonded k, k bonded l
+    Build a redundant internal set from geometry:
+      - bonds: distance <= scale * (rcov_i + rcov_j)
+      - angles: i-j-k where i and k bonded to j (i < k to avoid duplicates)
+      - dihedrals: i-j-k-l where chain of bonds exists
     Returns list of dicts {'type','inds','value'} with zero-based indices.
     """
     nat = len(atoms)
@@ -170,6 +158,7 @@ def generate_internals_from_geometry(atoms: list[str], coords: np.ndarray, scale
             ri = _covalent_radius(atoms[i])
             rj = _covalent_radius(atoms[j])
             cutoff = scale * (ri + rj)
+            # ignore extremely short distances (< 0.2 Å) as suspect
             if 0.2 < dmat[i, j] <= cutoff:
                 bonds.add((i, j))
     bonds = sorted(bonds)
@@ -206,12 +195,10 @@ def generate_internals_from_geometry(atoms: list[str], coords: np.ndarray, scale
             for i in bond_neighbors.get(j, []):
                 if i == k:
                     continue
-                # i - j - k, now extend k to l
                 for l in bond_neighbors.get(k, []):
                     if l == j:
                         continue
                     inds = (i, j, k, l)
-                    # canonical ordering to avoid duplicates
                     if inds not in diheds:
                         diheds.add(inds)
                         val = _dihedral_deg(coords[i], coords[j], coords[k], coords[l])
@@ -219,264 +206,6 @@ def generate_internals_from_geometry(atoms: list[str], coords: np.ndarray, scale
 
     if not out:
         raise RuntimeError("Fallback geometry-based internals generation produced no internals (geometry suspicious).")
-    return out
-
-
-# -------------------------
-# geomeTRIC PrimitiveInternalCoordinates integration (robust)
-# -------------------------
-def _is_sequence_of_ints(x):
-    try:
-        if isinstance(x, (list, tuple)):
-            return all(isinstance(i, (int, np.integer)) for i in x)
-        if isinstance(x, np.ndarray) and x.ndim == 1:
-            return np.issubdtype(x.dtype, np.integer)
-        return False
-    except Exception:
-        return False
-
-
-def _extract_indices_from_obj(obj):
-    # Try many plausible attribute names that may contain atom indices
-    for attr in ('indices', 'atoms', 'atoms_idx', 'atom_indices', 'atom_ids', 'atom_idxs', 'idx', 'i', 'a'):
-        if hasattr(obj, attr):
-            val = getattr(obj, attr)
-            if isinstance(val, (list, tuple, np.ndarray)):
-                return tuple(int(x) for x in np.asarray(val).reshape(-1))
-    # If object is a simple container (like numpy array)
-    if isinstance(obj, (list, tuple, np.ndarray)):
-        try:
-            return tuple(int(x) for x in list(obj))
-        except Exception:
-            pass
-    return None
-
-
-def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
-    """
-    Build RICs strictly using geomeTRIC's PrimitiveInternalCoordinates if possible,
-    otherwise fallback to geometry-derived internals.
-    Returns list of dicts: {'type': 'bond'|'angle'|'dihedral', 'inds': tuple(indices), 'value': float}
-    where indices are zero-based integers.
-    """
-    pic = None
-    tried = []
-
-    # Preferred: construct a geomeTRIC Molecule object if available.
-    try:
-        from geometric.molecule import Molecule as GeometricMolecule
-
-        gm = GeometricMolecule()
-        gm.Data = {
-            "resname": ["UNK"] * len(atoms),
-            "resid": [0] * len(atoms),
-            "elem": list(atoms),
-            "bonds": [],
-            "name": "pycbs_tmp",
-            # geomeTRIC expects a list of frames; supply one frame (Angstroms)
-            "xyzs": [coords.tolist()]
-        }
-        pic = PrimitiveInternalCoordinates(gm)
-    except Exception as exc_gm:
-        tried.append((("GeometricMolecule",), exc_gm))
-        pic = None
-
-    # If we didn't get a pic yet, try several plausible constructor signatures
-    if pic is None:
-        for args in (
-            (atoms, coords.tolist()),
-            (atoms, coords),
-            (coords.tolist(), atoms),
-            (coords, atoms),
-        ):
-            try:
-                pic = PrimitiveInternalCoordinates(*args)
-                break
-            except Exception as exc:
-                tried.append((args, exc))
-                pic = None
-
-    if pic is None:
-        msg = "Failed to instantiate PrimitiveInternalCoordinates with tried signatures.\n"
-        for args, exc in tried:
-            msg += f" Tried args={args!r} -> {type(exc).__name__}: {exc}\n"
-        # Rather than aborting outright, try a geometry fallback
-        # print diagnostic and proceed to fallback
-        print(msg)
-        print("Proceeding with geometry-derived internals fallback.")
-        return generate_internals_from_geometry(atoms, coords)
-
-    # Now attempt to extract the internal list.
-    raw_ints = None
-
-    # Try well-known attribute/method names first
-    for name in ("intcos", "internals", "primitive_internals", "intcos_list", "internallist", "prims", "primitives"):
-        if hasattr(pic, name):
-            raw_ints = getattr(pic, name)
-            if callable(raw_ints):
-                try:
-                    raw_ints = raw_ints()
-                except Exception:
-                    pass
-            break
-
-    if raw_ints is None:
-        for meth in ("get_internals", "get_intcos", "get_primitive_internals", "as_intcos", "to_intcos"):
-            if hasattr(pic, meth) and callable(getattr(pic, meth)):
-                try:
-                    raw_ints = getattr(pic, meth)()
-                except Exception:
-                    raw_ints = None
-                if raw_ints is not None:
-                    break
-
-    # If still not found: inspect public attributes and pick the first attribute that looks like internals
-    if raw_ints is None:
-        candidates = []
-        for attr in sorted(set(dir(pic))):
-            if attr.startswith('_'):
-                continue
-            try:
-                val = getattr(pic, attr)
-            except Exception:
-                continue
-            # list/tuple candidate
-            if isinstance(val, (list, tuple, np.ndarray)) and len(val) > 0:
-                first = val[0]
-                # case: sequence of integer-index sequences or 2D int ndarray
-                if isinstance(first, (list, tuple)) and all(isinstance(ii, (int, np.integer)) for ii in first):
-                    candidates.append((attr, val))
-                    continue
-                if isinstance(val, np.ndarray) and val.ndim == 2 and np.issubdtype(val.dtype, np.integer):
-                    candidates.append((attr, val))
-                    continue
-                # case: list of objects that probably wrap indices (have .indices/.atoms)
-                if hasattr(first, "indices") or hasattr(first, "atoms") or hasattr(first, "atoms_idx") or hasattr(first, "type") or hasattr(first, "kind"):
-                    candidates.append((attr, val))
-                    continue
-            # also consider single objects that are array-like
-            if hasattr(val, "__len__") and not isinstance(val, (str, bytes)) and len(val) > 0:
-                try:
-                    first = val[0]
-                    if isinstance(first, (list, tuple)) and all(isinstance(ii, (int, np.integer)) for ii in first):
-                        candidates.append((attr, val))
-                except Exception:
-                    pass
-        if candidates:
-            # prefer those with ndarray 2D integer arrays or direct sequence of int-tuples
-            chosen_attr, chosen_val = None, None
-            for attr, val in candidates:
-                if isinstance(val, np.ndarray) and val.ndim == 2 and np.issubdtype(val.dtype, np.integer):
-                    chosen_attr, chosen_val = attr, val
-                    break
-            if chosen_attr is None:
-                chosen_attr, chosen_val = candidates[0]
-            raw_ints = chosen_val
-            # Diagnostic print so you know which attribute was chosen
-            print(f"Warning: PrimitiveInternalCoordinates did not expose a standard attribute; "
-                  f"using '{chosen_attr}' (type={type(chosen_val).__name__}) as internals candidate.")
-
-    if raw_ints is None:
-        # No candidate found: fallback to geometry
-        print("PrimitiveInternalCoordinates did not expose any suitable internals attribute.")
-        print("Proceeding with geometry-derived internals fallback.")
-        return generate_internals_from_geometry(atoms, coords)
-
-    # Normalize raw_ints entries into a canonical format
-    out = []
-    for r in raw_ints:
-        # Possibilities:
-        # - r is a tuple/list of ints -> infer type by length
-        # - r is (type_str, indices)
-        # - r is an object with attributes .type and .atoms or .indices
-        try:
-            # numpy 2D array row -> convert
-            if isinstance(r, np.ndarray) and r.ndim == 1 and np.issubdtype(r.dtype, np.integer):
-                inds = tuple(int(x) for x in r.tolist())
-                if len(inds) == 2:
-                    tp = "bond"
-                elif len(inds) == 3:
-                    tp = "angle"
-                elif len(inds) == 4:
-                    tp = "dihedral"
-                else:
-                    continue
-                val = _value_for_internal(tp, inds, coords)
-                out.append({"type": tp, "inds": inds, "value": val})
-                continue
-        except Exception:
-            pass
-
-        try:
-            if isinstance(r, (list, tuple)) and all(isinstance(x, (int, np.integer)) for x in r):
-                inds = tuple(int(x) for x in r)
-                if len(inds) == 2:
-                    tp = "bond"
-                elif len(inds) == 3:
-                    tp = "angle"
-                elif len(inds) == 4:
-                    tp = "dihedral"
-                else:
-                    continue
-                val = _value_for_internal(tp, inds, coords)
-                out.append({"type": tp, "inds": inds, "value": val})
-                continue
-        except Exception:
-            pass
-
-        # If r is a pair like ('bond', (i,j))
-        try:
-            if isinstance(r, (list, tuple)) and len(r) >= 2 and isinstance(r[0], str):
-                tp = str(r[0]).lower()
-                inds_cand = r[1]
-                if isinstance(inds_cand, (list, tuple, np.ndarray)):
-                    inds = tuple(int(x) for x in np.asarray(inds_cand).reshape(-1))
-                    val = _value_for_internal(tp, inds, coords)
-                    out.append({"type": tp, "inds": inds, "value": val})
-                    continue
-        except Exception:
-            pass
-
-        # If r is an object with attributes
-        try:
-            tp_attr = getattr(r, "type", None) or getattr(r, "kind", None) or getattr(r, "label", None)
-            idx = _extract_indices_from_obj(r)
-            if tp_attr and idx is not None:
-                tp = str(tp_attr).lower()
-                inds = tuple(int(x) for x in idx)
-                val = _value_for_internal(tp, inds, coords)
-                out.append({"type": tp, "inds": inds, "value": val})
-                continue
-        except Exception:
-            pass
-
-        # If r is an object representing indices under some attribute name
-        try:
-            idx = _extract_indices_from_obj(r)
-            if idx is not None:
-                inds = tuple(int(x) for x in idx)
-                if len(inds) == 2:
-                    tp = "bond"
-                elif len(inds) == 3:
-                    tp = "angle"
-                elif len(inds) == 4:
-                    tp = "dihedral"
-                else:
-                    continue
-                val = _value_for_internal(tp, inds, coords)
-                out.append({"type": tp, "inds": inds, "value": val})
-                continue
-        except Exception:
-            pass
-
-        # If none matched, skip (but keep strict behavior)
-        raise RuntimeError(f"Unrecognized internal coordinate entry from geometric: {r!r}")
-
-    if not out:
-        # geomeTRIC returned an empty list or we couldn't normalize: fallback
-        print("geometric returned an empty list of internals; using geometry-derived fallback.")
-        return generate_internals_from_geometry(atoms, coords)
-
     return out
 
 
@@ -510,8 +239,7 @@ def apply_angle_change(coords, i, j, k, new_angle_deg):
     ri = p[i] - p[j]
     rk = p[k] - p[j]
     cur_angle = _angle_deg(p[i], p[j], p[k])
-    target = new_angle_deg
-    dtheta = math.radians(target - cur_angle)
+    dtheta = math.radians(new_angle_deg - cur_angle)
     axis = np.cross(ri, rk)
     if np.linalg.norm(axis) < 1e-8:
         axis = np.cross(ri, np.array([1.0, 0.0, 0.0]))
@@ -545,6 +273,10 @@ def apply_dihedral_change(coords, i, j, k, l, new_dihedral_deg):
 # -------------------------
 @lru_cache(maxsize=2000)
 def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str, spin: int):
+    """
+    Calculate CBS energy using two basis sets (bs1, bs2) and extrapolation coefficients
+    a_corr, b_hf. Raises on SCF failure (so the caller treats that displacement as invalid).
+    """
     scf_vals = []
     corr_vals = []
     for basis in (bs1, bs2):
@@ -563,7 +295,7 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
         mf.max_cycle = 100
         scf_energy = mf.kernel()
 
-        # Check SCF convergence; if not converged, raise so caller treats evaluation as failed
+        # check convergence
         scf_converged = getattr(mf, "converged", True)
         if not scf_converged:
             raise RuntimeError("SCF failed to converge for this geometry (mf.converged is False)")
@@ -582,6 +314,7 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
                 corr_energy = mycc.e_tot - scf_energy + (et if et is not None else 0.0)
             except Exception:
                 corr_energy = None
+
         if corr_energy is None and method.upper().startswith('MP2'):
             try:
                 mymp = mp.MP2(mf)
@@ -601,7 +334,7 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
                 corr_energy = None
 
         if corr_energy is None:
-            # try to fallback to MP2 if CCSD(T) failed
+            # final fallback to MP2 if CCSD(T) failed
             try:
                 mymp = mp.MP2(mf)
                 mymp.max_memory = 14330
@@ -632,16 +365,21 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
 
 
 def compute_cbs_energy_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str, spin: int):
+    # thin wrapper for readability
     return _compute_cbs_from_xyz_cached(xyz_string, method, a_corr, b_hf, bs1, bs2, int(spin))
 
 
 # -------------------------
-# Parabolic helper
+# 3-point parabolic helper (robust)
 # -------------------------
-def parabolic_minimum(x, y):
+def parabolic_minimum_3pt(x, y):
+    """
+    Fit quadratic using three points (x0,x1,x2) and return x_min, y_min.
+    If fit fails, return the sampled best.
+    """
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
-    if x.size < 3 or y.size < 3:
+    if x.size != 3 or y.size != 3:
         idx = np.argmin(y)
         return float(x[idx]), float(y[idx])
     try:
@@ -659,22 +397,19 @@ def parabolic_minimum(x, y):
 
 
 # -------------------------
-# Main optimization loop (SQM-style)
+# Main optimization loop (SQM-style) — no geomeTRIC
 # -------------------------
 def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DEFAULT, fac_mult=FAC_DEFAULT,
                       x1=X1_DEFAULT, x2=X2_DEFAULT, x1_hf=X1HF_DEFAULT, x2_hf=X2HF_DEFAULT, beta=BETA_DEFAULT,
-                      basis_pair=None, spin: int = 0, debug: bool = False):
+                      basis_pair=None, spin: int = 0, debug: bool = False, energy_accept_tol: float | None = None):
     """
-    Strictly geomeTRIC-backed SQM-style optimizer with best-improvement subiterations.
-    Returns atoms, final_coords, history(list), converged(bool), baseline_labels, internals_trace
+    SQM-style optimizer using geometry-only RIC manager and 3-point fitting.
 
-    debug: when True, prints detailed diagnostics for each internal evaluation.
+    Returns atoms, final_coords, history(list of dicts), converged(bool), baseline_labels, internals_trace
     """
-    # acceptance / diagnostics thresholds (local)
-    ENERGY_ACCEPT_TOL = 1e-6  # Ha (per-move acceptance)
-    MIN_CURVATURE = 1e-10     # minimal convex curvature required
-    # numeric gradient print thresholds (for developer visibility)
-    GRAD_PRINT_THRESHOLD = 1e-9
+    # acceptance / diagnostics thresholds (local defaults)
+    ENERGY_ACCEPT_TOL = 1e-6 if energy_accept_tol is None else float(energy_accept_tol)  # Ha
+    MIN_CURVATURE = 1e-10     # very small positive floor to avoid numerical instabilities
 
     a_corr = (x1 ** 3) / (x2 ** 3 - x1 ** 3)
     denom = math.exp(beta * x2_hf) - math.exp(beta * x1_hf)
@@ -686,17 +421,17 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         basis_pair = (basis_sets[0], basis_sets[1])
     bs1, bs2 = basis_pair
 
-    # Obtain canonical baseline internals using geomeTRIC (or fallback)
-    baseline = build_redundant_internals_geometric(atoms, coords)
-    if not baseline:
-        raise RuntimeError("No internals extracted by geometric or fallback; aborting.")
+    # Build baseline internals (canonical labels)
+    baseline_internals = generate_internals_from_geometry(atoms, coords)
+    if not baseline_internals:
+        raise RuntimeError("No internal coordinates found; check input geometry.")
 
-    baseline_labels = [_label_internal(ic['type'], ic['inds'], atoms) for ic in baseline]
-    baseline_kinds = [ic['type'] for ic in baseline]
-    baseline_inds = [ic['inds'] for ic in baseline]
+    baseline_labels = [_label_internal(ic['type'], ic['inds'], atoms) for ic in baseline_internals]
+    baseline_inds = [ic['inds'] for ic in baseline_internals]
+    baseline_types = [ic['type'] for ic in baseline_internals]
 
-    # Working internals (will be refreshed after geometry updates by re-calling geometric/fallback)
-    internals = [dict(ic) for ic in baseline]
+    # Working internals (will be rebuilt after geometry changes)
+    internals = [dict(ic) for ic in baseline_internals]
 
     current_coords = coords.copy()
     displacement_factor = fac_mult
@@ -705,11 +440,10 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
 
     internals_trace = []
     # cycle 0 initial values
-    init_map = {
-        lbl: _value_for_internal(tp, inds, current_coords)
-        for lbl, tp, inds in zip(baseline_labels, baseline_kinds, baseline_inds)
-    }
-    internals_trace.append(init_map)
+    init_vals = {}
+    for lbl, tp, inds in zip(baseline_labels, baseline_types, baseline_inds):
+        init_vals[lbl] = _value_for_internal(tp, inds, current_coords)
+    internals_trace.append(init_vals)
 
     try:
         _compute_cbs_from_xyz_cached.cache_clear()
@@ -717,39 +451,38 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         pass
 
     for cycle in range(1, maxcycle + 1):
+        # compute current energy from the actual geometry
         cur_xyz = xyz_to_pyscf_string(atoms, current_coords)
         try:
             current_energy = compute_cbs_energy_from_xyz_cached(cur_xyz, method, a_corr, b_hf, bs1, bs2, spin)
         except Exception as e:
             raise RuntimeError(f"CBS evaluation at cycle start failed: {e}")
 
+        applied_changes = []  # collect per-cycle change summaries for debug printing
+
         if debug:
             print(f"\n>>> Cycle {cycle}/{maxcycle}, displacement_factor={displacement_factor:.6f}, current E = {current_energy:.10f} Ha")
         else:
             print(f"\n>>> Cycle {cycle}/{maxcycle}, displacement_factor={displacement_factor:.6f}, current E = {current_energy:.10f} Ha")
 
-        # -----------------------
-        # Best-improvement subiteration:
-        # evaluate ALL internals (but DO NOT apply), pick and APPLY the single best improvement,
-        # repeat until no acceptable candidate remains.
-        # -----------------------
-        applied_any = False
+        # Best-improvement subiteration loop
         while True:
-            best_candidate = None  # tuple (deltaE, e_min, best_coords, ic, x_min_disp, curvature, grad0)
-            # Evaluate every internal but do NOT apply them yet
+            best_candidate = None  # (deltaE, predicted_xmin, coords_at_xmin, ic, curvature, grad0, sampled_best_val, sampled_best_coords)
             for ic in internals:
                 tp = ic['type']; inds = ic['inds']
-                # build displacements ds
+                # displacement magnitude for 3-point: ±h around current internal value
                 if tp == 'bond':
                     base = ic.get('value', _value_for_internal(tp, inds, current_coords))
-                    ds = np.array([-2*displacement_factor*base, -1*displacement_factor*base, 0.0,
-                                   1*displacement_factor*base, 2*displacement_factor*base], dtype=float)
+                    h = displacement_factor * base
+                    ds = np.array([-h, 0.0, h], dtype=float)
                 elif tp in ('angle', 'dihedral'):
                     base = ic.get('value', _value_for_internal(tp, inds, current_coords))
-                    ddeg = 2.0 * (displacement_factor * 100.0)
-                    ds = np.array([-2*ddeg, -1*ddeg, 0.0, 1*ddeg, 2*ddeg], dtype=float)
+                    # angle step uses degrees; scale displacement_factor up as before
+                    h = 2.0 * (displacement_factor * 100.0)  # this mirrors previous magnitude heuristic
+                    ds = np.array([-h, 0.0, h], dtype=float)
                 else:
                     ds = np.array([0.0])
+                    h = 0.0
 
                 es = []
                 coords_list = []
@@ -757,15 +490,15 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                 for d in ds:
                     try:
                         if tp == 'bond':
-                            i,j = inds
+                            i, j = inds
                             new_val = ic.get('value', _value_for_internal(tp, inds, current_coords)) + d
                             new_coords = apply_bond_change(current_coords, i, j, new_val, atoms)
                         elif tp == 'angle':
-                            i,j,k = inds
+                            i, j, k = inds
                             new_val = ic.get('value', _value_for_internal(tp, inds, current_coords)) + d
                             new_coords = apply_angle_change(current_coords, i, j, k, new_val)
                         elif tp == 'dihedral':
-                            i,j,k,l = inds
+                            i, j, k, l = inds
                             new_val = ic.get('value', _value_for_internal(tp, inds, current_coords)) + d
                             new_coords = apply_dihedral_change(current_coords, i, j, k, l, new_val)
                         else:
@@ -774,7 +507,6 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                         E = compute_cbs_energy_from_xyz_cached(xyzs, method, a_corr, b_hf, bs1, bs2, spin)
                         es.append(float(E)); coords_list.append(new_coords)
                     except Exception as exc:
-                        # mark failed evaluations with inf and continue; we will skip if all fail
                         es.append(float('inf')); coords_list.append(None)
                         scf_failed_any = True
                         if debug:
@@ -786,104 +518,154 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                         print(f"  All evaluations failed for IC {tp} {inds}; skipping")
                     continue
 
-                # parabolic fit
-                x_min_disp, e_min = parabolic_minimum(ds, es)
+                # parabolic fit using three points
+                x_min_disp, e_min = parabolic_minimum_3pt(ds, es)
                 idx_best = int(np.nanargmin(es))
-                best_coords = coords_list[idx_best]
+                sampled_best_coords = coords_list[idx_best]
+                sampled_best_energy = float(es[idx_best]) if not np.isinf(es[idx_best]) else None
 
-                # numeric curvature & gradient check (centered finite differences)
-                curvature = None
+                # numeric gradient and curvature (central finite difference with 3 points)
                 grad0 = None
+                curvature = None
                 try:
-                    # find index of zero displacement (exact match)
-                    idx0 = int(np.where(np.isclose(ds, 0.0))[0][0])
-                    # ensure we have neighbors for central diff
-                    if idx0 - 1 >= 0 and idx0 + 1 < len(es):
-                        Eminus = es[idx0-1]; E0 = es[idx0]; Eplus = es[idx0+1]
-                        h = ds[idx0+1] - ds[idx0]
-                        grad0 = (Eplus - Eminus) / (2.0 * h)
-                        curvature = (Eplus + Eminus - 2.0 * E0) / (h * h)
+                    Eminus = es[0]; E0 = es[1]; Eplus = es[2]
+                    grad0 = (Eplus - Eminus) / (2.0 * (ds[2] - ds[1]))  # central slope
+                    curvature = (Eplus + Eminus - 2.0 * E0) / ((ds[2] - ds[1]) ** 2)
                 except Exception:
                     grad0 = None
                     curvature = None
 
-                # candidate delta relative to current_energy
-                deltaE = current_energy - e_min  # positive => improvement
+                # candidate improvement relative to current_energy
+                deltaE_pred = current_energy - e_min  # positive => predicted improvement
 
-                # debug prints for this internal's sampling and numeric checks
                 if debug:
                     cur_val = ic.get('value', _value_for_internal(tp, inds, current_coords))
                     pred_val = cur_val + x_min_disp
                     sampled_best_val = None
                     try:
-                        sampled_best_val = _value_for_internal(tp, inds, coords_list[idx_best]) if coords_list[idx_best] is not None else None
+                        sampled_best_val = _value_for_internal(tp, inds, sampled_best_coords) if sampled_best_coords is not None else None
                     except Exception:
                         sampled_best_val = None
-                    print(f"  IC {tp} {inds}: cur={cur_val:.6f}, ds=[{', '.join(f'{x:.4g}' for x in ds)}], "
-                          f"E_samples=[{', '.join(f'{e:.6f}' for e in es)}], x_min_disp={x_min_disp:.6f}, e_min={e_min:.10f}")
+                    print(f"  IC {tp} {inds}: cur={cur_val:.6f}, ds=[{ds[0]:.4g}, 0, {ds[2]:.4g}], "
+                          f"E_samples=[{es[0]:.6f}, {es[1]:.6f}, {es[2]:.6f}], x_min_disp={x_min_disp:.6f}, e_min={e_min:.10f}")
                     if grad0 is not None:
-                        print(f"    numeric grad @0 = {grad0:.3e} Ha/unit, curvature = {curvature:.3e} Ha/unit^2")
-                    else:
-                        print("    numeric grad/curvature not available (insufficient sampling)")
-
+                        print(f"    numeric grad @0 = {grad0:.3e}, curvature = {curvature:.3e}")
                     if sampled_best_val is not None:
-                        print(f"    predicted new internal value (from x_min_disp) = {pred_val:.6f}, best sampled internal value = {sampled_best_val:.6f}")
+                        print(f"    predicted internal (pred_val) = {pred_val:.6f}, best sampled internal = {sampled_best_val:.6f}")
                     if scf_failed_any:
-                        print("    NOTE: some SCF evaluations failed for this IC sampling (see above)")
+                        print("    NOTE: some SCF evaluations failed for this IC sampling")
 
-                # selection criterion: convex parabolic fit, sufficient improvement, and best delta
-                if best_coords is not None and curvature is not None and curvature > MIN_CURVATURE and deltaE > ENERGY_ACCEPT_TOL:
-                    if best_candidate is None or deltaE > best_candidate[0]:
-                        best_candidate = (deltaE, e_min, best_coords, ic, x_min_disp, curvature, grad0)
+                # Selection criteria: require convex curvature, predicted improvement above tolerance
+                if curvature is not None and curvature > MIN_CURVATURE and deltaE_pred > ENERGY_ACCEPT_TOL:
+                    # We will attempt to validate — produce coordinates at predicted minimum (if inside bracket)
+                    # Only accept if validation evaluation yields improvement (evaluate true energy at predicted coords)
+                    # Build coords at predicted minimum
+                    coords_at_pred = None
+                    try:
+                        # produce coords applying predicted displacement
+                        if tp == 'bond':
+                            i, j = inds
+                            coords_at_pred = apply_bond_change(current_coords, i, j, ic.get('value', _value_for_internal(tp, inds, current_coords)) + x_min_disp, atoms)
+                        elif tp == 'angle':
+                            i, j, k = inds
+                            coords_at_pred = apply_angle_change(current_coords, i, j, k, ic.get('value', _value_for_internal(tp, inds, current_coords)) + x_min_disp)
+                        elif tp == 'dihedral':
+                            i, j, k, l = inds
+                            coords_at_pred = apply_dihedral_change(current_coords, i, j, k, l, ic.get('value', _value_for_internal(tp, inds, current_coords)) + x_min_disp)
+                        else:
+                            coords_at_pred = current_coords.copy()
 
-            # end for internals: apply best candidate if exists
+                        xyz_pred = xyz_to_pyscf_string(atoms, coords_at_pred)
+                        E_pred_true = compute_cbs_energy_from_xyz_cached(xyz_pred, method, a_corr, b_hf, bs1, bs2, spin)
+                        deltaE_pred_true = current_energy - float(E_pred_true)
+                    except Exception:
+                        # predicted geometry evaluation failed (SCF or correlation); fall back to sampled best candidate instead
+                        E_pred_true = float('inf')
+                        deltaE_pred_true = -1.0
+
+                    # If predicted true energy is acceptable, candidate becomes this predicted geometry
+                    if E_pred_true != float('inf') and deltaE_pred_true > ENERGY_ACCEPT_TOL:
+                        # choose predicted coords as candidate
+                        if best_candidate is None or deltaE_pred_true > best_candidate[0]:
+                            best_candidate = (deltaE_pred_true, x_min_disp, coords_at_pred, ic, curvature, grad0, sampled_best_energy, sampled_best_coords, 'predicted')
+                    else:
+                        # fallback: consider sampled best point (must also improve actual energy)
+                        if sampled_best_energy is not None and (current_energy - sampled_best_energy) > ENERGY_ACCEPT_TOL:
+                            if best_candidate is None or (current_energy - sampled_best_energy) > best_candidate[0]:
+                                best_candidate = ((current_energy - sampled_best_energy), ds[idx_best], sampled_best_coords, ic, curvature, grad0, sampled_best_energy, sampled_best_coords, 'sampled')
+
+            # end for internals
+
             if best_candidate is None:
                 if debug:
                     print("  No acceptable candidate found in this subiteration.")
-                break  # nothing worthwhile to apply
-            # apply the best candidate
-            deltaE, e_min, best_coords, chosen_ic, x_min_disp, curvature, grad0 = best_candidate
-            # final diagnostic before apply
-            if debug:
-                print(f"  Applying best IC {chosen_ic['type']} {chosen_ic['inds']}: ΔE = {deltaE:.3e} Ha, curvature={curvature:.3e}, grad0={grad0}")
-            else:
-                print(f"  Applied best IC {chosen_ic['type']} {chosen_ic['inds']}: ΔE = {deltaE:.3e} Ha (curvature={curvature:.3e})")
-            current_coords = best_coords.copy()
-            # refresh working internals for updated geometry
-            internals = build_redundant_internals_geometric(atoms, current_coords)
-            # update current energy
-            current_energy = e_min
-            applied_any = True
-            # loop: continue searching for another best internal on the updated geometry
+                break
 
-        # End subiteration while
+            # Apply best candidate (either predicted-validated or sampled)
+            deltaE, chosen_disp, chosen_coords, chosen_ic, curvature, grad0, sampled_e, sampled_coords, which = best_candidate
+            # Apply
+            current_coords = chosen_coords.copy()
+            # Refresh working internals from geometry
+            internals = generate_internals_from_geometry(atoms, current_coords)
+            # Update current_energy to the **actual evaluated** energy at the applied coordinates.
+            # If we applied a predicted candidate we evaluated it already (E_pred_true); if sampled we have sampled energy.
+            try:
+                cur_xyz_after = xyz_to_pyscf_string(atoms, current_coords)
+                actual_E_after = compute_cbs_energy_from_xyz_cached(cur_xyz_after, method, a_corr, b_hf, bs1, bs2, spin)
+            except Exception:
+                # this should not normally happen because we validated it, but be safe
+                actual_E_after = float('inf')
+
+            # Record applied change
+            applied_changes.append({
+                "internal": _label_internal(chosen_ic['type'], chosen_ic['inds'], atoms),
+                "which": which,
+                "disp": float(chosen_disp),
+                "deltaE_estimate": float(deltaE),
+                "energy_after": float(actual_E_after),
+                "curvature": float(curvature) if curvature is not None else None,
+                "grad0": float(grad0) if grad0 is not None else None
+            })
+
+            # Update current energy to the true evaluated energy
+            current_energy = float(actual_E_after)
+
+            # Continue subiteration searching for another best internal on the updated geometry
+            # (this loop will re-evaluate all internals on the new geometry)
+        # end while subiteration
 
         # record cycle energy and internals trace
         history.append({'cycle': cycle, 'energy': float(current_energy)})
-
-        cyc_map = {
-            lbl: _value_for_internal(tp, inds, current_coords)
-            for lbl, tp, inds in zip(baseline_labels, baseline_kinds, baseline_inds)
-        }
+        cyc_map = {}
+        for lbl, tp, inds in zip(baseline_labels, baseline_types, baseline_inds):
+            cyc_map[lbl] = _value_for_internal(tp, inds, current_coords)
         internals_trace.append(cyc_map)
 
-        # convergence check: cycle-level energy difference
+        # per-cycle debug summary: list all applied changes this cycle
+        if applied_changes:
+            print(f"\nCycle {cycle} applied changes ({len(applied_changes)}):")
+            for ch in applied_changes:
+                print(f"  - {ch['internal']}: type={ch['which']}, disp={ch['disp']:.6f}, ΔE_est={ch['deltaE_estimate']:.3e} Ha, E_after={ch['energy_after']:.10f}, curvature={ch['curvature']:.3e}")
+        else:
+            print(f"Cycle {cycle}: no accepted internal changes.")
+
+        # convergence check (energy)
         if cycle > 1:
             ediff = abs(history[-1]['energy'] - history[-2]['energy'])
             print(f"  ΔE since last cycle: {ediff:.4e} Ha")
             if ediff < ENERGY_CRIT:
-                # additionally, if debug show gradient-like diagnostics summary from last subiteration (best_candidate info missing),
                 print("Converged by energy criterion")
                 converged = True
                 break
 
         displacement_factor *= CUT
 
+    # return canonical baseline_labels and internals_trace for reproducibility
     return atoms, current_coords, history, converged, baseline_labels, internals_trace
 
 
 # -------------------------
-# run_optimization API
+# run_optimization API (CLI wrapper)
 # -------------------------
 def run_optimization(params: dict, outputs_dir: Path):
     outputs_dir = Path(outputs_dir)
@@ -905,11 +687,12 @@ def run_optimization(params: dict, outputs_dir: Path):
     basis_pair = (basis1, basis2) if (basis1 and basis2) else None
     spin = int(params.get("spin", DEFAULT_SPIN))
     debug = bool(params.get("debug", False))
+    energy_accept_tol = params.get("energy_accept_tol", None)
 
     atoms, coords0, comment = read_xyz(input_xyz)
     print(f"Loaded {len(atoms)} atoms from {input_xyz}")
-    print("Extracting redundant internal coordinates (geometric PrimitiveInternalCoordinates or fallback)...")
-    internals = build_redundant_internals_geometric(atoms, coords0)
+    print("Building redundant internal coordinates (geometry-derived fallback)...")
+    internals = generate_internals_from_geometry(atoms, coords0)
     print(f"Found {len(internals)} internals.")
 
     atoms_out, coords_out, history, converged, baseline_labels, internals_trace = optimize_from_xyz(
@@ -921,7 +704,8 @@ def run_optimization(params: dict, outputs_dir: Path):
         x1=x1, x2=x2, x1_hf=x1hf, x2_hf=x2hf, beta=beta,
         basis_pair=basis_pair,
         spin=spin,
-        debug=debug
+        debug=debug,
+        energy_accept_tol=energy_accept_tol
     )
 
     base = Path(input_xyz).stem
@@ -968,6 +752,7 @@ if __name__ == "__main__":
     p.add_argument("--beta", type=float, default=BETA_DEFAULT)
     p.add_argument("--spin", type=int, default=0)
     p.add_argument("--debug", action="store_true", help="Enable verbose diagnostics")
+    p.add_argument("--energy_accept_tol", type=float, default=None, help="Per-move acceptance energy (Ha)")
     args = p.parse_args()
 
     params = {
@@ -982,6 +767,7 @@ if __name__ == "__main__":
         "fac": args.fac,
         "spin": args.spin,
         "debug": args.debug,
+        "energy_accept_tol": args.energy_accept_tol
     }
     out = Path(args.out)
     result = run_optimization(params, out)
