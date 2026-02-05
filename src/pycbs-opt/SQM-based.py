@@ -2,7 +2,9 @@
 """
 SQM-based optimizer module (geomeTRIC-backed implementation)
 
-(Full comments omitted here for brevity — same as previous version.)
+This variant uses geomeTRIC's PrimitiveInternalCoordinates when available
+and falls back to a geometry-derived redundant internal set (bonds/angles/dihedrals)
+if geomeTRIC does not expose usable internals for the provided Molecule.
 """
 
 from pathlib import Path
@@ -14,7 +16,7 @@ import traceback
 import numpy as np
 from pycbs.writer import write_cycle_energies, write_final_xyz
 
-# Require geomeTRIC's geometric module
+# Require geomeTRIC's geometric module (we handle if import fails later)
 try:
     from geometric.internal import PrimitiveInternalCoordinates
 except Exception as e:
@@ -50,6 +52,15 @@ ATOMIC_MASS = {
     'H': 1.0079, 'C': 12.0107, 'N': 14.0067, 'O': 15.999, 'F': 18.998,
     'P': 30.9738, 'S': 32.065, 'Cl': 35.453
 }
+
+# Covalent radii (Å) - used by geometry fallback
+COVALENT_RADII = {
+    'H': 0.31, 'He': 0.28,
+    'Li': 1.28, 'Be': 0.96, 'B': 0.84, 'C': 0.76, 'N': 0.71, 'O': 0.66, 'F': 0.57, 'Ne': 0.58,
+    'Na': 1.66, 'Mg': 1.41, 'Al': 1.21, 'Si': 1.11, 'P': 1.07, 'S': 1.05, 'Cl': 1.02,
+    'K': 2.03, 'Ca': 1.76
+}
+DEFAULT_COV_RAD = 0.77  # fallback if element not in dict
 
 DEFAULT_SPIN = 0
 
@@ -122,8 +133,83 @@ def _label_internal(kind: str, inds: tuple[int, ...], atoms: list[str]) -> str:
         return f"angle:{i+1}-{j+1}-{k+1}:{atoms[i]}-{atoms[j]}-{atoms[k]}"
     if kind == 'dihedral':
         i, j, k, l = inds
-        return f"dihedral:{i+1}-{j+1}-{k+1}:{atoms[i]}-{atoms[j]}-{atoms[k]}-{atoms[l]}"
+        return f"dihedral:{i+1}-{j+1}-{k+1}-{l+1}:{atoms[i]}-{atoms[j]}-{atoms[k]}-{atoms[l]}"
     return f"intern:{inds}"
+
+
+# -------------------------
+# Geometry-derived internals fallback
+# -------------------------
+def _covalent_radius(elem: str) -> float:
+    return COVALENT_RADII.get(elem, DEFAULT_COV_RAD)
+
+
+def generate_internals_from_geometry(atoms: list[str], coords: np.ndarray, scale: float = 1.2):
+    """
+    Build a simple redundant internal set from geometry:
+      - bonds: distance < scale * (rcov_i + rcov_j)
+      - angles: any triplet i - j - k where i and k are bonded to j (i < k to avoid duplicates)
+      - dihedrals: any quadruplet i - j - k - l where i bonded to j, j bonded k, k bonded l
+    Returns list of dicts {'type','inds','value'} with zero-based indices.
+    """
+    nat = len(atoms)
+    dmat = np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=2)
+    bonds = set()
+    for i in range(nat):
+        for j in range(i + 1, nat):
+            ri = _covalent_radius(atoms[i])
+            rj = _covalent_radius(atoms[j])
+            cutoff = scale * (ri + rj)
+            if 0.2 < dmat[i, j] <= cutoff:
+                bonds.add((i, j))
+    bonds = sorted(bonds)
+    bond_neighbors = {i: [] for i in range(nat)}
+    for i, j in bonds:
+        bond_neighbors[i].append(j)
+        bond_neighbors[j].append(i)
+
+    out = []
+    # bonds
+    for i, j in bonds:
+        out.append({"type": "bond", "inds": (i, j), "value": float(dmat[i, j])})
+
+    # angles
+    angles = set()
+    for j in range(nat):
+        neigh = bond_neighbors.get(j, [])
+        if len(neigh) < 2:
+            continue
+        for ii in range(len(neigh)):
+            for kk in range(ii + 1, len(neigh)):
+                i = neigh[ii]
+                k = neigh[kk]
+                inds = (i, j, k)
+                if inds not in angles:
+                    angles.add(inds)
+                    val = _angle_deg(coords[i], coords[j], coords[k])
+                    out.append({"type": "angle", "inds": inds, "value": float(val)})
+
+    # dihedrals
+    diheds = set()
+    for j in range(nat):
+        for k in bond_neighbors.get(j, []):
+            for i in bond_neighbors.get(j, []):
+                if i == k:
+                    continue
+                # i - j - k, now extend k to l
+                for l in bond_neighbors.get(k, []):
+                    if l == j:
+                        continue
+                    inds = (i, j, k, l)
+                    # canonical ordering to avoid duplicates
+                    if inds not in diheds:
+                        diheds.add(inds)
+                        val = _dihedral_deg(coords[i], coords[j], coords[k], coords[l])
+                        out.append({"type": "dihedral", "inds": inds, "value": float(val)})
+
+    if not out:
+        raise RuntimeError("Fallback geometry-based internals generation produced no internals (geometry suspicious).")
+    return out
 
 
 # -------------------------
@@ -158,8 +244,8 @@ def _extract_indices_from_obj(obj):
 
 def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
     """
-    Build RICs strictly using geomeTRIC's PrimitiveInternalCoordinates.
-
+    Build RICs strictly using geomeTRIC's PrimitiveInternalCoordinates if possible,
+    otherwise fallback to geometry-derived internals.
     Returns list of dicts: {'type': 'bond'|'angle'|'dihedral', 'inds': tuple(indices), 'value': float}
     where indices are zero-based integers.
     """
@@ -185,7 +271,7 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
         tried.append((("GeometricMolecule",), exc_gm))
         pic = None
 
-    # If we didn't get a pic yet, try several plausible constructor signatures (backward compat)
+    # If we didn't get a pic yet, try several plausible constructor signatures
     if pic is None:
         for args in (
             (atoms, coords.tolist()),
@@ -204,7 +290,11 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
         msg = "Failed to instantiate PrimitiveInternalCoordinates with tried signatures.\n"
         for args, exc in tried:
             msg += f" Tried args={args!r} -> {type(exc).__name__}: {exc}\n"
-        raise RuntimeError(msg)
+        # Rather than aborting outright, try a geometry fallback
+        # print diagnostic and proceed to fallback
+        print(msg)
+        print("Proceeding with geometry-derived internals fallback.")
+        return generate_internals_from_geometry(atoms, coords)
 
     # Now attempt to extract the internal list.
     raw_ints = None
@@ -213,7 +303,6 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
     for name in ("intcos", "internals", "primitive_internals", "intcos_list", "internallist", "prims", "primitives"):
         if hasattr(pic, name):
             raw_ints = getattr(pic, name)
-            # If callables, call them
             if callable(raw_ints):
                 try:
                     raw_ints = raw_ints()
@@ -257,7 +346,6 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
                     continue
             # also consider single objects that are array-like
             if hasattr(val, "__len__") and not isinstance(val, (str, bytes)) and len(val) > 0:
-                # attempt to introspect first element
                 try:
                     first = val[0]
                     if isinstance(first, (list, tuple)) and all(isinstance(ii, (int, np.integer)) for ii in first):
@@ -279,9 +367,10 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
                   f"using '{chosen_attr}' (type={type(chosen_val).__name__}) as internals candidate.")
 
     if raw_ints is None:
-        raise RuntimeError("Could not locate internals list in PrimitiveInternalCoordinates instance. "
-                           "Please check the geometric package version and API. Available attributes: "
-                           + ", ".join(sorted([a for a in dir(pic) if not a.startswith('_')])))
+        # No candidate found: fallback to geometry
+        print("PrimitiveInternalCoordinates did not expose any suitable internals attribute.")
+        print("Proceeding with geometry-derived internals fallback.")
+        return generate_internals_from_geometry(atoms, coords)
 
     # Normalize raw_ints entries into a canonical format
     out = []
@@ -370,11 +459,13 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
         except Exception:
             pass
 
-        # If none matched, raise so we keep strict behavior
+        # If none matched, skip (but keep strict behavior)
         raise RuntimeError(f"Unrecognized internal coordinate entry from geometric: {r!r}")
 
     if not out:
-        raise RuntimeError("geometric returned an empty list of internals; aborting.")
+        # geomeTRIC returned an empty list or we couldn't normalize: fallback
+        print("geometric returned an empty list of internals; using geometry-derived fallback.")
+        return generate_internals_from_geometry(atoms, coords)
 
     return out
 
@@ -558,6 +649,10 @@ def parabolic_minimum(x, y):
 def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DEFAULT, fac_mult=FAC_DEFAULT,
                       x1=X1_DEFAULT, x2=X2_DEFAULT, x1_hf=X1HF_DEFAULT, x2_hf=X2HF_DEFAULT, beta=BETA_DEFAULT,
                       basis_pair=None, spin: int = 0):
+    """
+    Strictly geomeTRIC-backed SQM-style optimizer.
+    Returns atoms, final_coords, history(list), converged(bool), baseline_labels, internals_trace
+    """
     a_corr = (x1 ** 3) / (x2 ** 3 - x1 ** 3)
     denom = math.exp(beta * x2_hf) - math.exp(beta * x1_hf)
     if abs(denom) < 1e-16:
@@ -568,14 +663,16 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         basis_pair = (basis_sets[0], basis_sets[1])
     bs1, bs2 = basis_pair
 
+    # Obtain canonical baseline internals using geomeTRIC (or fallback)
     baseline = build_redundant_internals_geometric(atoms, coords)
     if not baseline:
-        raise RuntimeError("No internals extracted by geometric; aborting.")
+        raise RuntimeError("No internals extracted by geometric or fallback; aborting.")
 
     baseline_labels = [_label_internal(ic['type'], ic['inds'], atoms) for ic in baseline]
     baseline_kinds = [ic['type'] for ic in baseline]
     baseline_inds = [ic['inds'] for ic in baseline]
 
+    # Working internals (will be refreshed after geometry updates by re-calling geometric/fallback)
     internals = [dict(ic) for ic in baseline]
 
     current_coords = coords.copy()
@@ -584,6 +681,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
     converged = False
 
     internals_trace = []
+    # cycle 0 initial values
     init_map = {
         lbl: _value_for_internal(tp, inds, current_coords)
         for lbl, tp, inds in zip(baseline_labels, baseline_kinds, baseline_inds)
@@ -664,6 +762,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                 print(f"  IC {tp} {inds}: current={ic['value']:.6f} -> x_min_disp={x_min_disp:.6f}, E_min={e_min:.10f}")
                 if e_min < current_energy - 1e-12 and best_coords is not None:
                     current_coords = best_coords.copy()
+                    # Refresh internals (try geomeTRIC again; fallback if necessary)
                     internals = build_redundant_internals_geometric(atoms, current_coords)
                     updated = True
                     current_energy = e_min
@@ -695,7 +794,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
 
 
 # -------------------------
-# run_optimization API (unchanged)
+# run_optimization API
 # -------------------------
 def run_optimization(params: dict, outputs_dir: Path):
     outputs_dir = Path(outputs_dir)
@@ -719,9 +818,9 @@ def run_optimization(params: dict, outputs_dir: Path):
 
     atoms, coords0, comment = read_xyz(input_xyz)
     print(f"Loaded {len(atoms)} atoms from {input_xyz}")
-    print("Extracting redundant internal coordinates (geometric PrimitiveInternalCoordinates)...")
+    print("Extracting redundant internal coordinates (geometric PrimitiveInternalCoordinates or fallback)...")
     internals = build_redundant_internals_geometric(atoms, coords0)
-    print(f"Found {len(internals)} internals (from geometric).")
+    print(f"Found {len(internals)} internals.")
 
     atoms_out, coords_out, history, converged, baseline_labels, internals_trace = optimize_from_xyz(
         atoms,
