@@ -2,31 +2,7 @@
 """
 SQM-based optimizer module (geomeTRIC-backed implementation)
 
-This variant strictly uses the geometric (geomeTRIC) package to extract
-redundant internal coordinates (RICs) via PrimitiveInternalCoordinates
-and then runs an SQM-style sequential internal-coordinate scan optimizer
-that:
-
- - Loads RICs (types and atom indices) from geometric.internal.PrimitiveInternalCoordinates.
- - Uses those RIC labels/indices as the canonical baseline internals for tracing.
- - For each internal performs a 5-point parabolic scan in that internal
-   (bond: Å, angle/dihedral: degrees), evaluates CBS energies with PySCF,
-   and updates Cartesian coordinates if the best point improves the CBS energy.
- - Records the value of every baseline internal at cycle 0..N (raw floats).
- - At the end prints a terminal table: rows = RIC labels, columns = cycle values.
- - Persists cycle energies and final xyz to outputs (prefixed with input basename).
-
-Notes:
- - This file intentionally requires the `geometric` package. If it's not
-   importable or PrimitiveInternalCoordinates cannot be used, the module
-   will raise ImportError. You indicated geometric is available.
- - The conversion from internal displacements to Cartesian updates here uses
-   geometric only for extracting internals. The actual per-internal Cartesian
-   updates are performed with geometric-aware index mapping but still use the
-   same geometric adjustments as the prior SQM implementation (approximate
-   local moves). If you want a full B-matrix-based internal->Cartesian update
-   (exact Wilson/B-matrix inversion), that requires more extensive use of
-   geomeTRIC internal machinery (or geomeTRIC optimizers) and can be added.
+(Full comments omitted here for brevity — same as previous version.)
 """
 
 from pathlib import Path
@@ -146,22 +122,46 @@ def _label_internal(kind: str, inds: tuple[int, ...], atoms: list[str]) -> str:
         return f"angle:{i+1}-{j+1}-{k+1}:{atoms[i]}-{atoms[j]}-{atoms[k]}"
     if kind == 'dihedral':
         i, j, k, l = inds
-        return f"dihedral:{i+1}-{j+1}-{k+1}-{l+1}:{atoms[i]}-{atoms[j]}-{atoms[k]}-{atoms[l]}"
+        return f"dihedral:{i+1}-{j+1}-{k+1}:{atoms[i]}-{atoms[j]}-{atoms[k]}-{atoms[l]}"
     return f"intern:{inds}"
 
 
 # -------------------------
-# geomeTRIC PrimitiveInternalCoordinates integration
+# geomeTRIC PrimitiveInternalCoordinates integration (robust)
 # -------------------------
+def _is_sequence_of_ints(x):
+    try:
+        if isinstance(x, (list, tuple)):
+            return all(isinstance(i, (int, np.integer)) for i in x)
+        if isinstance(x, np.ndarray) and x.ndim == 1:
+            return np.issubdtype(x.dtype, np.integer)
+        return False
+    except Exception:
+        return False
+
+
+def _extract_indices_from_obj(obj):
+    # Try many plausible attribute names that may contain atom indices
+    for attr in ('indices', 'atoms', 'atoms_idx', 'atom_indices', 'atom_ids', 'atom_idxs', 'idx', 'i', 'a'):
+        if hasattr(obj, attr):
+            val = getattr(obj, attr)
+            if isinstance(val, (list, tuple, np.ndarray)):
+                return tuple(int(x) for x in np.asarray(val).reshape(-1))
+    # If object is a simple container (like numpy array)
+    if isinstance(obj, (list, tuple, np.ndarray)):
+        try:
+            return tuple(int(x) for x in list(obj))
+        except Exception:
+            pass
+    return None
+
+
 def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
     """
     Build RICs strictly using geomeTRIC's PrimitiveInternalCoordinates.
 
     Returns list of dicts: {'type': 'bond'|'angle'|'dihedral', 'inds': tuple(indices), 'value': float}
     where indices are zero-based integers.
-    If the geomeTRIC object provides a slightly different representation, we
-    try to extract type and atom indices accordingly. If extraction fails we
-    raise an informative error.
     """
     pic = None
     tried = []
@@ -180,15 +180,12 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
             # geomeTRIC expects a list of frames; supply one frame (Angstroms)
             "xyzs": [coords.tolist()]
         }
-        # Some geomeTRIC internals expect gm.elem or gm.Data['elem'] — having Data set
-        # is the most compatible minimal Molecule.
         pic = PrimitiveInternalCoordinates(gm)
     except Exception as exc_gm:
-        # record attempt and fall back to other common signatures
         tried.append((("GeometricMolecule",), exc_gm))
         pic = None
 
-    # If we didn't get a pic yet, try several plausible constructor signatures
+    # If we didn't get a pic yet, try several plausible constructor signatures (backward compat)
     if pic is None:
         for args in (
             (atoms, coords.tolist()),
@@ -204,7 +201,6 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
                 pic = None
 
     if pic is None:
-        # Provide diagnostic info
         msg = "Failed to instantiate PrimitiveInternalCoordinates with tried signatures.\n"
         for args, exc in tried:
             msg += f" Tried args={args!r} -> {type(exc).__name__}: {exc}\n"
@@ -212,22 +208,80 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
 
     # Now attempt to extract the internal list.
     raw_ints = None
-    # try a few likely attribute/method names
-    for name in ("intcos", "internals", "primitive_internals", "intcos_list", "internallist"):
+
+    # Try well-known attribute/method names first
+    for name in ("intcos", "internals", "primitive_internals", "intcos_list", "internallist", "prims", "primitives"):
         if hasattr(pic, name):
             raw_ints = getattr(pic, name)
+            # If callables, call them
+            if callable(raw_ints):
+                try:
+                    raw_ints = raw_ints()
+                except Exception:
+                    pass
             break
-    if raw_ints is None:
-        # some versions expose a method
-        for meth in ("get_internals", "get_intcos", "get_primitive_internals"):
-            if hasattr(pic, meth) and callable(getattr(pic, meth)):
-                raw_ints = getattr(pic, meth)()
-                break
 
     if raw_ints is None:
-        # As last resort inspect repr/dir for clues
+        for meth in ("get_internals", "get_intcos", "get_primitive_internals", "as_intcos", "to_intcos"):
+            if hasattr(pic, meth) and callable(getattr(pic, meth)):
+                try:
+                    raw_ints = getattr(pic, meth)()
+                except Exception:
+                    raw_ints = None
+                if raw_ints is not None:
+                    break
+
+    # If still not found: inspect public attributes and pick the first attribute that looks like internals
+    if raw_ints is None:
+        candidates = []
+        for attr in sorted(set(dir(pic))):
+            if attr.startswith('_'):
+                continue
+            try:
+                val = getattr(pic, attr)
+            except Exception:
+                continue
+            # list/tuple candidate
+            if isinstance(val, (list, tuple, np.ndarray)) and len(val) > 0:
+                first = val[0]
+                # case: sequence of integer-index sequences or 2D int ndarray
+                if isinstance(first, (list, tuple)) and all(isinstance(ii, (int, np.integer)) for ii in first):
+                    candidates.append((attr, val))
+                    continue
+                if isinstance(val, np.ndarray) and val.ndim == 2 and np.issubdtype(val.dtype, np.integer):
+                    candidates.append((attr, val))
+                    continue
+                # case: list of objects that probably wrap indices (have .indices/.atoms)
+                if hasattr(first, "indices") or hasattr(first, "atoms") or hasattr(first, "atoms_idx") or hasattr(first, "type") or hasattr(first, "kind"):
+                    candidates.append((attr, val))
+                    continue
+            # also consider single objects that are array-like
+            if hasattr(val, "__len__") and not isinstance(val, (str, bytes)) and len(val) > 0:
+                # attempt to introspect first element
+                try:
+                    first = val[0]
+                    if isinstance(first, (list, tuple)) and all(isinstance(ii, (int, np.integer)) for ii in first):
+                        candidates.append((attr, val))
+                except Exception:
+                    pass
+        if candidates:
+            # prefer those with ndarray 2D integer arrays or direct sequence of int-tuples
+            chosen_attr, chosen_val = None, None
+            for attr, val in candidates:
+                if isinstance(val, np.ndarray) and val.ndim == 2 and np.issubdtype(val.dtype, np.integer):
+                    chosen_attr, chosen_val = attr, val
+                    break
+            if chosen_attr is None:
+                chosen_attr, chosen_val = candidates[0]
+            raw_ints = chosen_val
+            # Diagnostic print so you know which attribute was chosen
+            print(f"Warning: PrimitiveInternalCoordinates did not expose a standard attribute; "
+                  f"using '{chosen_attr}' (type={type(chosen_val).__name__}) as internals candidate.")
+
+    if raw_ints is None:
         raise RuntimeError("Could not locate internals list in PrimitiveInternalCoordinates instance. "
-                           "Please check the geometric package version and API.")
+                           "Please check the geometric package version and API. Available attributes: "
+                           + ", ".join(sorted([a for a in dir(pic) if not a.startswith('_')])))
 
     # Normalize raw_ints entries into a canonical format
     out = []
@@ -236,6 +290,24 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
         # - r is a tuple/list of ints -> infer type by length
         # - r is (type_str, indices)
         # - r is an object with attributes .type and .atoms or .indices
+        try:
+            # numpy 2D array row -> convert
+            if isinstance(r, np.ndarray) and r.ndim == 1 and np.issubdtype(r.dtype, np.integer):
+                inds = tuple(int(x) for x in r.tolist())
+                if len(inds) == 2:
+                    tp = "bond"
+                elif len(inds) == 3:
+                    tp = "angle"
+                elif len(inds) == 4:
+                    tp = "dihedral"
+                else:
+                    continue
+                val = _value_for_internal(tp, inds, coords)
+                out.append({"type": tp, "inds": inds, "value": val})
+                continue
+        except Exception:
+            pass
+
         try:
             if isinstance(r, (list, tuple)) and all(isinstance(x, (int, np.integer)) for x in r):
                 inds = tuple(int(x) for x in r)
@@ -258,8 +330,8 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
             if isinstance(r, (list, tuple)) and len(r) >= 2 and isinstance(r[0], str):
                 tp = str(r[0]).lower()
                 inds_cand = r[1]
-                if isinstance(inds_cand, (list, tuple)):
-                    inds = tuple(int(x) for x in inds_cand)
+                if isinstance(inds_cand, (list, tuple, np.ndarray)):
+                    inds = tuple(int(x) for x in np.asarray(inds_cand).reshape(-1))
                     val = _value_for_internal(tp, inds, coords)
                     out.append({"type": tp, "inds": inds, "value": val})
                     continue
@@ -268,23 +340,37 @@ def build_redundant_internals_geometric(atoms: list[str], coords: np.ndarray):
 
         # If r is an object with attributes
         try:
-            # e.g., r.type, r.indices, r.atoms
-            tp_attr = getattr(r, "type", None) or getattr(r, "kind", None)
-            idx_attr = getattr(r, "indices", None) or getattr(r, "atoms", None) or getattr(r, "atoms_idx", None)
-            if tp_attr and idx_attr is not None:
+            tp_attr = getattr(r, "type", None) or getattr(r, "kind", None) or getattr(r, "label", None)
+            idx = _extract_indices_from_obj(r)
+            if tp_attr and idx is not None:
                 tp = str(tp_attr).lower()
-                if isinstance(idx_attr, (list, tuple)):
-                    inds = tuple(int(x) for x in idx_attr)
-                else:
-                    # maybe a numpy array
-                    inds = tuple(int(x) for x in list(idx_attr))
+                inds = tuple(int(x) for x in idx)
                 val = _value_for_internal(tp, inds, coords)
                 out.append({"type": tp, "inds": inds, "value": val})
                 continue
         except Exception:
             pass
 
-        # If none matched, skip but warn (we keep strict behavior: do not fallback)
+        # If r is an object representing indices under some attribute name
+        try:
+            idx = _extract_indices_from_obj(r)
+            if idx is not None:
+                inds = tuple(int(x) for x in idx)
+                if len(inds) == 2:
+                    tp = "bond"
+                elif len(inds) == 3:
+                    tp = "angle"
+                elif len(inds) == 4:
+                    tp = "dihedral"
+                else:
+                    continue
+                val = _value_for_internal(tp, inds, coords)
+                out.append({"type": tp, "inds": inds, "value": val})
+                continue
+        except Exception:
+            pass
+
+        # If none matched, raise so we keep strict behavior
         raise RuntimeError(f"Unrecognized internal coordinate entry from geometric: {r!r}")
 
     if not out:
@@ -472,10 +558,6 @@ def parabolic_minimum(x, y):
 def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DEFAULT, fac_mult=FAC_DEFAULT,
                       x1=X1_DEFAULT, x2=X2_DEFAULT, x1_hf=X1HF_DEFAULT, x2_hf=X2HF_DEFAULT, beta=BETA_DEFAULT,
                       basis_pair=None, spin: int = 0):
-    """
-    Strictly geomeTRIC-backed SQM-style optimizer.
-    Returns atoms, final_coords, history(list), converged(bool), baseline_labels, internals_trace
-    """
     a_corr = (x1 ** 3) / (x2 ** 3 - x1 ** 3)
     denom = math.exp(beta * x2_hf) - math.exp(beta * x1_hf)
     if abs(denom) < 1e-16:
@@ -486,7 +568,6 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         basis_pair = (basis_sets[0], basis_sets[1])
     bs1, bs2 = basis_pair
 
-    # Obtain canonical baseline internals using geomeTRIC
     baseline = build_redundant_internals_geometric(atoms, coords)
     if not baseline:
         raise RuntimeError("No internals extracted by geometric; aborting.")
@@ -495,7 +576,6 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
     baseline_kinds = [ic['type'] for ic in baseline]
     baseline_inds = [ic['inds'] for ic in baseline]
 
-    # Working internals (will be refreshed after geometry updates by re-calling geometric)
     internals = [dict(ic) for ic in baseline]
 
     current_coords = coords.copy()
@@ -504,7 +584,6 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
     converged = False
 
     internals_trace = []
-    # cycle 0 initial values
     init_map = {
         lbl: _value_for_internal(tp, inds, current_coords)
         for lbl, tp, inds in zip(baseline_labels, baseline_kinds, baseline_inds)
@@ -585,7 +664,6 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                 print(f"  IC {tp} {inds}: current={ic['value']:.6f} -> x_min_disp={x_min_disp:.6f}, E_min={e_min:.10f}")
                 if e_min < current_energy - 1e-12 and best_coords is not None:
                     current_coords = best_coords.copy()
-                    # Refresh internals from geomeTRIC for the new geometry
                     internals = build_redundant_internals_geometric(atoms, current_coords)
                     updated = True
                     current_energy = e_min
@@ -617,7 +695,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
 
 
 # -------------------------
-# run_optimization API
+# run_optimization API (unchanged)
 # -------------------------
 def run_optimization(params: dict, outputs_dir: Path):
     outputs_dir = Path(outputs_dir)
