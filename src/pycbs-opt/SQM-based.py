@@ -5,6 +5,13 @@ SQM-based optimizer module (geomeTRIC-backed implementation)
 This variant uses geomeTRIC's PrimitiveInternalCoordinates when available
 and falls back to a geometry-derived redundant internal set (bonds/angles/dihedrals)
 if geomeTRIC does not expose usable internals for the provided Molecule.
+
+Enhancements in this version:
+ - Best-improvement subiterations per cycle (evaluate all internals, apply only the single best improvement).
+ - ENERGY_ACCEPT_TOL and MIN_CURVATURE thresholds (reject tiny/noisy moves).
+ - Per-evaluation diagnostics: SCF convergence checks, numeric gradient & curvature prints,
+   predicted vs actual internal values, candidate selection debug prints.
+ - A `debug` flag can be set in params to increase terminal output.
 """
 
 from pathlib import Path
@@ -553,6 +560,11 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
         mf.max_cycle = 100
         scf_energy = mf.kernel()
 
+        # Check SCF convergence; if not converged, raise so caller treats evaluation as failed
+        scf_converged = getattr(mf, "converged", True)
+        if not scf_converged:
+            raise RuntimeError("SCF failed to converge for this geometry (mf.converged is False)")
+
         corr_energy = None
         if method.upper().startswith('CCSD'):
             try:
@@ -648,11 +660,19 @@ def parabolic_minimum(x, y):
 # -------------------------
 def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DEFAULT, fac_mult=FAC_DEFAULT,
                       x1=X1_DEFAULT, x2=X2_DEFAULT, x1_hf=X1HF_DEFAULT, x2_hf=X2HF_DEFAULT, beta=BETA_DEFAULT,
-                      basis_pair=None, spin: int = 0):
+                      basis_pair=None, spin: int = 0, debug: bool = False):
     """
-    Strictly geomeTRIC-backed SQM-style optimizer.
+    Strictly geomeTRIC-backed SQM-style optimizer with best-improvement subiterations.
     Returns atoms, final_coords, history(list), converged(bool), baseline_labels, internals_trace
+
+    debug: when True, prints detailed diagnostics for each internal evaluation.
     """
+    # acceptance / diagnostics thresholds (local)
+    ENERGY_ACCEPT_TOL = 1e-6  # Ha (per-move acceptance)
+    MIN_CURVATURE = 1e-10     # minimal convex curvature required
+    # numeric gradient print thresholds (for developer visibility)
+    GRAD_PRINT_THRESHOLD = 1e-9
+
     a_corr = (x1 ** 3) / (x2 ** 3 - x1 ** 3)
     denom = math.exp(beta * x2_hf) - math.exp(beta * x1_hf)
     if abs(denom) < 1e-16:
@@ -700,78 +720,142 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         except Exception as e:
             raise RuntimeError(f"CBS evaluation at cycle start failed: {e}")
 
-        print(f"\n>>> Cycle {cycle}/{maxcycle}, displacement_factor={displacement_factor:.6f}, current E = {current_energy:.10f} Ha")
+        if debug:
+            print(f"\n>>> Cycle {cycle}/{maxcycle}, displacement_factor={displacement_factor:.6f}, current E = {current_energy:.10f} Ha")
+        else:
+            print(f"\n>>> Cycle {cycle}/{maxcycle}, displacement_factor={displacement_factor:.6f}, current E = {current_energy:.10f} Ha")
 
-        updated = False
-        for ic in internals:
-            tp = ic['type']
-            inds = ic['inds']
-            if tp == 'bond':
-                base = ic['value']
-                disps = np.array([
-                    -2 * displacement_factor * base,
-                    -1 * displacement_factor * base,
-                    0.0,
-                    1 * displacement_factor * base,
-                    2 * displacement_factor * base
-                ], dtype=float)
-            elif tp in ('angle', 'dihedral'):
-                base = ic.get('value', _value_for_internal(tp, inds, current_coords))
-                ddeg = 2.0 * (displacement_factor * 100.0)
-                disps = np.array([-2*ddeg, -1*ddeg, 0.0, 1*ddeg, 2*ddeg], dtype=float)
-            else:
-                disps = np.array([0.0])
+        # -----------------------
+        # Best-improvement subiteration:
+        # evaluate ALL internals (but DO NOT apply), pick and APPLY the single best improvement,
+        # repeat until no acceptable candidate remains.
+        # -----------------------
+        applied_any = False
+        while True:
+            best_candidate = None  # tuple (deltaE, e_min, best_coords, ic, x_min_disp, curvature, grad0)
+            # Evaluate every internal but do NOT apply them yet
+            for ic in internals:
+                tp = ic['type']; inds = ic['inds']
+                # build displacements ds
+                if tp == 'bond':
+                    base = ic.get('value', _value_for_internal(tp, inds, current_coords))
+                    ds = np.array([-2*displacement_factor*base, -1*displacement_factor*base, 0.0,
+                                   1*displacement_factor*base, 2*displacement_factor*base], dtype=float)
+                elif tp in ('angle', 'dihedral'):
+                    base = ic.get('value', _value_for_internal(tp, inds, current_coords))
+                    ddeg = 2.0 * (displacement_factor * 100.0)
+                    ds = np.array([-2*ddeg, -1*ddeg, 0.0, 1*ddeg, 2*ddeg], dtype=float)
+                else:
+                    ds = np.array([0.0])
 
-            energies = []
-            coords_list = []
-            for d in disps:
-                try:
-                    if tp == 'bond':
-                        i, j = inds
-                        new_val = ic['value'] + d
-                        new_coords = apply_bond_change(current_coords, i, j, new_val, atoms)
-                    elif tp == 'angle':
-                        i, j, k = inds
-                        new_val = ic['value'] + d
-                        new_coords = apply_angle_change(current_coords, i, j, k, new_val)
-                    elif tp == 'dihedral':
-                        i, j, k, l = inds
-                        new_val = ic['value'] + d
-                        new_coords = apply_dihedral_change(current_coords, i, j, k, l, new_val)
-                    else:
-                        new_coords = current_coords.copy()
+                es = []
+                coords_list = []
+                scf_failed_any = False
+                for d in ds:
+                    try:
+                        if tp == 'bond':
+                            i,j = inds
+                            new_val = ic.get('value', _value_for_internal(tp, inds, current_coords)) + d
+                            new_coords = apply_bond_change(current_coords, i, j, new_val, atoms)
+                        elif tp == 'angle':
+                            i,j,k = inds
+                            new_val = ic.get('value', _value_for_internal(tp, inds, current_coords)) + d
+                            new_coords = apply_angle_change(current_coords, i, j, k, new_val)
+                        elif tp == 'dihedral':
+                            i,j,k,l = inds
+                            new_val = ic.get('value', _value_for_internal(tp, inds, current_coords)) + d
+                            new_coords = apply_dihedral_change(current_coords, i, j, k, l, new_val)
+                        else:
+                            new_coords = current_coords.copy()
+                        xyzs = xyz_to_pyscf_string(atoms, new_coords)
+                        E = compute_cbs_energy_from_xyz_cached(xyzs, method, a_corr, b_hf, bs1, bs2, spin)
+                        es.append(float(E)); coords_list.append(new_coords)
+                    except Exception as exc:
+                        # mark failed evaluations with inf and continue; we will skip if all fail
+                        es.append(float('inf')); coords_list.append(None)
+                        scf_failed_any = True
+                        if debug:
+                            print(f"    eval failed for IC {tp} {inds} displacement {d}: {exc}")
 
-                    xyzs = xyz_to_pyscf_string(atoms, new_coords)
-                    E = compute_cbs_energy_from_xyz_cached(xyzs, method, a_corr, b_hf, bs1, bs2, spin)
-                    energies.append(float(E))
-                    coords_list.append(new_coords)
-                except Exception as e:
-                    energies.append(float('inf'))
-                    coords_list.append(None)
-                    print(f"    eval failed for IC {tp} {inds} displacement {d}: {e}")
+                es = np.array(es, dtype=float)
+                if np.all(np.isinf(es)):
+                    if debug:
+                        print(f"  All evaluations failed for IC {tp} {inds}; skipping")
+                    continue
 
-            es = np.array(energies, dtype=float)
-            if np.all(np.isinf(es)):
-                print(f"  Skipping {tp} {inds}: all evals failed")
-                continue
-
-            try:
-                x_min_disp, e_min = parabolic_minimum(disps, es)
+                # parabolic fit
+                x_min_disp, e_min = parabolic_minimum(ds, es)
                 idx_best = int(np.nanargmin(es))
                 best_coords = coords_list[idx_best]
-                print(f"  IC {tp} {inds}: current={ic['value']:.6f} -> x_min_disp={x_min_disp:.6f}, E_min={e_min:.10f}")
-                if e_min < current_energy - 1e-12 and best_coords is not None:
-                    current_coords = best_coords.copy()
-                    # Refresh internals (try geomeTRIC again; fallback if necessary)
-                    internals = build_redundant_internals_geometric(atoms, current_coords)
-                    updated = True
-                    current_energy = e_min
-                    print("    geometry updated (improvement)")
-                else:
-                    print("    no improvement")
-            except Exception as e:
-                print(f"    error in parabolic fit for IC {inds}: {e}")
 
+                # numeric curvature & gradient check (centered finite differences)
+                curvature = None
+                grad0 = None
+                try:
+                    # find index of zero displacement (exact match)
+                    idx0 = int(np.where(np.isclose(ds, 0.0))[0][0])
+                    # ensure we have neighbors for central diff
+                    if idx0 - 1 >= 0 and idx0 + 1 < len(es):
+                        Eminus = es[idx0-1]; E0 = es[idx0]; Eplus = es[idx0+1]
+                        h = ds[idx0+1] - ds[idx0]
+                        grad0 = (Eplus - Eminus) / (2.0 * h)
+                        curvature = (Eplus + Eminus - 2.0 * E0) / (h * h)
+                except Exception:
+                    grad0 = None
+                    curvature = None
+
+                # candidate delta relative to current_energy
+                deltaE = current_energy - e_min  # positive => improvement
+
+                # debug prints for this internal's sampling and numeric checks
+                if debug:
+                    cur_val = ic.get('value', _value_for_internal(tp, inds, current_coords))
+                    pred_val = cur_val + x_min_disp
+                    sampled_best_val = None
+                    try:
+                        sampled_best_val = _value_for_internal(tp, inds, coords_list[idx_best]) if coords_list[idx_best] is not None else None
+                    except Exception:
+                        sampled_best_val = None
+                    print(f"  IC {tp} {inds}: cur={cur_val:.6f}, ds=[{', '.join(f'{x:.4g}' for x in ds)}], "
+                          f"E_samples=[{', '.join(f'{e:.6f}' for e in es)}], x_min_disp={x_min_disp:.6f}, e_min={e_min:.10f}")
+                    if grad0 is not None:
+                        print(f"    numeric grad @0 = {grad0:.3e} Ha/unit, curvature = {curvature:.3e} Ha/unit^2")
+                    else:
+                        print("    numeric grad/curvature not available (insufficient sampling)")
+
+                    if sampled_best_val is not None:
+                        print(f"    predicted new internal value (from x_min_disp) = {pred_val:.6f}, best sampled internal value = {sampled_best_val:.6f}")
+                    if scf_failed_any:
+                        print("    NOTE: some SCF evaluations failed for this IC sampling (see above)")
+
+                # selection criterion: convex parabolic fit, sufficient improvement, and best delta
+                if best_coords is not None and curvature is not None and curvature > MIN_CURVATURE and deltaE > ENERGY_ACCEPT_TOL:
+                    if best_candidate is None or deltaE > best_candidate[0]:
+                        best_candidate = (deltaE, e_min, best_coords, ic, x_min_disp, curvature, grad0)
+
+            # end for internals: apply best candidate if exists
+            if best_candidate is None:
+                if debug:
+                    print("  No acceptable candidate found in this subiteration.")
+                break  # nothing worthwhile to apply
+            # apply the best candidate
+            deltaE, e_min, best_coords, chosen_ic, x_min_disp, curvature, grad0 = best_candidate
+            # final diagnostic before apply
+            if debug:
+                print(f"  Applying best IC {chosen_ic['type']} {chosen_ic['inds']}: ΔE = {deltaE:.3e} Ha, curvature={curvature:.3e}, grad0={grad0}")
+            else:
+                print(f"  Applied best IC {chosen_ic['type']} {chosen_ic['inds']}: ΔE = {deltaE:.3e} Ha (curvature={curvature:.3e})")
+            current_coords = best_coords.copy()
+            # refresh working internals for updated geometry
+            internals = build_redundant_internals_geometric(atoms, current_coords)
+            # update current energy
+            current_energy = e_min
+            applied_any = True
+            # loop: continue searching for another best internal on the updated geometry
+
+        # End subiteration while
+
+        # record cycle energy and internals trace
         history.append({'cycle': cycle, 'energy': float(current_energy)})
 
         cyc_map = {
@@ -780,10 +864,12 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         }
         internals_trace.append(cyc_map)
 
+        # convergence check: cycle-level energy difference
         if cycle > 1:
             ediff = abs(history[-1]['energy'] - history[-2]['energy'])
             print(f"  ΔE since last cycle: {ediff:.4e} Ha")
             if ediff < ENERGY_CRIT:
+                # additionally, if debug show gradient-like diagnostics summary from last subiteration (best_candidate info missing),
                 print("Converged by energy criterion")
                 converged = True
                 break
@@ -815,6 +901,7 @@ def run_optimization(params: dict, outputs_dir: Path):
     basis2 = params.get("basis2")
     basis_pair = (basis1, basis2) if (basis1 and basis2) else None
     spin = int(params.get("spin", DEFAULT_SPIN))
+    debug = bool(params.get("debug", False))
 
     atoms, coords0, comment = read_xyz(input_xyz)
     print(f"Loaded {len(atoms)} atoms from {input_xyz}")
@@ -830,7 +917,8 @@ def run_optimization(params: dict, outputs_dir: Path):
         fac_mult=fac,
         x1=x1, x2=x2, x1_hf=x1hf, x2_hf=x2hf, beta=beta,
         basis_pair=basis_pair,
-        spin=spin
+        spin=spin,
+        debug=debug
     )
 
     base = Path(input_xyz).stem
@@ -876,6 +964,7 @@ if __name__ == "__main__":
     p.add_argument("--x2hf", type=float, default=X2HF_DEFAULT)
     p.add_argument("--beta", type=float, default=BETA_DEFAULT)
     p.add_argument("--spin", type=int, default=0)
+    p.add_argument("--debug", action="store_true", help="Enable verbose diagnostics")
     args = p.parse_args()
 
     params = {
@@ -889,6 +978,7 @@ if __name__ == "__main__":
         "maxcycle": args.maxcycle,
         "fac": args.fac,
         "spin": args.spin,
+        "debug": args.debug,
     }
     out = Path(args.out)
     result = run_optimization(params, out)
