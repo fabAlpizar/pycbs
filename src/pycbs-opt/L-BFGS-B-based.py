@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-L-BFGS-B-based optimizer module (full implementation).
+L-BFGS-B-based optimizer module (full implementation, 3-point fit + verbose status).
 
 This module implements the L-BFGS-B optimization pathway using redundant
 internal coordinates and CBS-extrapolated energies (PySCF). It exposes a
@@ -8,18 +8,13 @@ programmatic API:
 
     run_optimization(params: dict, outputs_dir: pathlib.Path) -> dict
 
-which is the interface consumed by opt_cli.py.
-
-The implementation is adapted from the opt_3.py optimizer implementation
-and packaged here so that the optimizer can be run either directly from
-the command line or called by the CLI dispatcher.
-
-Notes:
-- params is expected to contain keys normalized by opt_cli.prepare_options_from_params,
-  e.g. 'input_xyz', 'method', 'X1', 'X2', 'X1hf', 'X2hf', 'beta', ...
-- outputs_dir is a pathlib.Path pointing to the directory where outputs
-  (cycle CSV and final XYZ) will be written. The function will create the folder
-  if it does not exist.
+Notes / differences from previous variant:
+ - Includes a 3-point parabolic helper (parabolic_minimum_3pt) (keeps available
+   for downstream uses and diagnostics).
+ - Callback prints detailed status per optimization step: CBS energy plus the
+   underlying SCF / correlation components returned by compute_cbs_energy.
+ - PySCF verbosity is controlled by CONFIG["PYSCF_VERBOSE"] and will be honored
+   by the SCF / correlation calls (so you will see PySCF text if enabled).
 """
 from pathlib import Path
 import argparse
@@ -28,7 +23,7 @@ import sys
 from functools import lru_cache
 
 import numpy as np
-from scipy.optimize import minimize, least_squares
+from scipy.optimize import minimize
 
 # PySCF imports
 try:
@@ -54,7 +49,8 @@ CONFIG = {
 
     # PySCF settings
     "PYSCF_MAX_MEMORY": 4 * 1024,  # in MB
-    "PYSCF_NTHREADS": 1,
+    "PYSCF_NTHREADS": 6,
+    "PYSCF_VERBOSE": 1,            # 0 = quiet, >0 prints PySCF output during calls
 
     # Geometry inversion (least_squares) options
     "LSQRTOL": 1e-8,
@@ -71,6 +67,8 @@ CONFIG = {
 # module-level default spin (can be set via _update_config_from_params)
 DEFAULT_SPIN = 0
 
+# ensure PySCF threads reflect config
+lib.num_threads(CONFIG["PYSCF_NTHREADS"])
 
 # ---------------------
 # Utility geometry functions
@@ -222,10 +220,38 @@ def internal_to_cartesian(initial_cart, internals, target_values, lsq_opts=None)
                 diffs.append(d)
         return np.array(diffs)
 
+    from scipy.optimize import least_squares
     result = least_squares(residuals, x0, method="trf", ftol=tol, xtol=tol, gtol=tol, max_nfev=max_nfev)
     if not result.success:
         print("Warning: internal->cartesian least_squares did not converge: " + result.message, file=sys.stderr)
     return result.x.reshape((nat, 3))
+
+
+# ---------------------
+# 3-point parabolic helper (robust)
+# ---------------------
+def parabolic_minimum_3pt(x, y):
+    """
+    Fit quadratic using three points (x0,x1,x2) and return x_min, y_min.
+    If fit fails, return the sampled best.
+    """
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if x.size != 3 or y.size != 3:
+        idx = np.argmin(y)
+        return float(x[idx]), float(y[idx])
+    try:
+        coeffs = np.polyfit(x, y, 2)
+        a, b, c = coeffs
+        if abs(a) < 1e-20:
+            idx = np.argmin(y)
+            return float(x[idx]), float(y[idx])
+        x_min = -b / (2.0 * a)
+        y_min = a * x_min ** 2 + b * x_min + c
+        return float(x_min), float(y_min)
+    except Exception:
+        idx = np.argmin(y)
+        return float(x[idx]), float(y[idx])
 
 
 # ---------------------
@@ -248,7 +274,6 @@ def cbs_compose(corr_small, corr_big, scf_small, scf_big, cfg=CONFIG):
         raise ZeroDivisionError("HF CBS denominator too small")
     b_hf = math.exp(BETA * X1_HF) / denom
 
-    # SQM-style HF composition (matches SQM module)
     E_hf_cbs = scf_big + b_hf * (scf_big - scf_small)
 
     E_cbs = E_hf_cbs + E_corr_cbs
@@ -261,21 +286,20 @@ def cbs_compose(corr_small, corr_big, scf_small, scf_big, cfg=CONFIG):
 def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd(t)", "mp2")):
     nat = len(symbols)
     mol = gto.Mole()
-    mol.verbose = 0
+    mol.verbose = CONFIG["PYSCF_VERBOSE"]
     mol.unit = "Angstrom"
     mol.atom = [(symbols[i], tuple(coords[i].tolist())) for i in range(nat)]
     mol.basis = basis
     mol.charge = 0
-    # Set spin from module-level default (can be changed by _update_config_from_params)
     mol.spin = int(DEFAULT_SPIN)
     mol.build()
 
+    # resources
     mol.max_memory = CONFIG["PYSCF_MAX_MEMORY"]
-    mol.stdout = None
-
+    # PySCF prints to stdout according to mol.verbose / mf.verbose
     mf = scf.RHF(mol)
     mf.conv_tol = 1e-8
-    mf.verbose = 0
+    mf.verbose = CONFIG["PYSCF_VERBOSE"]
     mf.max_cycle = 200
     try:
         scf_e = mf.kernel()
@@ -289,8 +313,8 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
             mycc = cc.CCSD(mf)
             mycc.conv_tol = 1e-7
             mycc.max_cycle = 200
+            mycc.verbose = CONFIG["PYSCF_VERBOSE"]
             mycc.kernel()
-            triples = 0.0
             try:
                 triples = mycc.ccsd_t()
             except Exception:
@@ -306,7 +330,7 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
     if corr_e is None and "mp2" in method_preference:
         try:
             mp2 = mp.MP2(mf)
-            mp2.verbose = 0
+            mp2.verbose = CONFIG["PYSCF_VERBOSE"]
             res = mp2.kernel()
             mp2_corr = None
             if hasattr(res, "e_corr"):
@@ -327,6 +351,7 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
     if corr_e is None:
         raise RuntimeError("No correlation energy available for basis {} (last error: {})".format(basis, last_err))
 
+    # Return (scf_total, correlation_energy) where correlation_energy is the correlation portion
     return float(scf_e), float(corr_e)
 
 
@@ -401,20 +426,42 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
     last = {"E": None, "count": 0}
 
     def callback(xk):
-        E = energy_cache.evaluate(xk, basis_pair=basis_pair)["E_cbs"]
-        last["count"] += 1
-        history.append({'cycle': last["count"], 'energy': float(E)})
-        if last["E"] is None or abs(E - last["E"]) > 1e-8:
-            print(f"opt step: E_cbs = {E:.10f} Ha")
+        try:
+            res = energy_cache.evaluate(xk, basis_pair=basis_pair)
+            E = res["E_cbs"]
+            last["count"] += 1
+            # Detailed printout: CBS + SCF/corr components
+            dbg = res.get("debug", {})
+            scf1 = dbg.get("scf1")
+            scf2 = dbg.get("scf2")
+            corr1 = dbg.get("corr1")
+            corr2 = dbg.get("corr2")
+            E_hf_cbs = dbg.get("E_hf_cbs")
+            E_corr_cbs = dbg.get("E_corr_cbs")
+            print(f"[opt step {last['count']}] E_cbs = {E:.10f} Ha  (E_hf_cbs={E_hf_cbs:.10f}, E_corr_cbs={E_corr_cbs:.10f})")
+            if scf1 is not None:
+                print(f"    scf (small) = {scf1:.10f}, scf (big) = {scf2:.10f}")
+            if corr1 is not None:
+                print(f"    corr (small) = {corr1:.10f}, corr (big) = {corr2:.10f}")
+            history.append({'cycle': last["count"], 'energy': float(E)})
+            # print a short internals summary (min/max)
+            xi = np.array(xk, dtype=float)
+            print(f"    internals (n={len(xi)}): min={xi.min():.6e}, max={xi.max():.6e}, rms={np.sqrt(np.mean(xi**2)):.6e}")
+            # optionally print cartesian RMS displacement from initial guess for diagnostics
+            rms_cart = np.sqrt(np.mean((res["cart"].reshape(-1) - np.array(coords0).reshape(-1))**2))
+            print(f"    cart RMS from initial: {rms_cart:.6e} Å")
             last["E"] = E
+        except Exception as e:
+            print(f"[callback] evaluation failed: {e}", file=sys.stderr)
 
     x0 = np.array(values0, dtype=float)
     # initial energy entry
     try:
         E0 = energy_cache.evaluate(x0, basis_pair=basis_pair)["E_cbs"]
         history.append({'cycle': 0, 'energy': float(E0)})
-    except Exception:
-        pass
+        print(f"[init] E_cbs (initial) = {E0:.10f} Ha")
+    except Exception as e:
+        print("[init] initial energy eval failed:", e, file=sys.stderr)
 
     opt_res = minimize(
         lambda x: energy_cache.evaluate(x, basis_pair=basis_pair)["E_cbs"],
@@ -440,7 +487,7 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
         "final_hf_cbs": final["E_hf_cbs"],
         "final_corr_cbs": final["E_corr_cbs"],
         "final_cart": final_cart,
-        "debug": final["debug"],
+        "debug": final.get("debug", {}),
         "internals": internals,
         "x_opt": x_opt,
         "history": history,
@@ -452,7 +499,7 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
 # Helper to update CONFIG from params
 # ---------------------
 def _update_config_from_params(params):
-    # params keys: X1, X2, X1hf, X2hf, beta, basis1, basis2, pyscf_threads, pyscf_max_memory, spin
+    # params keys: X1, X2, X1hf, X2hf, beta, basis1, basis2, pyscf_threads, pyscf_max_memory, spin, pyscf_verbose
     global DEFAULT_SPIN
     if params is None:
         return
@@ -473,6 +520,8 @@ def _update_config_from_params(params):
             lib.num_threads(nt)
         if "pyscf_max_memory" in params:
             CONFIG["PYSCF_MAX_MEMORY"] = int(params["pyscf_max_memory"])
+        if "pyscf_verbose" in params:
+            CONFIG["PYSCF_VERBOSE"] = int(params["pyscf_verbose"])
         # basis sets overrides
         if params.get("basis1") and params.get("basis2"):
             CONFIG["BASIS_SETS"] = (params["basis1"], params["basis2"])
@@ -510,6 +559,7 @@ def run_optimization(params: dict, outputs_dir: Path):
         basis_pair = CONFIG["BASIS_SETS"]
 
     print("Starting L-BFGS-B optimization with basis pair:", basis_pair)
+    print(f"PySCF verbosity = {CONFIG['PYSCF_VERBOSE']}, threads = {CONFIG['PYSCF_NTHREADS']}, max mem = {CONFIG['PYSCF_MAX_MEMORY']} MB")
     res = optimize_geometry(symbols, coords0, basis_pair=basis_pair)
 
     final_cart = res["final_cart"]
@@ -540,6 +590,9 @@ def _cli_main():
     parser.add_argument("--X2hf", type=float, default=None)
     parser.add_argument("--beta", type=float, default=None)
     parser.add_argument("--spin", type=int, default=0)
+    parser.add_argument("--pyscf_threads", type=int, default=None, help="Set PySCF thread count")
+    parser.add_argument("--pyscf_max_memory", type=int, default=None, help="Set PySCF max memory (MB)")
+    parser.add_argument("--pyscf_verbose", type=int, default=None, help="PySCF verbosity (0=quiet, >0 verbose)")
     args = parser.parse_args()
 
     params = {
@@ -552,6 +605,9 @@ def _cli_main():
         "X2hf": args.X2hf,
         "beta": args.beta,
         "spin": args.spin,
+        "pyscf_threads": args.pyscf_threads,
+        "pyscf_max_memory": args.pyscf_max_memory,
+        "pyscf_verbose": args.pyscf_verbose,
     }
     outputs_dir = Path.cwd() / "PyCBS-OUTPUTS"
     result = run_optimization(params, outputs_dir)
