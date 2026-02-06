@@ -16,8 +16,9 @@ import math
 import os
 import sys
 from functools import lru_cache
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
+import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
 from pycbs.writer import write_cycle_energies, write_final_xyz
@@ -517,7 +518,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
             # collect results
             sampled = {i: [] for i in range(len(internals))}  # idx -> list of (d, E, coords, err)
             if tasks:
-                with ProcessPoolExecutor(max_workers=workers) as ex:
+                with ProcessPoolExecutor(max_workers=workers, mp_context=mp.get_context("fork")) as ex:
                     futures = {ex.submit(_worker_eval_disp, t): t for t in tasks}
                     for fut in as_completed(futures):
                         res = fut.result()
@@ -692,7 +693,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
             val_results = []
             if val_tasks:
                 # run validation tasks in the ProcessPoolExecutor as well
-                with ProcessPoolExecutor(max_workers=workers) as ex:
+                with ProcessPoolExecutor(max_workers=workers, mp_context=mp.get_context("fork")) as ex:
                     futures = {ex.submit(_val_worker, vt): vt for vt in val_tasks}
                     for fut in as_completed(futures):
                         val_results.append(fut.result())
