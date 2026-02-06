@@ -380,7 +380,7 @@ def parabolic_minimum_3pt(x, y):
 def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DEFAULT, fac_mult=FAC_DEFAULT,
                       x1=X1_DEFAULT, x2=X2_DEFAULT, x1_hf=X1HF_DEFAULT, x2_hf=X2HF_DEFAULT, beta=BETA_DEFAULT,
                       basis_pair=None, spin: int = 0, debug: bool = False, energy_accept_tol: float | None = None,
-                      workers: int = 1):
+                      workers: int = 2):
     ENERGY_ACCEPT_TOL = 1e-6 if energy_accept_tol is None else float(energy_accept_tol)  # Ha
     MIN_CURVATURE = 1e-10
 
@@ -625,7 +625,7 @@ def run_optimization(params: dict, outputs_dir: Path):
     spin = int(params.get("spin", DEFAULT_SPIN))
     debug = bool(params.get("debug", False))
     energy_accept_tol = params.get("energy_accept_tol", None)
-    workers = int(params.get("workers", 1))
+    workers = int(params.get("workers", 2))
 
     atoms, coords0, comment = read_xyz(input_xyz)
     print(f"Loaded {len(atoms)} atoms from {input_xyz}")
@@ -691,7 +691,7 @@ if __name__ == "__main__":
     p.add_argument("--spin", type=int, default=0)
     p.add_argument("--debug", action="store_true", help="Enable verbose diagnostics")
     p.add_argument("--energy_accept_tol", type=float, default=None, help="Per-move acceptance energy (Ha)")
-    p.add_argument("--workers", type=int, default=1, help="Number of parallel internal evaluators (default 1)")
+    p.add_argument("--workers", type=int, default=2, help="Number of parallel internal evaluators (default 1)")
     args = p.parse_args()
 
     params = {
