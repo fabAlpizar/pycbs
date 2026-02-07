@@ -1,23 +1,18 @@
 #!/usr/bin/env python3
 """
-SQM-based optimizer module (improved + immediate 5-point exploration per-internal)
+SQM-based optimizer module (immediate 3-point exploration per-internal; improved)
 
-- Preserves improvements from your "improved" script:
+- Uses 3-point parabolic fits (−h, 0, +h) for internals.
+- Preserves improvements from your improved script:
     * larger LRU cache for CBS evaluations
     * geometry helpers, atom masses/radii
     * diagnostic printing and internals trace
     * ability to parallelize per-displacement evaluations (workers)
-- Changes exploration to match the "full" script:
-    * for each internal perform a 5-point scan (−2h, −h, 0, +h, +2h or angle/dihedral analog)
-    * if the best sampled/fitted geometry for that internal improves the current energy
-      by more than ENERGY_ACCEPT_TOL, **apply the update immediately** and continue with the next internal
-Usage:
-    python sqm_optimizer_immediate5_improved.py -i input.xyz --out PyCBS-OUTPUTS --workers 1 --debug
+- Exploration: per-internal immediate updates (apply improvement as soon as found).
 """
 from pathlib import Path
 import math
 import sys
-import traceback
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -81,7 +76,6 @@ def read_xyz(filename):
 
 
 def xyz_to_pyscf_string(atoms, coords):
-    # minimized string work
     return "\n".join(f"{a} {c[0]:.10f} {c[1]:.10f} {c[2]:.10f}" for a, c in zip(atoms, coords))
 
 
@@ -261,7 +255,6 @@ def apply_dihedral_change(coords, i, j, k, l, new_dihedral_deg):
 # -------------------------
 # CBS energy evaluator (with caching)
 # -------------------------
-# bigger cache for more reuse
 @lru_cache(maxsize=10000)
 def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str, spin: int):
     scf_vals = []
@@ -354,7 +347,7 @@ def compute_cbs_energy_from_xyz_cached(xyz_string: str, method: str, a_corr: flo
 
 
 # -------------------------
-# 3/5-point parabolic helpers
+# 3-point parabolic helper (robust)
 # -------------------------
 def parabolic_minimum_3pt(x, y):
     x = np.asarray(x, dtype=float)
@@ -377,6 +370,7 @@ def parabolic_minimum_3pt(x, y):
 
 
 def parabolic_minimum(x, y):
+    # kept for compatibility but not used in 3-point mode
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
     if x.size < 3 or y.size < 3:
@@ -397,7 +391,7 @@ def parabolic_minimum(x, y):
 
 
 # -------------------------
-# Main optimization loop (immediate 5-point exploration per internal)
+# Main optimization loop (immediate 3-point per-internal)
 # -------------------------
 def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DEFAULT, fac_mult=FAC_DEFAULT,
                       x1=X1_DEFAULT, x2=X2_DEFAULT, x1_hf=X1HF_DEFAULT, x2_hf=X2HF_DEFAULT, beta=BETA_DEFAULT,
@@ -451,7 +445,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
 
         print(f"\n>>> Cycle {cycle}/{maxcycle}, displacement_factor={displacement_factor:.6f}, current E = {current_energy:.10f} Ha")
 
-        # iterate internals sequentially, 5-point scan per internal, apply immediate update if improvement
+        # iterate internals sequentially, 3-point scan per internal, apply immediate update if improvement
         for ic in list(internals):  # iterate over snapshot of internals
             tp = ic['type']
             inds = ic['inds']
@@ -459,11 +453,12 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                 base = ic.get('value', _value_for_internal(tp, inds, current_coords))
                 h = displacement_factor * base
                 ds = np.array([-h, 0.0, +h], dtype=float)
-
             elif tp in ('angle', 'dihedral'):
                 base = ic.get('value', _value_for_internal(tp, inds, current_coords))
                 ddeg = 2.0 * (displacement_factor * 100.0)
                 ds = np.array([-ddeg, 0.0, +ddeg], dtype=float)
+            else:
+                ds = np.array([0.0], dtype=float)
 
             energies = [float('inf')] * ds.size
             coords_list = [None] * ds.size
@@ -497,7 +492,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                 for idx, d in enumerate(ds):
                     energies[idx], coords_list[idx] = eval_disp(idx, d)
             else:
-                # parallelize the 5 displacements for this single internal
+                # parallelize the 3 displacements for this single internal
                 with ThreadPoolExecutor(max_workers=workers) as exc:
                     fut_map = {exc.submit(eval_disp, idx, float(d)): idx for idx, d in enumerate(ds)}
                     for fut in as_completed(fut_map):
@@ -518,11 +513,10 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                     print(f"  Skipping {tp} {inds}: all evals failed")
                 continue
 
-            # Evaluate parabolic min across the grid (5-point) — returns x_min (in displacement units) and e_min
+            # 3-point parabolic minimum (use dedicated helper)
             try:
-                x_min_disp, e_min = parabolic_minimum(ds, es)
+                x_min_disp, e_min = parabolic_minimum_3pt(ds, es)
             except Exception:
-                # fallback
                 idx_best = int(np.nanargmin(es))
                 x_min_disp = float(ds[idx_best])
                 e_min = float(es[idx_best])
@@ -531,14 +525,13 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
             sampled_best_coords = coords_list[idx_sampled_best]
             sampled_best_energy = float(es[idx_sampled_best]) if not np.isinf(es[idx_sampled_best]) else None
 
-            # compute curvature and grad estimate (from central three points if available)
+            # compute gradient/curvature using the 3 points (indices 0,1,2)
             grad0 = None
             curvature = None
             try:
-                # center three points are indices 1,2,3 for 5-point array
-                Eminus = es[1]; E0 = es[2]; Eplus = es[3]
-                grad0 = (Eplus - Eminus) / (2.0 * (ds[3] - ds[2]))
-                curvature = (Eplus + Eminus - 2.0 * E0) / ((ds[3] - ds[2]) ** 2)
+                Eminus = es[0]; E0 = es[1]; Eplus = es[2]
+                grad0 = (Eplus - Eminus) / (2.0 * (ds[2] - ds[1]))
+                curvature = (Eplus + Eminus - 2.0 * E0) / ((ds[2] - ds[1]) ** 2)
             except Exception:
                 pass
 
@@ -590,17 +583,15 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                     chosen_energy_after = float(sampled_best_energy)
 
             if accepted:
-                # apply update immediately (match second script behavior)
                 prev_energy = current_energy
                 current_coords = chosen_coords.copy()
-                # rebuild internals on the *new* geometry
+                # rebuild internals on the new geometry
                 try:
                     internals = generate_internals_from_geometry(atoms, current_coords)
                 except Exception:
-                    # if rebuild fails keep previous internals but continue
                     pass
 
-                # try to compute actual energy after update (validate and store)
+                # compute actual energy after update
                 try:
                     cur_xyz_after = xyz_to_pyscf_string(atoms, current_coords)
                     actual_E_after = compute_cbs_energy_from_xyz_cached(cur_xyz_after, method, a_corr, b_hf, bs1, bs2, spin)
@@ -617,21 +608,18 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                     "grad0": float(grad0) if grad0 is not None else None
                 })
 
-                # update current_energy to the actual energy after change if available
                 if actual_E_after != float('inf'):
                     current_energy = float(actual_E_after)
                 else:
-                    # fallback to the sampled/predicted estimate
                     if chosen_energy_after is not None:
                         current_energy = float(chosen_energy_after)
 
-                # After immediate update we continue to the next internal (using the new current_coords)
                 if debug:
                     print(f"  Applied update on {tp} {inds}: reason={accept_reason}, disp={chosen_disp:.6f}, E_after={current_energy:.10f}")
-
             else:
                 if debug:
-                    print(f"  IC {tp} {inds}: no accepted improvement (best E {float(np.nanmin(es)):.10f})")
+                    best_e = float(np.nanmin(es))
+                    print(f"  IC {tp} {inds}: no accepted improvement (best sampled E {best_e:.10f})")
 
         # end per-internal loop for this cycle
 
