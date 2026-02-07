@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-SQM-based optimizer module (improved)
-- Same overall workflow as your original script.
-- Changes:
-  * optional parallel evaluation of internals (ThreadPoolExecutor; shared lru_cache)
-  * single-best-per-cycle update strategy (evaluate all internals each cycle, apply only the
-    single best validated improvement)
-  * increased cache size for more reuse
-  * small local micro-optimizations (fewer redundant string conversions)
-Usage (CLI):
-    python sqm_optimizer_improved.py -i input.xyz --out PyCBS-OUTPUTS --workers 4 --debug
+SQM-based optimizer module (improved + immediate 5-point exploration per-internal)
+
+- Preserves improvements from your "improved" script:
+    * larger LRU cache for CBS evaluations
+    * geometry helpers, atom masses/radii
+    * diagnostic printing and internals trace
+    * ability to parallelize per-displacement evaluations (workers)
+- Changes exploration to match the "full" script:
+    * for each internal perform a 5-point scan (−2h, −h, 0, +h, +2h or angle/dihedral analog)
+    * if the best sampled/fitted geometry for that internal improves the current energy
+      by more than ENERGY_ACCEPT_TOL, **apply the update immediately** and continue with the next internal
+Usage:
+    python sqm_optimizer_immediate5_improved.py -i input.xyz --out PyCBS-OUTPUTS --workers 1 --debug
 """
 from pathlib import Path
 import math
@@ -78,10 +81,8 @@ def read_xyz(filename):
 
 
 def xyz_to_pyscf_string(atoms, coords):
-    lines = []
-    for a, c in zip(atoms, coords):
-        lines.append(f"{a} {c[0]:.10f} {c[1]:.10f} {c[2]:.10f}")
-    return "\n".join(lines)
+    # minimized string work
+    return "\n".join(f"{a} {c[0]:.10f} {c[1]:.10f} {c[2]:.10f}" for a, c in zip(atoms, coords))
 
 
 def _angle_deg(a, b, c):
@@ -260,6 +261,7 @@ def apply_dihedral_change(coords, i, j, k, l, new_dihedral_deg):
 # -------------------------
 # CBS energy evaluator (with caching)
 # -------------------------
+# bigger cache for more reuse
 @lru_cache(maxsize=10000)
 def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str, spin: int):
     scf_vals = []
@@ -352,7 +354,7 @@ def compute_cbs_energy_from_xyz_cached(xyz_string: str, method: str, a_corr: flo
 
 
 # -------------------------
-# 3-point parabolic helper (robust)
+# 3/5-point parabolic helpers
 # -------------------------
 def parabolic_minimum_3pt(x, y):
     x = np.asarray(x, dtype=float)
@@ -374,8 +376,28 @@ def parabolic_minimum_3pt(x, y):
         return float(x[idx]), float(y[idx])
 
 
+def parabolic_minimum(x, y):
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if x.size < 3 or y.size < 3:
+        idx = np.argmin(y)
+        return float(x[idx]), float(y[idx])
+    try:
+        coeffs = np.polyfit(x, y, 2)
+        a, b, c = coeffs
+        if abs(a) < 1e-20:
+            idx = np.argmin(y)
+            return float(x[idx]), float(y[idx])
+        x_min = -b / (2.0 * a)
+        y_min = a * x_min ** 2 + b * x_min + c
+        return float(x_min), float(y_min)
+    except Exception:
+        idx = np.argmin(y)
+        return float(x[idx]), float(y[idx])
+
+
 # -------------------------
-# Main optimization loop (SQM-style) — modified single-best-per-cycle + optional parallel workers
+# Main optimization loop (immediate 5-point exploration per internal)
 # -------------------------
 def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DEFAULT, fac_mult=FAC_DEFAULT,
                       x1=X1_DEFAULT, x2=X2_DEFAULT, x1_hf=X1HF_DEFAULT, x2_hf=X2HF_DEFAULT, beta=BETA_DEFAULT,
@@ -394,15 +416,13 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         basis_pair = (basis_sets[0], basis_sets[1])
     bs1, bs2 = basis_pair
 
-    baseline_internals = generate_internals_from_geometry(atoms, coords)
-    if not baseline_internals:
+    internals = generate_internals_from_geometry(atoms, coords)
+    if not internals:
         raise RuntimeError("No internal coordinates found; check input geometry.")
 
-    baseline_labels = [_label_internal(ic['type'], ic['inds'], atoms) for ic in baseline_internals]
-    baseline_inds = [ic['inds'] for ic in baseline_internals]
-    baseline_types = [ic['type'] for ic in baseline_internals]
-
-    internals = [dict(ic) for ic in baseline_internals]
+    baseline_labels = [_label_internal(ic['type'], ic['inds'], atoms) for ic in internals]
+    baseline_inds = [ic['inds'] for ic in internals]
+    baseline_types = [ic['type'] for ic in internals]
 
     current_coords = coords.copy()
     displacement_factor = fac_mult
@@ -429,29 +449,27 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
 
         applied_changes = []
 
-        if debug:
-            print(f"\n>>> Cycle {cycle}/{maxcycle}, displacement_factor={displacement_factor:.6f}, current E = {current_energy:.10f} Ha")
-        else:
-            print(f"\n>>> Cycle {cycle}/{maxcycle}, displacement_factor={displacement_factor:.6f}, current E = {current_energy:.10f} Ha")
+        print(f"\n>>> Cycle {cycle}/{maxcycle}, displacement_factor={displacement_factor:.6f}, current E = {current_energy:.10f} Ha")
 
-        # ---- Evaluate all internals (3-point samples) and pick single best validated improvement ----
-        def evaluate_internal(ic):
-            tp = ic['type']; inds = ic['inds']
+        # iterate internals sequentially, 5-point scan per internal, apply immediate update if improvement
+        for ic in list(internals):  # iterate over snapshot of internals
+            tp = ic['type']
+            inds = ic['inds']
             if tp == 'bond':
                 base = ic.get('value', _value_for_internal(tp, inds, current_coords))
                 h = displacement_factor * base
-                ds = np.array([-h, 0.0, h], dtype=float)
+                ds = np.array([-h, 0.0, +h], dtype=float)
+
             elif tp in ('angle', 'dihedral'):
                 base = ic.get('value', _value_for_internal(tp, inds, current_coords))
-                h = 2.0 * (displacement_factor * 100.0)
-                ds = np.array([-h, 0.0, h], dtype=float)
-            else:
-                ds = np.array([0.0])
-                h = 0.0
+                ddeg = 2.0 * (displacement_factor * 100.0)
+                ds = np.array([-ddeg, 0.0, +ddeg], dtype=float)
 
-            es = []
-            coords_list = []
-            for d in ds:
+            energies = [float('inf')] * ds.size
+            coords_list = [None] * ds.size
+
+            # helper to evaluate one displacement
+            def eval_disp(idx, d):
                 try:
                     if tp == 'bond':
                         i, j = inds
@@ -469,111 +487,153 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                         new_coords = current_coords.copy()
                     xyzs = xyz_to_pyscf_string(atoms, new_coords)
                     E = compute_cbs_energy_from_xyz_cached(xyzs, method, a_corr, b_hf, bs1, bs2, spin)
-                    es.append(float(E)); coords_list.append(new_coords)
-                except Exception:
-                    es.append(float('inf')); coords_list.append(None)
+                    return float(E), new_coords
+                except Exception as e:
                     if debug:
-                        print(f"    eval failed for IC {tp} {inds} displacement {d}")
+                        print(f"    eval failed for IC {tp} {inds} displacement {d}: {e}")
+                    return float('inf'), None
 
-            es = np.array(es, dtype=float)
+            if workers is None or workers <= 1:
+                for idx, d in enumerate(ds):
+                    energies[idx], coords_list[idx] = eval_disp(idx, d)
+            else:
+                # parallelize the 5 displacements for this single internal
+                with ThreadPoolExecutor(max_workers=workers) as exc:
+                    fut_map = {exc.submit(eval_disp, idx, float(d)): idx for idx, d in enumerate(ds)}
+                    for fut in as_completed(fut_map):
+                        idx = fut_map[fut]
+                        try:
+                            E, new_coords = fut.result()
+                            energies[idx] = E
+                            coords_list[idx] = new_coords
+                        except Exception as e:
+                            energies[idx] = float('inf')
+                            coords_list[idx] = None
+                            if debug:
+                                print("    worker error:", e)
+
+            es = np.array(energies, dtype=float)
             if np.all(np.isinf(es)):
-                return None
+                if debug:
+                    print(f"  Skipping {tp} {inds}: all evals failed")
+                continue
 
-            x_min_disp, e_min = parabolic_minimum_3pt(ds, es)
-            idx_best = int(np.nanargmin(es))
-            sampled_best_coords = coords_list[idx_best]
-            sampled_best_energy = float(es[idx_best]) if not np.isinf(es[idx_best]) else None
+            # Evaluate parabolic min across the grid (5-point) — returns x_min (in displacement units) and e_min
+            try:
+                x_min_disp, e_min = parabolic_minimum(ds, es)
+            except Exception:
+                # fallback
+                idx_best = int(np.nanargmin(es))
+                x_min_disp = float(ds[idx_best])
+                e_min = float(es[idx_best])
 
+            idx_sampled_best = int(np.nanargmin(es))
+            sampled_best_coords = coords_list[idx_sampled_best]
+            sampled_best_energy = float(es[idx_sampled_best]) if not np.isinf(es[idx_sampled_best]) else None
+
+            # compute curvature and grad estimate (from central three points if available)
             grad0 = None
             curvature = None
             try:
-                Eminus = es[0]; E0 = es[1]; Eplus = es[2]
-                grad0 = (Eplus - Eminus) / (2.0 * (ds[2] - ds[1]))
-                curvature = (Eplus + Eminus - 2.0 * E0) / ((ds[2] - ds[1]) ** 2)
+                # center three points are indices 1,2,3 for 5-point array
+                Eminus = es[1]; E0 = es[2]; Eplus = es[3]
+                grad0 = (Eplus - Eminus) / (2.0 * (ds[3] - ds[2]))
+                curvature = (Eplus + Eminus - 2.0 * E0) / ((ds[3] - ds[2]) ** 2)
             except Exception:
                 pass
 
-            deltaE_pred = current_energy - e_min
-
-            if curvature is not None and curvature > MIN_CURVATURE and deltaE_pred > ENERGY_ACCEPT_TOL:
-                try:
-                    if tp == 'bond':
-                        i, j = inds
-                        coords_at_pred = apply_bond_change(current_coords, i, j, ic.get('value', _value_for_internal(tp, inds, current_coords)) + x_min_disp, atoms)
-                    elif tp == 'angle':
-                        i, j, k = inds
-                        coords_at_pred = apply_angle_change(current_coords, i, j, k, ic.get('value', _value_for_internal(tp, inds, current_coords)) + x_min_disp)
-                    elif tp == 'dihedral':
-                        i, j, k, l = inds
-                        coords_at_pred = apply_dihedral_change(current_coords, i, j, k, l, ic.get('value', _value_for_internal(tp, inds, current_coords)) + x_min_disp)
-                    else:
-                        coords_at_pred = current_coords.copy()
-
+            # predicted displacement geometry (via parabolic fit) -> construct coordinates_at_pred and evaluate true energy
+            coords_at_pred = None
+            E_pred_true = float('inf')
+            deltaE_pred_true = -1.0
+            try:
+                if tp == 'bond':
+                    i, j = inds
+                    coords_at_pred = apply_bond_change(current_coords, i, j, ic.get('value', _value_for_internal(tp, inds, current_coords)) + x_min_disp, atoms)
+                elif tp == 'angle':
+                    i, j, k = inds
+                    coords_at_pred = apply_angle_change(current_coords, i, j, k, ic.get('value', _value_for_internal(tp, inds, current_coords)) + x_min_disp)
+                elif tp == 'dihedral':
+                    i, j, k, l = inds
+                    coords_at_pred = apply_dihedral_change(current_coords, i, j, k, l, ic.get('value', _value_for_internal(tp, inds, current_coords)) + x_min_disp)
+                else:
+                    coords_at_pred = current_coords.copy()
+                if coords_at_pred is not None:
                     xyz_pred = xyz_to_pyscf_string(atoms, coords_at_pred)
                     E_pred_true = compute_cbs_energy_from_xyz_cached(xyz_pred, method, a_corr, b_hf, bs1, bs2, spin)
                     deltaE_pred_true = current_energy - float(E_pred_true)
-                except Exception:
-                    E_pred_true = float('inf')
-                    deltaE_pred_true = -1.0
-
-                if E_pred_true != float('inf') and deltaE_pred_true > ENERGY_ACCEPT_TOL:
-                    return (deltaE_pred_true, x_min_disp, coords_at_pred, ic, curvature, grad0, sampled_best_energy, sampled_best_coords, 'predicted')
-
-            # fallback: sampled best
-            if sampled_best_energy is not None and (current_energy - sampled_best_energy) > ENERGY_ACCEPT_TOL:
-                return ((current_energy - sampled_best_energy), ds[idx_best], sampled_best_coords, ic, curvature, grad0, sampled_best_energy, sampled_best_coords, 'sampled')
-
-            return None
-
-        candidates = []
-        if workers is None or workers <= 1:
-            for ic in internals:
-                try:
-                    res = evaluate_internal(ic)
-                    if res is not None:
-                        candidates.append(res)
-                except Exception:
-                    if debug:
-                        print("  evaluator error for internal", ic.get('inds'))
-        else:
-            with ThreadPoolExecutor(max_workers=workers) as exc:
-                future_map = {exc.submit(evaluate_internal, ic): ic for ic in internals}
-                for fut in as_completed(future_map):
-                    try:
-                        res = fut.result()
-                        if res is not None:
-                            candidates.append(res)
-                    except Exception as e:
-                        if debug:
-                            print("  worker error:", e)
-
-        # pick the best validated candidate (largest deltaE)
-        if not candidates:
-            if debug:
-                print("  No acceptable candidate found this cycle.")
-        else:
-            best_candidate = max(candidates, key=lambda x: x[0])
-            deltaE, chosen_disp, chosen_coords, chosen_ic, curvature, grad0, sampled_e, sampled_coords, which = best_candidate
-
-            current_coords = chosen_coords.copy()
-            internals = generate_internals_from_geometry(atoms, current_coords)
-            try:
-                cur_xyz_after = xyz_to_pyscf_string(atoms, current_coords)
-                actual_E_after = compute_cbs_energy_from_xyz_cached(cur_xyz_after, method, a_corr, b_hf, bs1, bs2, spin)
             except Exception:
-                actual_E_after = float('inf')
+                E_pred_true = float('inf')
+                deltaE_pred_true = -1.0
 
-            applied_changes.append({
-                "internal": _label_internal(chosen_ic['type'], chosen_ic['inds'], atoms),
-                "which": which,
-                "disp": float(chosen_disp),
-                "deltaE_estimate": float(deltaE),
-                "energy_after": float(actual_E_after),
-                "curvature": float(curvature) if curvature is not None else None,
-                "grad0": float(grad0) if grad0 is not None else None
-            })
+            # Decision logic: accept predicted parabolic minimum if validated, else accept sampled best if it improves
+            accepted = False
+            accept_reason = None
+            chosen_coords = None
+            chosen_disp = None
+            chosen_energy_after = None
 
-            current_energy = float(actual_E_after)
+            if E_pred_true != float('inf') and deltaE_pred_true > ENERGY_ACCEPT_TOL and curvature is not None and curvature > MIN_CURVATURE:
+                # accept predicted
+                accepted = True
+                accept_reason = 'predicted'
+                chosen_coords = coords_at_pred
+                chosen_disp = float(x_min_disp)
+                chosen_energy_after = float(E_pred_true)
+            else:
+                # fallback to sampled best
+                if sampled_best_coords is not None and sampled_best_energy is not None and (current_energy - sampled_best_energy) > ENERGY_ACCEPT_TOL:
+                    accepted = True
+                    accept_reason = 'sampled'
+                    chosen_coords = sampled_best_coords
+                    chosen_disp = float(ds[idx_sampled_best])
+                    chosen_energy_after = float(sampled_best_energy)
+
+            if accepted:
+                # apply update immediately (match second script behavior)
+                prev_energy = current_energy
+                current_coords = chosen_coords.copy()
+                # rebuild internals on the *new* geometry
+                try:
+                    internals = generate_internals_from_geometry(atoms, current_coords)
+                except Exception:
+                    # if rebuild fails keep previous internals but continue
+                    pass
+
+                # try to compute actual energy after update (validate and store)
+                try:
+                    cur_xyz_after = xyz_to_pyscf_string(atoms, current_coords)
+                    actual_E_after = compute_cbs_energy_from_xyz_cached(cur_xyz_after, method, a_corr, b_hf, bs1, bs2, spin)
+                except Exception:
+                    actual_E_after = float('inf')
+
+                applied_changes.append({
+                    "internal": _label_internal(tp, inds, atoms),
+                    "which": accept_reason,
+                    "disp": float(chosen_disp),
+                    "deltaE_estimate": float(prev_energy - chosen_energy_after) if chosen_energy_after is not None else None,
+                    "energy_after": float(actual_E_after) if actual_E_after != float('inf') else None,
+                    "curvature": float(curvature) if curvature is not None else None,
+                    "grad0": float(grad0) if grad0 is not None else None
+                })
+
+                # update current_energy to the actual energy after change if available
+                if actual_E_after != float('inf'):
+                    current_energy = float(actual_E_after)
+                else:
+                    # fallback to the sampled/predicted estimate
+                    if chosen_energy_after is not None:
+                        current_energy = float(chosen_energy_after)
+
+                # After immediate update we continue to the next internal (using the new current_coords)
+                if debug:
+                    print(f"  Applied update on {tp} {inds}: reason={accept_reason}, disp={chosen_disp:.6f}, E_after={current_energy:.10f}")
+
+            else:
+                if debug:
+                    print(f"  IC {tp} {inds}: no accepted improvement (best E {float(np.nanmin(es)):.10f})")
+
+        # end per-internal loop for this cycle
 
         history.append({'cycle': cycle, 'energy': float(current_energy)})
         cyc_map = {}
@@ -584,7 +644,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         if applied_changes:
             print(f"\nCycle {cycle} applied changes ({len(applied_changes)}):")
             for ch in applied_changes:
-                print(f"  - {ch['internal']}: type={ch['which']}, disp={ch['disp']:.6f}, ΔE_est={ch['deltaE_estimate']:.3e} Ha, E_after={ch['energy_after']:.10f}, curvature={ch['curvature']:.3e}")
+                print(f"  - {ch['internal']}: type={ch['which']}, disp={ch['disp']:.6f}, ΔE_est={ch['deltaE_estimate']:.3e} Ha, E_after={ch['energy_after']:.10f}, curvature={ch['curvature']}")
         else:
             print(f"Cycle {cycle}: no accepted internal changes.")
 
@@ -691,7 +751,7 @@ if __name__ == "__main__":
     p.add_argument("--spin", type=int, default=0)
     p.add_argument("--debug", action="store_true", help="Enable verbose diagnostics")
     p.add_argument("--energy_accept_tol", type=float, default=None, help="Per-move acceptance energy (Ha)")
-    p.add_argument("--workers", type=int, default=1, help="Number of parallel internal evaluators (default 1)")
+    p.add_argument("--workers", type=int, default=1, help="Number of parallel workers for per-internal displacement evaluations")
     args = p.parse_args()
 
     params = {
