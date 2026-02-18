@@ -73,7 +73,7 @@ STEP-BY-STEP WORKFLOW:
 5. OUTPUT GENERATION
    - Saves per-cycle XYZ geometries (cycle_000_initial, cycle_001, ...)
    - Saves final optimized XYZ
-   - Saves energy vs cycle plot (with both PySCF and CBS energies)
+   - Saves energy vs cycle plot (with PySCF HF, PySCF Correlation, and CBS energies)
    - Prints internal coordinate trace (values per cycle)
 
 KEY DIFFERENCES FROM SINGLE-BEST STRATEGY:
@@ -450,13 +450,30 @@ def compute_cbs_energy_from_xyz_cached(xyz_string: str, method: str, a_corr: flo
     return _compute_cbs_from_xyz_cached(xyz_string, method, a_corr, b_hf, bs1, bs2, int(spin))
 
 
-# ---- HELPER FUNCTION: Compute PySCF HF energies for both bases ----
-def compute_pyscf_hf_energies(atoms, coords, bs1, bs2, spin, pyscf_threads):
-    """Compute RHF-SCF energies for both basis sets (for CSV logging)"""
-    pyscf_energies = {}
+# ---- HELPER FUNCTION: Compute PySCF energies (HF + Correlation) for both bases ----
+def compute_pyscf_energies(atoms, coords, bs1, bs2, method, spin, pyscf_threads):
+    """
+    Compute PySCF energies for both basis sets:
+    - HF-SCF energy
+    - Correlation energy (CCSD(T) or MP2 depending on method)
+    - Total energy (HF + Correlation)
+
+    Returns dict with keys: hf_bs1, hf_bs2, corr_bs1, corr_bs2, total_bs1, total_bs2
+    """
+    pyscf_data = {
+        'hf_bs1': None, 'hf_bs2': None,
+        'corr_bs1': None, 'corr_bs2': None,
+        'total_bs1': None, 'total_bs2': None
+    }
+
     try:
         xyz_str = xyz_to_pyscf_string(atoms, coords)
-        for basis in (bs1, bs2):
+
+        for idx, basis in enumerate((bs1, bs2)):
+            basis_key_hf = 'hf_bs1' if idx == 0 else 'hf_bs2'
+            basis_key_corr = 'corr_bs1' if idx == 0 else 'corr_bs2'
+            basis_key_total = 'total_bs1' if idx == 0 else 'total_bs2'
+
             mol = gto.Mole()
             mol.atom = xyz_str
             mol.basis = basis
@@ -465,17 +482,60 @@ def compute_pyscf_hf_energies(atoms, coords, bs1, bs2, spin, pyscf_threads):
             mol.nthread = pyscf_threads
             mol.max_memory = 8000
             mol.build()
+
             mf = scf.RHF(mol)
             mf.max_memory = 14330
             mf.conv_tol = 1e-9
             mf.max_cycle = 100
             scf_e = mf.kernel()
-            pyscf_energies[basis] = float(scf_e)
+            pyscf_data[basis_key_hf] = float(scf_e)
+
+            corr_e = None
+            total_e = None
+
+            # Compute correlation energy based on method
+            if method.upper().startswith('CCSD'):
+                try:
+                    mycc = cc.CCSD(mf)
+                    mycc.conv_tol = 1e-7
+                    mycc.max_cycle = 100
+                    mycc.kernel()
+                    try:
+                        et = mycc.ccsd_t()
+                    except Exception:
+                        et = 0.0
+                    total_e = mycc.e_tot + (et if et is not None else 0.0)
+                    corr_e = total_e - scf_e
+                except Exception:
+                    corr_e = None
+                    total_e = None
+
+            if corr_e is None and method.upper().startswith('MP2'):
+                try:
+                    mymp = mp.MP2(mf)
+                    mymp.max_memory = 14330
+                    res = mymp.run()
+                    mp2_total = getattr(res, 'e_tot', None)
+                    if mp2_total is None:
+                        mp2_total = getattr(mymp, 'e_tot', None)
+                    if mp2_total is None:
+                        e_corr_tmp = getattr(res, 'e_corr', getattr(mymp, 'e_corr', None))
+                        if e_corr_tmp is not None:
+                            mp2_total = scf_e + e_corr_tmp
+                    if mp2_total is not None:
+                        total_e = float(mp2_total)
+                        corr_e = total_e - scf_e
+                except Exception:
+                    corr_e = None
+                    total_e = None
+
+            pyscf_data[basis_key_corr] = float(corr_e) if corr_e is not None else None
+            pyscf_data[basis_key_total] = float(total_e) if total_e is not None else None
+
     except Exception as e:
-        if sys.modules.get('__main__'):  # Only print if not silent
-            pass
-        pyscf_energies = {bs1: None, bs2: None}
-    return pyscf_energies
+        pass
+
+    return pyscf_data
 
 
 # -------------------------
@@ -501,19 +561,24 @@ def parabolic_minimum_3pt(x, y):
         return float(x[idx]), float(y[idx])
 
 
-# ---- CSV WRITER FUNCTION: Write cycle energies with PySCF data ----
-def write_cycle_energies_with_pyscf(outputs_dir, prefix, history, basis1, basis2):
+# ---- CSV WRITER FUNCTION: Write cycle energies with full PySCF data ----
+def write_cycle_energies_with_pyscf(outputs_dir, prefix, history, basis1, basis2, method):
     """
-    Write cycle energies to CSV with both PySCF (HF-SCF) and CBS energies.
+    Write cycle energies to CSV with PySCF (HF + Correlation) and CBS energies.
 
     Output CSV has columns:
-    Cycle, CBS_Energy, PySCF_HF_<basis1>, PySCF_HF_<basis2>, Energy_Difference
+    Cycle, CBS_Energy, PySCF_HF_bs1, PySCF_Corr_bs1, PySCF_Total_bs1,
+           PySCF_HF_bs2, PySCF_Corr_bs2, PySCF_Total_bs2,
+           ΔE_CBS_from_initial, ΔE_CBS_from_previous
     """
     csv_file = outputs_dir / f"{prefix}_cycles_with_pyscf.csv"
 
     with open(csv_file, 'w') as f:
         # Header
-        f.write(f"Cycle,CBS_Energy_Ha,PySCF_HF_{basis1}_Ha,PySCF_HF_{basis2}_Ha,ΔE_from_initial_Ha,ΔE_from_previous_Ha\n")
+        f.write(f"Cycle,CBS_Energy_Ha,")
+        f.write(f"PySCF_HF_{basis1}_Ha,PySCF_{method}_{basis1}_Ha,PySCF_Total_{basis1}_Ha,")
+        f.write(f"PySCF_HF_{basis2}_Ha,PySCF_{method}_{basis2}_Ha,PySCF_Total_{basis2}_Ha,")
+        f.write(f"ΔE_CBS_from_initial_Ha,ΔE_CBS_from_previous_Ha\n")
 
         initial_energy = history[0]['energy'] if history else 0.0
         previous_energy = initial_energy
@@ -521,18 +586,27 @@ def write_cycle_energies_with_pyscf(outputs_dir, prefix, history, basis1, basis2
         for entry in history:
             cycle = entry['cycle']
             cbs_e = entry['energy']
-            pyscf_bs1 = entry.get('pyscf_hf_bs1', None)
-            pyscf_bs2 = entry.get('pyscf_hf_bs2', None)
+
+            # Get PySCF data
+            hf_bs1 = entry.get('pyscf_hf_bs1', None)
+            corr_bs1 = entry.get('pyscf_corr_bs1', None)
+            total_bs1 = entry.get('pyscf_total_bs1', None)
+
+            hf_bs2 = entry.get('pyscf_hf_bs2', None)
+            corr_bs2 = entry.get('pyscf_corr_bs2', None)
+            total_bs2 = entry.get('pyscf_total_bs2', None)
 
             delta_from_initial = cbs_e - initial_energy
             delta_from_previous = cbs_e - previous_energy
 
-            # Format: use 'N/A' if PySCF energies not available
-            pyscf_bs1_str = f"{pyscf_bs1:.10f}" if pyscf_bs1 is not None else "N/A"
-            pyscf_bs2_str = f"{pyscf_bs2:.10f}" if pyscf_bs2 is not None else "N/A"
+            # Format energies (use 'N/A' if not available)
+            def fmt(val):
+                return f"{val:.10f}" if val is not None else "N/A"
 
-            f.write(
-                f"{cycle},{cbs_e:.10f},{pyscf_bs1_str},{pyscf_bs2_str},{delta_from_initial:.10e},{delta_from_previous:.10e}\n")
+            f.write(f"{cycle},{cbs_e:.10f},")
+            f.write(f"{fmt(hf_bs1)},{fmt(corr_bs1)},{fmt(total_bs1)},")
+            f.write(f"{fmt(hf_bs2)},{fmt(corr_bs2)},{fmt(total_bs2)},")
+            f.write(f"{delta_from_initial:.10e},{delta_from_previous:.10e}\n")
 
             previous_energy = cbs_e
 
@@ -705,22 +779,13 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                 try:
                     if tp == 'bond':
                         i, j = inds
-                        coords_at_pred = apply_bond_change(current_coords, i, j, ic.get('value',
-                                                                                        _value_for_internal(tp, inds,
-                                                                                                            current_coords)) + x_min_disp,
-                                                           atoms)
+                        coords_at_pred = apply_bond_change(current_coords, i, j, ic.get('value',_value_for_internal(tp, inds,current_coords)) + x_min_disp,atoms)
                     elif tp == 'angle':
                         i, j, k = inds
-                        coords_at_pred = apply_angle_change(current_coords, i, j, k, ic.get('value',
-                                                                                            _value_for_internal(tp,
-                                                                                                                inds,
-                                                                                                                current_coords)) + x_min_disp)
+                        coords_at_pred = apply_angle_change(current_coords, i, j, k, ic.get('value',_value_for_internal(tp,inds,current_coords)) + x_min_disp)
                     elif tp == 'dihedral':
                         i, j, k, l = inds
-                        coords_at_pred = apply_dihedral_change(current_coords, i, j, k, l, ic.get('value',
-                                                                                                  _value_for_internal(
-                                                                                                      tp, inds,
-                                                                                                      current_coords)) + x_min_disp)
+                        coords_at_pred = apply_dihedral_change(current_coords, i, j, k, l, ic.get('value', _value_for_internal(tp, inds,current_coords)) + x_min_disp)
                     else:
                         coords_at_pred = current_coords.copy()
 
@@ -797,14 +862,18 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         else:
             print(f"  No acceptable candidates this cycle.")
 
-        # Calculate PySCF energies for CSV logging
-        pyscf_energies = compute_pyscf_hf_energies(atoms, current_coords, bs1, bs2, spin, PYSCF_THREADS)
+        # Calculate PySCF energies for CSV logging (HF + Correlation + Total)
+        pyscf_data = compute_pyscf_energies(atoms, current_coords, bs1, bs2, method, spin, PYSCF_THREADS)
 
         history.append({
             'cycle': cycle,
             'energy': float(current_energy),
-            'pyscf_hf_bs1': pyscf_energies.get(bs1, None),
-            'pyscf_hf_bs2': pyscf_energies.get(bs2, None)
+            'pyscf_hf_bs1': pyscf_data.get('hf_bs1', None),
+            'pyscf_corr_bs1': pyscf_data.get('corr_bs1', None),
+            'pyscf_total_bs1': pyscf_data.get('total_bs1', None),
+            'pyscf_hf_bs2': pyscf_data.get('hf_bs2', None),
+            'pyscf_corr_bs2': pyscf_data.get('corr_bs2', None),
+            'pyscf_total_bs2': pyscf_data.get('total_bs2', None),
         })
         cyc_map = {}
         for lbl, tp, inds in zip(baseline_labels, baseline_types, baseline_inds):
@@ -890,10 +959,11 @@ def run_optimization(params: dict, outputs_dir: Path):
     cycles_file = write_cycle_energies(outputs_dir, prefix, history)
     xyz_file = write_final_xyz(outputs_dir, prefix, atoms_out, coords_out, history[-1]['energy'] if history else 0.0)
 
-    # Write enhanced CSV with PySCF + CBS energies
+    # Write enhanced CSV with full PySCF data (HF + Correlation + Total)
     if basis_pair is None:
         basis_pair = (basis_sets[0], basis_sets[1])
-    enhanced_cycles_file = write_cycle_energies_with_pyscf(outputs_dir, prefix, history, basis_pair[0], basis_pair[1])
+    enhanced_cycles_file = write_cycle_energies_with_pyscf(outputs_dir, prefix, history, basis_pair[0], basis_pair[1],
+                                                           method)
 
     try:
         print("\nRedundant-internal coordinates trace (rows: internal, columns: cycle 0..):")
@@ -920,7 +990,7 @@ def run_optimization(params: dict, outputs_dir: Path):
     print("ENERGY CSV FILES:")
     print("=" * 80)
     print(f"  Standard CSV: {Path(cycles_file).name}")
-    print(f"  Enhanced CSV (with PySCF): {Path(enhanced_cycles_file).name}")
+    print(f"  Enhanced CSV (with PySCF HF + {method} + Total): {Path(enhanced_cycles_file).name}")
     print("=" * 80)
 
     return {
