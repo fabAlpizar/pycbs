@@ -73,7 +73,7 @@ STEP-BY-STEP WORKFLOW:
 5. OUTPUT GENERATION
    - Saves per-cycle XYZ geometries (cycle_000_initial, cycle_001, ...)
    - Saves final optimized XYZ
-   - Saves energy vs cycle plot
+   - Saves energy vs cycle plot (with both PySCF and CBS energies)
    - Prints internal coordinate trace (values per cycle)
 
 KEY DIFFERENCES FROM SINGLE-BEST STRATEGY:
@@ -123,7 +123,7 @@ BETA_DEFAULT = 1.62
 PYSCF_THREADS = 1
 lib.num_threads(PYSCF_THREADS)
 
-MAXCYCLE_DEFAULT = 50
+MAXCYCLE_DEFAULT = 70
 ENERGY_CRIT = 1e-8
 FAC_DEFAULT = 0.05
 CUT = 0.75
@@ -450,6 +450,34 @@ def compute_cbs_energy_from_xyz_cached(xyz_string: str, method: str, a_corr: flo
     return _compute_cbs_from_xyz_cached(xyz_string, method, a_corr, b_hf, bs1, bs2, int(spin))
 
 
+# ---- HELPER FUNCTION: Compute PySCF HF energies for both bases ----
+def compute_pyscf_hf_energies(atoms, coords, bs1, bs2, spin, pyscf_threads):
+    """Compute RHF-SCF energies for both basis sets (for CSV logging)"""
+    pyscf_energies = {}
+    try:
+        xyz_str = xyz_to_pyscf_string(atoms, coords)
+        for basis in (bs1, bs2):
+            mol = gto.Mole()
+            mol.atom = xyz_str
+            mol.basis = basis
+            mol.spin = int(spin)
+            mol.charge = 0
+            mol.nthread = pyscf_threads
+            mol.max_memory = 8000
+            mol.build()
+            mf = scf.RHF(mol)
+            mf.max_memory = 14330
+            mf.conv_tol = 1e-9
+            mf.max_cycle = 100
+            scf_e = mf.kernel()
+            pyscf_energies[basis] = float(scf_e)
+    except Exception as e:
+        if sys.modules.get('__main__'):  # Only print if not silent
+            pass
+        pyscf_energies = {bs1: None, bs2: None}
+    return pyscf_energies
+
+
 # -------------------------
 # 3-point parabolic helper (robust)
 # -------------------------
@@ -471,6 +499,44 @@ def parabolic_minimum_3pt(x, y):
     except Exception:
         idx = np.argmin(y)
         return float(x[idx]), float(y[idx])
+
+
+# ---- CSV WRITER FUNCTION: Write cycle energies with PySCF data ----
+def write_cycle_energies_with_pyscf(outputs_dir, prefix, history, basis1, basis2):
+    """
+    Write cycle energies to CSV with both PySCF (HF-SCF) and CBS energies.
+
+    Output CSV has columns:
+    Cycle, CBS_Energy, PySCF_HF_<basis1>, PySCF_HF_<basis2>, Energy_Difference
+    """
+    csv_file = outputs_dir / f"{prefix}_cycles_with_pyscf.csv"
+
+    with open(csv_file, 'w') as f:
+        # Header
+        f.write(f"Cycle,CBS_Energy_Ha,PySCF_HF_{basis1}_Ha,PySCF_HF_{basis2}_Ha,ΔE_from_initial_Ha,ΔE_from_previous_Ha\n")
+
+        initial_energy = history[0]['energy'] if history else 0.0
+        previous_energy = initial_energy
+
+        for entry in history:
+            cycle = entry['cycle']
+            cbs_e = entry['energy']
+            pyscf_bs1 = entry.get('pyscf_hf_bs1', None)
+            pyscf_bs2 = entry.get('pyscf_hf_bs2', None)
+
+            delta_from_initial = cbs_e - initial_energy
+            delta_from_previous = cbs_e - previous_energy
+
+            # Format: use 'N/A' if PySCF energies not available
+            pyscf_bs1_str = f"{pyscf_bs1:.10f}" if pyscf_bs1 is not None else "N/A"
+            pyscf_bs2_str = f"{pyscf_bs2:.10f}" if pyscf_bs2 is not None else "N/A"
+
+            f.write(
+                f"{cycle},{cbs_e:.10f},{pyscf_bs1_str},{pyscf_bs2_str},{delta_from_initial:.10e},{delta_from_previous:.10e}\n")
+
+            previous_energy = cbs_e
+
+    return csv_file
 
 
 # -------------------------
@@ -731,7 +797,15 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         else:
             print(f"  No acceptable candidates this cycle.")
 
-        history.append({'cycle': cycle, 'energy': float(current_energy)})
+        # Calculate PySCF energies for CSV logging
+        pyscf_energies = compute_pyscf_hf_energies(atoms, current_coords, bs1, bs2, spin, PYSCF_THREADS)
+
+        history.append({
+            'cycle': cycle,
+            'energy': float(current_energy),
+            'pyscf_hf_bs1': pyscf_energies.get(bs1, None),
+            'pyscf_hf_bs2': pyscf_energies.get(bs2, None)
+        })
         cyc_map = {}
         for lbl, tp, inds in zip(baseline_labels, baseline_types, baseline_inds):
             cyc_map[lbl] = _value_for_internal(tp, inds, current_coords)
@@ -816,6 +890,11 @@ def run_optimization(params: dict, outputs_dir: Path):
     cycles_file = write_cycle_energies(outputs_dir, prefix, history)
     xyz_file = write_final_xyz(outputs_dir, prefix, atoms_out, coords_out, history[-1]['energy'] if history else 0.0)
 
+    # Write enhanced CSV with PySCF + CBS energies
+    if basis_pair is None:
+        basis_pair = (basis_sets[0], basis_sets[1])
+    enhanced_cycles_file = write_cycle_energies_with_pyscf(outputs_dir, prefix, history, basis_pair[0], basis_pair[1])
+
     try:
         print("\nRedundant-internal coordinates trace (rows: internal, columns: cycle 0..):")
         ncycles = len(internals_trace)
@@ -837,12 +916,19 @@ def run_optimization(params: dict, outputs_dir: Path):
         print(f"  Cycle {cycle_num:3d}: {Path(geo_data['path']).name:40s} E = {energy_str}")
     print("=" * 80)
 
+    print("\n" + "=" * 80)
+    print("ENERGY CSV FILES:")
+    print("=" * 80)
+    print(f"  Standard CSV: {Path(cycles_file).name}")
+    print(f"  Enhanced CSV (with PySCF): {Path(enhanced_cycles_file).name}")
+    print("=" * 80)
+
     return {
         "history": history,
         "final_energy": float(history[-1]['energy']) if history else None,
         "final_cart": coords_out,
         "symbols": atoms_out,
-        "outputs": {"cycles": str(cycles_file), "xyz": str(xyz_file)},
+        "outputs": {"cycles": str(cycles_file), "cycles_with_pyscf": str(enhanced_cycles_file), "xyz": str(xyz_file)},
         "converged": converged,
         "internals_trace": {"labels": baseline_labels, "trace": internals_trace},
         "cycle_geometries": cycle_geometries,
