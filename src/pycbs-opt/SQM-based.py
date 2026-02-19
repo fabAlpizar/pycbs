@@ -123,7 +123,7 @@ BETA_DEFAULT = 1.62
 PYSCF_THREADS = 1
 lib.num_threads(PYSCF_THREADS)
 
-MAXCYCLE_DEFAULT = 70
+MAXCYCLE_DEFAULT = 100
 ENERGY_CRIT = 1e-8
 FAC_DEFAULT = 0.05
 CUT = 0.75
@@ -450,29 +450,40 @@ def compute_cbs_energy_from_xyz_cached(xyz_string: str, method: str, a_corr: flo
     return _compute_cbs_from_xyz_cached(xyz_string, method, a_corr, b_hf, bs1, bs2, int(spin))
 
 
-# ---- HELPER FUNCTION: Compute PySCF energies (HF + Correlation) for both bases ----
+# ---- HELPER FUNCTION: Compute PySCF energies with separated CCSD and (T) ----
 def compute_pyscf_energies(atoms, coords, bs1, bs2, method, spin, pyscf_threads):
     """
     Compute PySCF energies for both basis sets:
     - HF-SCF energy
-    - Correlation energy (CCSD(T) or MP2 depending on method)
-    - Total energy (HF + Correlation)
+    - CCSD correlation energy (if method is CCSD(T))
+    - (T) triple correction (if method is CCSD(T))
+    - Total energy (HF + CCSD + (T))
+    - OR: MP2 correlation energy (if method is MP2)
+    - OR: Total energy (HF + MP2)
 
-    Returns dict with keys: hf_bs1, hf_bs2, corr_bs1, corr_bs2, total_bs1, total_bs2
+    Returns dict with appropriate keys based on method
     """
     pyscf_data = {
         'hf_bs1': None, 'hf_bs2': None,
-        'corr_bs1': None, 'corr_bs2': None,
-        'total_bs1': None, 'total_bs2': None
     }
+
+    if method.upper().startswith('CCSD'):
+        pyscf_data.update({
+            'ccsd_corr_bs1': None, 'ccsd_corr_bs2': None,
+            'triples_corr_bs1': None, 'triples_corr_bs2': None,
+            'total_bs1': None, 'total_bs2': None
+        })
+    else:  # MP2
+        pyscf_data.update({
+            'mp2_corr_bs1': None, 'mp2_corr_bs2': None,
+            'total_bs1': None, 'total_bs2': None
+        })
 
     try:
         xyz_str = xyz_to_pyscf_string(atoms, coords)
 
         for idx, basis in enumerate((bs1, bs2)):
             basis_key_hf = 'hf_bs1' if idx == 0 else 'hf_bs2'
-            basis_key_corr = 'corr_bs1' if idx == 0 else 'corr_bs2'
-            basis_key_total = 'total_bs1' if idx == 0 else 'total_bs2'
 
             mol = gto.Mole()
             mol.atom = xyz_str
@@ -490,27 +501,42 @@ def compute_pyscf_energies(atoms, coords, bs1, bs2, method, spin, pyscf_threads)
             scf_e = mf.kernel()
             pyscf_data[basis_key_hf] = float(scf_e)
 
-            corr_e = None
-            total_e = None
-
-            # Compute correlation energy based on method
             if method.upper().startswith('CCSD'):
+                basis_key_ccsd = 'ccsd_corr_bs1' if idx == 0 else 'ccsd_corr_bs2'
+                basis_key_triples = 'triples_corr_bs1' if idx == 0 else 'triples_corr_bs2'
+                basis_key_total = 'total_bs1' if idx == 0 else 'total_bs2'
+
                 try:
                     mycc = cc.CCSD(mf)
                     mycc.conv_tol = 1e-7
                     mycc.max_cycle = 100
                     mycc.kernel()
+
+                    # Get CCSD correlation (without (T))
+                    ccsd_corr = mycc.e_tot - scf_e
+                    pyscf_data[basis_key_ccsd] = float(ccsd_corr)
+
+                    # Get (T) correction
+                    triples_corr = 0.0
                     try:
                         et = mycc.ccsd_t()
+                        triples_corr = et if et is not None else 0.0
                     except Exception:
-                        et = 0.0
-                    total_e = mycc.e_tot + (et if et is not None else 0.0)
-                    corr_e = total_e - scf_e
-                except Exception:
-                    corr_e = None
-                    total_e = None
+                        triples_corr = 0.0
+                    pyscf_data[basis_key_triples] = float(triples_corr)
 
-            if corr_e is None and method.upper().startswith('MP2'):
+                    # Total = HF + CCSD + (T)
+                    total_e = scf_e + ccsd_corr + triples_corr
+                    pyscf_data[basis_key_total] = float(total_e)
+                except Exception as e:
+                    pyscf_data[basis_key_ccsd] = None
+                    pyscf_data[basis_key_triples] = None
+                    pyscf_data[basis_key_total] = None
+
+            else:  # MP2
+                basis_key_mp2 = 'mp2_corr_bs1' if idx == 0 else 'mp2_corr_bs2'
+                basis_key_total = 'total_bs1' if idx == 0 else 'total_bs2'
+
                 try:
                     mymp = mp.MP2(mf)
                     mymp.max_memory = 14330
@@ -522,15 +548,14 @@ def compute_pyscf_energies(atoms, coords, bs1, bs2, method, spin, pyscf_threads)
                         e_corr_tmp = getattr(res, 'e_corr', getattr(mymp, 'e_corr', None))
                         if e_corr_tmp is not None:
                             mp2_total = scf_e + e_corr_tmp
-                    if mp2_total is not None:
-                        total_e = float(mp2_total)
-                        corr_e = total_e - scf_e
-                except Exception:
-                    corr_e = None
-                    total_e = None
 
-            pyscf_data[basis_key_corr] = float(corr_e) if corr_e is not None else None
-            pyscf_data[basis_key_total] = float(total_e) if total_e is not None else None
+                    if mp2_total is not None:
+                        mp2_corr = float(mp2_total) - scf_e
+                        pyscf_data[basis_key_mp2] = float(mp2_corr)
+                        pyscf_data[basis_key_total] = float(mp2_total)
+                except Exception:
+                    pyscf_data[basis_key_mp2] = None
+                    pyscf_data[basis_key_total] = None
 
     except Exception as e:
         pass
@@ -561,24 +586,31 @@ def parabolic_minimum_3pt(x, y):
         return float(x[idx]), float(y[idx])
 
 
-# ---- CSV WRITER FUNCTION: Write cycle energies with full PySCF data ----
 def write_cycle_energies_with_pyscf(outputs_dir, prefix, history, basis1, basis2, method):
     """
-    Write cycle energies to CSV with PySCF (HF + Correlation) and CBS energies.
+    Write cycle energies to CSV with detailed PySCF breakdown.
 
-    Output CSV has columns:
-    Cycle, CBS_Energy, PySCF_HF_bs1, PySCF_Corr_bs1, PySCF_Total_bs1,
-           PySCF_HF_bs2, PySCF_Corr_bs2, PySCF_Total_bs2,
-           ΔE_CBS_from_initial, ΔE_CBS_from_previous
+    For CCSD(T):
+    - HF, CCSD correlation, (T) correction, Total for each basis
+
+    For MP2:
+    - HF, MP2 correlation, Total for each basis
     """
     csv_file = outputs_dir / f"{prefix}_cycles_with_pyscf.csv"
 
     with open(csv_file, 'w') as f:
-        # Header
-        f.write(f"Cycle,CBS_Energy_Ha,")
-        f.write(f"PySCF_HF_{basis1}_Ha,PySCF_{method}_{basis1}_Ha,PySCF_Total_{basis1}_Ha,")
-        f.write(f"PySCF_HF_{basis2}_Ha,PySCF_{method}_{basis2}_Ha,PySCF_Total_{basis2}_Ha,")
-        f.write(f"ΔE_CBS_from_initial_Ha,ΔE_CBS_from_previous_Ha\n")
+        if method.upper().startswith('CCSD'):
+            # CCSD(T) format
+            f.write(f"Cycle,CBS_Energy_Ha,")
+            f.write(f"PySCF_HF_{basis1}_Ha,PySCF_CCSD_{basis1}_Ha,PySCF_Triples_{basis1}_Ha,PySCF_Total_{basis1}_Ha,")
+            f.write(f"PySCF_HF_{basis2}_Ha,PySCF_CCSD_{basis2}_Ha,PySCF_Triples_{basis2}_Ha,PySCF_Total_{basis2}_Ha,")
+            f.write(f"ΔE_CBS_from_initial_Ha,ΔE_CBS_from_previous_Ha\n")
+        else:
+            # MP2 format
+            f.write(f"Cycle,CBS_Energy_Ha,")
+            f.write(f"PySCF_HF_{basis1}_Ha,PySCF_MP2_{basis1}_Ha,PySCF_Total_{basis1}_Ha,")
+            f.write(f"PySCF_HF_{basis2}_Ha,PySCF_MP2_{basis2}_Ha,PySCF_Total_{basis2}_Ha,")
+            f.write(f"ΔE_CBS_from_initial_Ha,ΔE_CBS_from_previous_Ha\n")
 
         initial_energy = history[0]['energy'] if history else 0.0
         previous_energy = initial_energy
@@ -587,25 +619,42 @@ def write_cycle_energies_with_pyscf(outputs_dir, prefix, history, basis1, basis2
             cycle = entry['cycle']
             cbs_e = entry['energy']
 
-            # Get PySCF data
-            hf_bs1 = entry.get('pyscf_hf_bs1', None)
-            corr_bs1 = entry.get('pyscf_corr_bs1', None)
-            total_bs1 = entry.get('pyscf_total_bs1', None)
-
-            hf_bs2 = entry.get('pyscf_hf_bs2', None)
-            corr_bs2 = entry.get('pyscf_corr_bs2', None)
-            total_bs2 = entry.get('pyscf_total_bs2', None)
-
             delta_from_initial = cbs_e - initial_energy
             delta_from_previous = cbs_e - previous_energy
 
-            # Format energies (use 'N/A' if not available)
+            # Format helper
             def fmt(val):
                 return f"{val:.10f}" if val is not None else "N/A"
 
             f.write(f"{cycle},{cbs_e:.10f},")
-            f.write(f"{fmt(hf_bs1)},{fmt(corr_bs1)},{fmt(total_bs1)},")
-            f.write(f"{fmt(hf_bs2)},{fmt(corr_bs2)},{fmt(total_bs2)},")
+
+            if method.upper().startswith('CCSD'):
+                # CCSD(T) data
+                hf_bs1 = entry.get('pyscf_hf_bs1', None)
+                ccsd_bs1 = entry.get('pyscf_ccsd_corr_bs1', None)
+                triples_bs1 = entry.get('pyscf_triples_corr_bs1', None)
+                total_bs1 = entry.get('pyscf_total_bs1', None)
+
+                hf_bs2 = entry.get('pyscf_hf_bs2', None)
+                ccsd_bs2 = entry.get('pyscf_ccsd_corr_bs2', None)
+                triples_bs2 = entry.get('pyscf_triples_corr_bs2', None)
+                total_bs2 = entry.get('pyscf_total_bs2', None)
+
+                f.write(f"{fmt(hf_bs1)},{fmt(ccsd_bs1)},{fmt(triples_bs1)},{fmt(total_bs1)},")
+                f.write(f"{fmt(hf_bs2)},{fmt(ccsd_bs2)},{fmt(triples_bs2)},{fmt(total_bs2)},")
+            else:
+                # MP2 data
+                hf_bs1 = entry.get('pyscf_hf_bs1', None)
+                mp2_bs1 = entry.get('pyscf_mp2_corr_bs1', None)
+                total_bs1 = entry.get('pyscf_total_bs1', None)
+
+                hf_bs2 = entry.get('pyscf_hf_bs2', None)
+                mp2_bs2 = entry.get('pyscf_mp2_corr_bs2', None)
+                total_bs2 = entry.get('pyscf_total_bs2', None)
+
+                f.write(f"{fmt(hf_bs1)},{fmt(mp2_bs1)},{fmt(total_bs1)},")
+                f.write(f"{fmt(hf_bs2)},{fmt(mp2_bs2)},{fmt(total_bs2)},")
+
             f.write(f"{delta_from_initial:.10e},{delta_from_previous:.10e}\n")
 
             previous_energy = cbs_e
@@ -862,19 +911,33 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         else:
             print(f"  No acceptable candidates this cycle.")
 
-        # Calculate PySCF energies for CSV logging (HF + Correlation + Total)
+        # Calculate PySCF energies for CSV logging
         pyscf_data = compute_pyscf_energies(atoms, current_coords, bs1, bs2, method, spin, PYSCF_THREADS)
 
-        history.append({
-            'cycle': cycle,
-            'energy': float(current_energy),
-            'pyscf_hf_bs1': pyscf_data.get('hf_bs1', None),
-            'pyscf_corr_bs1': pyscf_data.get('corr_bs1', None),
-            'pyscf_total_bs1': pyscf_data.get('total_bs1', None),
-            'pyscf_hf_bs2': pyscf_data.get('hf_bs2', None),
-            'pyscf_corr_bs2': pyscf_data.get('corr_bs2', None),
-            'pyscf_total_bs2': pyscf_data.get('total_bs2', None),
-        })
+        if method.upper().startswith('CCSD'):
+            history.append({
+                'cycle': cycle,
+                'energy': float(current_energy),
+                'pyscf_hf_bs1': pyscf_data.get('hf_bs1', None),
+                'pyscf_ccsd_corr_bs1': pyscf_data.get('ccsd_corr_bs1', None),
+                'pyscf_triples_corr_bs1': pyscf_data.get('triples_corr_bs1', None),
+                'pyscf_total_bs1': pyscf_data.get('total_bs1', None),
+                'pyscf_hf_bs2': pyscf_data.get('hf_bs2', None),
+                'pyscf_ccsd_corr_bs2': pyscf_data.get('ccsd_corr_bs2', None),
+                'pyscf_triples_corr_bs2': pyscf_data.get('triples_corr_bs2', None),
+                'pyscf_total_bs2': pyscf_data.get('total_bs2', None),
+            })
+        else:  # MP2
+            history.append({
+                'cycle': cycle,
+                'energy': float(current_energy),
+                'pyscf_hf_bs1': pyscf_data.get('hf_bs1', None),
+                'pyscf_mp2_corr_bs1': pyscf_data.get('mp2_corr_bs1', None),
+                'pyscf_total_bs1': pyscf_data.get('total_bs1', None),
+                'pyscf_hf_bs2': pyscf_data.get('hf_bs2', None),
+                'pyscf_mp2_corr_bs2': pyscf_data.get('mp2_corr_bs2', None),
+                'pyscf_total_bs2': pyscf_data.get('total_bs2', None),
+            })
         cyc_map = {}
         for lbl, tp, inds in zip(baseline_labels, baseline_types, baseline_inds):
             cyc_map[lbl] = _value_for_internal(tp, inds, current_coords)
