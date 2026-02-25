@@ -1,0 +1,291 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="y" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Extrapolation Schemes in pyCBS &mdash; pyCBS 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=26611e44"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Geometrical Optimization" href="optimization.html" />
+    <link rel="prev" title="Installation" href="installation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            pyCBS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Extrapolation Schemes in pyCBS</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#config-file-example">Config file example</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="optimization.html">Geometrical Optimization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Academic Record</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="citing.html">Citing pyCBS</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">pyCBS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Extrapolation Schemes in pyCBS</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/extrapolations.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="extrapolation-schemes-in-pycbs">
+<h1>Extrapolation Schemes in pyCBS<a class="headerlink" href="#extrapolation-schemes-in-pycbs" title="Link to this heading"></a></h1>
+<section id="config-file-example">
+<h2>Config file example<a class="headerlink" href="#config-file-example" title="Link to this heading"></a></h2>
+<p>### [cite_start]HF component [cite: 14, 15]</p>
+<div class="highlight-ini notranslate"><div class="highlight"><pre><span></span><span class="c1"># pyCBS example input file (all schemes)</span>
+<span class="c1"># Keys are lowercase; scheme/method values are case-insensitive.</span>
+
+<span class="k">[calculation_feller]</span>
+<span class="na">SCHEME</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">feller</span>
+<span class="na">ehf_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-78.123344</span>
+<span class="na">ehf_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-72.42344</span>
+<span class="na">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2</span>
+<span class="na">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3</span>
+<span class="na">alfa</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1.353</span>
+
+<span class="k">[calculation_jensen]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">jensen</span>
+<span class="na">ehf_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-67.9865</span>
+<span class="na">ehf_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-21.87654</span>
+<span class="na">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2</span>
+<span class="na">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3</span>
+<span class="na">alfa</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">5.163</span>
+
+<span class="k">[calculation_klopper]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">klopper</span>
+<span class="na">ehf_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-32.54678</span>
+<span class="na">ehf_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-12.345678</span>
+<span class="na">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2</span>
+<span class="na">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3</span>
+<span class="na">alfa</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">4.257</span>
+
+<span class="k">[calculation_truhlar_hf]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">truhlar_hf</span>
+<span class="na">ehf_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-23.5676</span>
+<span class="na">ehf_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-90.87654</span>
+<span class="na">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2</span>
+<span class="na">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3</span>
+<span class="na">alfa</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.337</span>
+
+<span class="k">[calculation_hf_e]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">hf_e</span>
+<span class="na">hf1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-45.98765</span>
+<span class="na">hf2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-79.25988532</span>
+<span class="na">basis1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VDZ</span>
+<span class="na">basis2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VTZ</span>
+</pre></div>
+</div>
+<p>### [cite_start]Correlation component [cite: 1, 9, 10, 11, 12]</p>
+<div class="highlight-ini notranslate"><div class="highlight"><pre><span></span><span class="c1"># ---------------------------</span>
+<span class="c1"># Correlation single-function schemes (ec_x/ec_y)</span>
+<span class="c1"># ---------------------------</span>
+<span class="k">[calculation_bakoules]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">bakoules</span>
+<span class="na">ec_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.324545</span>
+<span class="na">ec_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.111111</span>
+<span class="na">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2</span>
+<span class="na">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3</span>
+<span class="na">beta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.877</span>
+
+<span class="k">[calculation_halkier]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">halkier_helgaker</span>
+<span class="na">ec_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.334556</span>
+<span class="na">ec_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.99999</span>
+<span class="na">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2</span>
+<span class="na">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3</span>
+
+<span class="k">[calculation_huh_lee]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">huh_lee</span>
+<span class="na">ec_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.3142367</span>
+<span class="na">ec_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.111111</span>
+<span class="na">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2</span>
+<span class="na">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3</span>
+<span class="na">beta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0.220</span>
+
+<span class="k">[calculation_martin]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">martin</span>
+<span class="na">ec_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.12345</span>
+<span class="na">ec_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.86765</span>
+<span class="na">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2</span>
+<span class="na">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3</span>
+<span class="na">beta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.315</span>
+
+<span class="k">[calculation_oan]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">oan</span>
+<span class="na">ec_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.123456789</span>
+<span class="na">ec_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.09876543</span>
+<span class="c1"># OAN uses beta but has a specific formula; including beta overrides default</span>
+<span class="na">beta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2.086</span>
+
+<span class="k">[calculation_truhlar_corr]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">truhlar_corr</span>
+<span class="na">ec_x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.3345467</span>
+<span class="na">ec_y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.31111</span>
+<span class="na">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2</span>
+<span class="na">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3</span>
+<span class="na">beta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2.751</span>
+</pre></div>
+</div>
+<p>### [cite_start]HF+Correlation [cite: 16, 17, 18, 19]</p>
+<div class="highlight-ini notranslate"><div class="highlight"><pre><span></span><span class="c1"># ---------------------------</span>
+<span class="c1"># Full CBS extrapolation schemes (USTE1, USTE2)</span>
+<span class="c1"># USTE1: requires hf1, hf2, e1, e2, method, basis1, basis2</span>
+<span class="c1"># ---------------------------</span>
+<span class="k">[calculation_uste1_example]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">uste1</span>
+<span class="na">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">MP2</span>
+<span class="na">basis1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VDZ</span>
+<span class="na">basis2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VTZ</span>
+<span class="na">hf1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-79.23491656</span>
+<span class="na">hf2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-79.25988532</span>
+<span class="na">e1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-79.53686865</span>
+<span class="na">e2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-79.62988995</span>
+
+<span class="c1"># USTE2: can accept basis3/basis4 (for corr basis) or defaults</span>
+<span class="k">[calculation_uste2_example]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">uste2</span>
+<span class="na">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">MP2</span>
+<span class="na">basis1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VDZ</span>
+<span class="na">basis2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VTZ</span>
+<span class="na">basis3</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VDZ</span>
+<span class="na">basis4</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VTZ</span>
+<span class="na">hf1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-117.63645</span>
+<span class="na">hf2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-117.6704923</span>
+<span class="na">e1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-118.051348</span>
+<span class="na">e2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-118.1801621</span>
+
+<span class="c1"># ---------------------------</span>
+<span class="c1"># USPE (single-point estimate)</span>
+<span class="c1"># USPE compute expects: zeta_hf1, zeta_hf2, zeta_e, method, constant, basis1 [, basis2]</span>
+<span class="c1"># Use &#39;constant&#39; as &#39;normal&#39; or &#39;augmented&#39;</span>
+<span class="c1"># ---------------------------</span>
+<span class="k">[calculation_uspe_example]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">USPE</span>
+<span class="na">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">MP2</span>
+<span class="na">constant</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">normal</span>
+<span class="na">basis</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VDZ</span>
+<span class="na">HF</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-19.0987</span>
+<span class="na">Etot</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-81.9876</span>
+
+
+<span class="c1"># ---------------------------</span>
+<span class="c1"># TENSORIAL (uses USTE-style helpers)</span>
+<span class="c1"># Provide zeta_hf1/zeta_hf2 and zeta_cor1/zeta_cor2</span>
+<span class="c1"># ---------------------------</span>
+<span class="k">[calculation_tensorial_example]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">tensorial</span>
+<span class="na">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">MP2</span>
+<span class="na">basis1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VDZ</span>
+<span class="na">basis2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VTZ</span>
+<span class="na">zeta_hf1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-79.23491656</span>
+<span class="na">zeta_hf2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-79.25988532</span>
+<span class="na">zeta_cor1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.301234</span>
+<span class="na">zeta_cor2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-0.312345</span>
+<span class="na">dc_scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">USPE</span>
+
+<span class="c1"># ---------------------------</span>
+<span class="c1"># FREQUENCY (USTE-like extrapolation of frequencies)</span>
+<span class="c1"># Provide hf1/hf2 for HF part and f1/f2 for frequency or F1/F2</span>
+<span class="c1"># ---------------------------</span>
+<span class="k">[calculation_frequency_example]</span>
+<span class="na">scheme</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">frequency</span>
+<span class="na">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">MP2</span>
+<span class="na">basis1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VDZ</span>
+<span class="na">basis2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">VTZ</span>
+<span class="na">hf1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-79.23491656</span>
+<span class="na">hf2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-79.25988532</span>
+<span class="na">F1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-79.02</span>
+<span class="na">F2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">-79.04</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="optimization.html" class="btn btn-neutral float-right" title="Geometrical Optimization" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Fabio J. Delgado-Alpizar.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

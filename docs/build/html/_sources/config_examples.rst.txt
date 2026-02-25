@@ -1,0 +1,39 @@
+Configuration & Methods
+=======================
+
+pyCBS uses a `.yaml` or `.toml` configuration file to define simulation parameters.
+
+Extrapolation Schemes
+---------------------
+The energy is extrapolated using the following relationship:
+
+.. math::
+
+   E(L) = E_{CBS} + A e^{-(L-1)} + B e^{-(L-1)^2}
+
+Optimization Routines
+---------------------
+
+### L-BFGS-B Optimization
+Ideal for large-scale bound-constrained optimization.
+
+
+.. code-block:: yaml
+
+   # config.yaml
+   optimization:
+     method: "L-BFGS-B"
+     tolerance: 1e-6
+     max_iterations: 500
+     bounds: [0.0, 5.0]
+
+### SQM (Sequential Quadratic Programming)
+Used for non-linear constraints.
+
+.. code-block:: yaml
+
+   # config.yaml
+   optimization:
+     method: "SQM"
+     step_size: 0.01
+     constraint_mode: "strict"

@@ -1,0 +1,178 @@
+Extrapolation Schemes in pyCBS
+==============================
+
+Config file example
+-------------------
+
+### [cite_start]HF component [cite: 14, 15]
+
+.. code-block:: ini
+
+   # pyCBS example input file (all schemes)
+   # Keys are lowercase; scheme/method values are case-insensitive.
+
+   [calculation_feller]
+   SCHEME = feller
+   ehf_x = -78.123344
+   ehf_y = -72.42344
+   x = 2
+   y = 3
+   alfa = 1.353
+
+   [calculation_jensen]
+   scheme = jensen
+   ehf_x = -67.9865
+   ehf_y = -21.87654
+   x = 2
+   y = 3
+   alfa = 5.163
+
+   [calculation_klopper]
+   scheme = klopper
+   ehf_x = -32.54678
+   ehf_y = -12.345678
+   x = 2
+   y = 3
+   alfa = 4.257
+
+   [calculation_truhlar_hf]
+   scheme = truhlar_hf
+   ehf_x = -23.5676
+   ehf_y = -90.87654
+   x = 2
+   y = 3
+   alfa = 3.337
+
+   [calculation_hf_e]
+   scheme = hf_e
+   hf1 = -45.98765
+   hf2 = -79.25988532
+   basis1 = VDZ
+   basis2 = VTZ
+
+### [cite_start]Correlation component [cite: 1, 9, 10, 11, 12]
+
+.. code-block:: ini
+
+   # ---------------------------
+   # Correlation single-function schemes (ec_x/ec_y)
+   # ---------------------------
+   [calculation_bakoules]
+   scheme = bakoules
+   ec_x = -0.324545
+   ec_y = -0.111111
+   x = 2
+   y = 3
+   beta = 3.877
+
+   [calculation_halkier]
+   scheme = halkier_helgaker
+   ec_x = -0.334556
+   ec_y = -0.99999
+   x = 2
+   y = 3
+
+   [calculation_huh_lee]
+   scheme = huh_lee
+   ec_x = -0.3142367
+   ec_y = -0.111111
+   x = 2
+   y = 3
+   beta = 0.220
+
+   [calculation_martin]
+   scheme = martin
+   ec_x = -0.12345
+   ec_y = -0.86765
+   x = 2
+   y = 3
+   beta = 3.315
+
+   [calculation_oan]
+   scheme = oan
+   ec_x = -0.123456789
+   ec_y = -0.09876543
+   # OAN uses beta but has a specific formula; including beta overrides default
+   beta = 2.086
+
+   [calculation_truhlar_corr]
+   scheme = truhlar_corr
+   ec_x = -0.3345467
+   ec_y = -0.31111
+   x = 2
+   y = 3
+   beta = 2.751
+
+### [cite_start]HF+Correlation [cite: 16, 17, 18, 19]
+
+.. code-block:: ini
+
+   # ---------------------------
+   # Full CBS extrapolation schemes (USTE1, USTE2)
+   # USTE1: requires hf1, hf2, e1, e2, method, basis1, basis2
+   # ---------------------------
+   [calculation_uste1_example]
+   scheme = uste1
+   method = MP2
+   basis1 = VDZ
+   basis2 = VTZ
+   hf1 = -79.23491656
+   hf2 = -79.25988532
+   e1 = -79.53686865
+   e2 = -79.62988995
+
+   # USTE2: can accept basis3/basis4 (for corr basis) or defaults
+   [calculation_uste2_example]
+   scheme = uste2
+   method = MP2
+   basis1 = VDZ
+   basis2 = VTZ
+   basis3 = VDZ
+   basis4 = VTZ
+   hf1 = -117.63645
+   hf2 = -117.6704923
+   e1 = -118.051348
+   e2 = -118.1801621
+
+   # ---------------------------
+   # USPE (single-point estimate)
+   # USPE compute expects: zeta_hf1, zeta_hf2, zeta_e, method, constant, basis1 [, basis2]
+   # Use 'constant' as 'normal' or 'augmented'
+   # ---------------------------
+   [calculation_uspe_example]
+   scheme = USPE
+   method = MP2
+   constant = normal
+   basis = VDZ
+   HF = -19.0987
+   Etot = -81.9876
+
+
+   # ---------------------------
+   # TENSORIAL (uses USTE-style helpers)
+   # Provide zeta_hf1/zeta_hf2 and zeta_cor1/zeta_cor2
+   # ---------------------------
+   [calculation_tensorial_example]
+   scheme = tensorial
+   method = MP2
+   basis1 = VDZ
+   basis2 = VTZ
+   zeta_hf1 = -79.23491656
+   zeta_hf2 = -79.25988532
+   zeta_cor1 = -0.301234
+   zeta_cor2 = -0.312345
+   dc_scheme = USPE
+
+   # ---------------------------
+   # FREQUENCY (USTE-like extrapolation of frequencies)
+   # Provide hf1/hf2 for HF part and f1/f2 for frequency or F1/F2
+   # ---------------------------
+   [calculation_frequency_example]
+   scheme = frequency
+   method = MP2
+   basis1 = VDZ
+   basis2 = VTZ
+   hf1 = -79.23491656
+   hf2 = -79.25988532
+   F1 = -79.02
+   F2 = -79.04

@@ -1,0 +1,5888 @@
+Index: src/inputfile.inp
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+># pyCBS example input file (all schemes)\n# Keys are lowercase; scheme/method values are case-insensitive.\n\n[calculation_feller]\nSCHEME = feller\nehf_x = -78.123344\nehf_y = -72.42344\nx = 2\ny = 3\nalfa = 1.353\n\n[calculation_jensen]\nscheme = jensen\nehf_x = -67.9865\nehf_y = -21.87654\nx = 2\ny = 3\nalfa = 5.163\n\n[calculation_klopper]\nscheme = klopper\nehf_x = -32.54678\nehf_y = -12.345678\nx = 2\ny = 3\nalfa = 4.257\n\n[calculation_truhlar_hf]\nscheme = truhlar_hf\nehf_x = -23.5676\nehf_y = -90.87654\nx = 2\ny = 3\nalfa = 3.337\n\n[calculation_hf_e]\nscheme = hf_e\nhf1 = -45.98765\nhf2 = -79.25988532\nbasis1 = VDZ\nbasis2 = VTZ\n\n# ---------------------------\n# Correlation single-function schemes (ec_x/ec_y)\n# ---------------------------\n[calculation_bakoules]\nscheme = bakoules\nec_x = -0.324545\nec_y = -0.111111\nx = 2\ny = 3\nbeta = 3.877\n\n[calculation_halkier]\nscheme = halkier_helgaker\nec_x = -0.334556\nec_y = -0.99999\nx = 2\ny = 3\n\n[calculation_huh_lee]\nscheme = huh_lee\nec_x = -0.3142367\nec_y = -0.111111\nx = 2\ny = 3\nbeta = 0.220\n\n[calculation_martin]\nscheme = martin\nec_x = -0.12345\nec_y = -0.86765\nx = 2\ny = 3\nbeta = 3.315\n\n[calculation_oan]\nscheme = oan\nec_x = -0.123456789\nec_y = -0.09876543\n# OAN uses beta but has a specific formula; including beta overrides default\nbeta = 2.086\n\n[calculation_truhlar_corr]\nscheme = truhlar_corr\nec_x = -0.3345467\nec_y = -0.31111\nx = 2\ny = 3\nbeta = 2.751\n\n# ---------------------------\n# Full CBS extrapolation schemes (USTE1, USTE2)\n# USTE1: requires hf1, hf2, e1, e2, method, basis1, basis2\n# ---------------------------\n[calculation_uste1_example]\nscheme = uste1\nmethod = MP2\nbasis1 = VDZ\nbasis2 = VTZ\nhf1 = -79.23491656\nhf2 = -79.25988532\ne1 = -79.53686865\ne2 = -79.62988995\n\n# USTE2: can accept basis3/basis4 (for corr basis) or defaults\n[calculation_uste2_example]\nscheme = uste2\nmethod = MP2\nbasis1 = VDZ\nbasis2 = VTZ\nbasis3 = VDZ\nbasis4 = VTZ\nhf1 = -117.63645\nhf2 = -117.6704923\ne1 = -118.051348\ne2 = -118.1801621\n\n# ---------------------------\n# USPE (single-point estimate)\n# USPE compute expects: zeta_hf1, zeta_hf2, zeta_e, method, constant, basis1 [, basis2]\n# Use 'constant' as 'normal' or 'augmented'\n# ---------------------------\n[calculation_uspe_example]\nscheme = USPE\nmethod = MP2\nconstant = normal\nbasis = VDZ\nHF = -19.0987\nEtot = -81.9876\n\n\n# ---------------------------\n# TENSORIAL (uses USTE-style helpers)\n# Provide zeta_hf1/zeta_hf2 and zeta_cor1/zeta_cor2\n# ---------------------------\n[calculation_tensorial_example]\nscheme = tensorial\nmethod = MP2\nbasis1 = VDZ\nbasis2 = VTZ\nzeta_hf1 = -79.23491656\nzeta_hf2 = -79.25988532\nzeta_cor1 = -0.301234\nzeta_cor2 = -0.312345\ndc_scheme = USPE\n\n# ---------------------------\n# FREQUENCY (USTE-like extrapolation of frequencies)\n# Provide hf1/hf2 for HF part and f1/f2 for frequency or F1/F2\n# ---------------------------\n[calculation_frequency_example]\nscheme = frequency\nmethod = MP2\nbasis1 = VDZ\nbasis2 = VTZ\nhf1 = -79.23491656\nhf2 = -79.25988532\nF1 = -79.02\nF2 = -79.04\n\n# ---------------------------\n# OPTIMIZATION example (optional)\n# ---------------------------\n[optimization]\noptimization = True\ninit_parameters = 0.96654,103.93761\nbasis_sets = STO-3G, MINI\nmethod = MP2\nbeta = 1.62\nmaxcycle = 20\nenergy_criterion = 1e-8\nfac_mult = 0.05\ncut = 0.75\n
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/inputfile.inp b/src/inputfile.inp
+--- a/src/inputfile.inp	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ b/src/inputfile.inp	(date 1769765814934)
+@@ -44,9 +44,11 @@
+ # Correlation single-function schemes (ec_x/ec_y)
+ # ---------------------------
+ [calculation_bakoules]
+-scheme = bakoules
++scheme = bakowies
+ ec_x = -0.324545
+ ec_y = -0.111111
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
+ x = 2
+ y = 3
+ beta = 3.877
+@@ -55,6 +57,8 @@
+ scheme = halkier_helgaker
+ ec_x = -0.334556
+ ec_y = -0.99999
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
+ x = 2
+ y = 3
+ 
+@@ -62,6 +66,8 @@
+ scheme = huh_lee
+ ec_x = -0.3142367
+ ec_y = -0.111111
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
+ x = 2
+ y = 3
+ beta = 0.220
+@@ -70,14 +76,18 @@
+ scheme = martin
+ ec_x = -0.12345
+ ec_y = -0.86765
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
+ x = 2
+ y = 3
+ beta = 3.315
+ 
+ [calculation_oan]
+-scheme = oan
++scheme = oanc
+ ec_x = -0.123456789
+ ec_y = -0.09876543
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
+ # OAN uses beta but has a specific formula; including beta overrides default
+ beta = 2.086
+ 
+@@ -85,6 +95,8 @@
+ scheme = truhlar_corr
+ ec_x = -0.3345467
+ ec_y = -0.31111
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
+ x = 2
+ y = 3
+ beta = 2.751
+@@ -159,16 +171,12 @@
+ F1 = -79.02
+ F2 = -79.04
+ 
+-# ---------------------------
+-# OPTIMIZATION example (optional)
+-# ---------------------------
+ [optimization]
+-optimization = True
+-init_parameters = 0.96654,103.93761
+-basis_sets = STO-3G, MINI
+-method = MP2
+-beta = 1.62
+-maxcycle = 20
+-energy_criterion = 1e-8
+-fac_mult = 0.05
+-cut = 0.75
++optimization = True              ; enable optimization (True/False)
++xyz = /home/fab/01_Fab_Hub/01_pinchas/02_albeaker/pyCBS/tests/benchmark/eu_vs_el_varan/h2o.xyz    ; REQUIRED — path to xyz file (one or multiple molecules)
++method = CCSD(T)                ; or MP2 — default: CCSD(T)
++basis1 = cc-pvtz                   ; optional, default VDZ
++basis2 = cc-pvqz                    ; optional, default VTZ
++beta = 1.62                      ; optional float, default 1.62
++spin = 0                         ; optional int, default 0
++
+Index: src/pycbs/corr_component/Martin.py
+===================================================================
+diff --git a/src/pycbs/corr_component/Martin.py b/src/pycbs/corr_component/Martin.py
+deleted file mode 100644
+--- a/src/pycbs/corr_component/Martin.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,5 +0,0 @@
+-def Martin_HF_extrapolation(Ec_X, Ec_Y, X, Y, beta=3.315):
+-    num = Ec_Y * ((X+0.5)**-beta) - Ec_X * ((Y+0.5)**-beta)
+-    den = ((X+0.5)**-beta) - ((Y+0.5)**-beta)
+-    return num/den
+-
+Index: src/pycbs/corr_component/Truhlar_corr.py
+===================================================================
+diff --git a/src/pycbs/corr_component/Truhlar_corr.py b/src/pycbs/corr_component/Truhlar_corr.py
+deleted file mode 100644
+--- a/src/pycbs/corr_component/Truhlar_corr.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,4 +0,0 @@
+-def Truhlar_corr_extrapolation(Ec_X, Ec_Y, X, Y, beta=2.751):
+-    num = Ec_Y * (X**-beta) - Ec_X * (Y**-beta)
+-    den = (X**-beta) - (Y**-beta)
+-    return num/den
+\ No newline at end of file
+Index: src/pycbs/corr_component/Halkier-Helgaker.py
+===================================================================
+diff --git a/src/pycbs/corr_component/Halkier-Helgaker.py b/src/pycbs/corr_component/Halkier-Helgaker.py
+deleted file mode 100644
+--- a/src/pycbs/corr_component/Halkier-Helgaker.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,4 +0,0 @@
+-def Halkier_corr_extrapolation(Ec_X, Ec_Y, X, Y):
+-    num = Ec_X * (X**3) - Ec_Y * (Y**3)
+-    den = (X**3) - (Y**3)
+-    return num/den
+\ No newline at end of file
+Index: src/pycbs/HF_component/Feller.py
+===================================================================
+diff --git a/src/pycbs/HF_component/Feller.py b/src/pycbs/HF_component/Feller.py
+deleted file mode 100644
+--- a/src/pycbs/HF_component/Feller.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,6 +0,0 @@
+-import math as mt
+-def Feller_HF_extrapolation(Ehf_X, Ehf_Y, X, Y, alfa=1.353):
+-    num = Ehf_Y * mt.exp(-alfa * X ) - Ehf_X * mt.exp(-alfa * Y)
+-    den = mt.exp(-alfa * X ) - mt.exp(-alfa * Y)
+-    return num/den
+-
+Index: src/pycbs/corr_component/Bakoules.py
+===================================================================
+diff --git a/src/pycbs/corr_component/Bakoules.py b/src/pycbs/corr_component/Bakoules.py
+deleted file mode 100644
+--- a/src/pycbs/corr_component/Bakoules.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,5 +0,0 @@
+-def Bakoules_HF_extrapolation(Ec_X, Ec_Y, X, Y, beta=3.877):
+-    num = Ec_Y * ((X+1)**-beta) - Ec_X * ((Y+1)**-beta)
+-    den = ((X+1)**-beta) - ((Y+1)**-beta)
+-    return num/den
+-
+Index: src/pycbs/HF_component/Jensen.py
+===================================================================
+diff --git a/src/pycbs/HF_component/Jensen.py b/src/pycbs/HF_component/Jensen.py
+deleted file mode 100644
+--- a/src/pycbs/HF_component/Jensen.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,6 +0,0 @@
+-import math as mt
+-def Jensen_HF_extrapolation(Ehf_X, Ehf_Y, X, Y, alfa=5.163):
+-    num = Ehf_Y * (X+1) * mt.exp(-alfa * mt.sqrt(X) ) - Ehf_X * (Y+1) * mt.exp(-alfa * mt.sqrt(Y) )
+-    den = (X+1) * mt.exp(-alfa * mt.sqrt(X) ) - (Y+1) * mt.exp(-alfa * mt.sqrt(Y) )
+-    return num/den
+-
+Index: src/pycbs/HF_component/Klopper.py
+===================================================================
+diff --git a/src/pycbs/HF_component/Klopper.py b/src/pycbs/HF_component/Klopper.py
+deleted file mode 100644
+--- a/src/pycbs/HF_component/Klopper.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,6 +0,0 @@
+-import math as mt
+-def Klopper_HF_extrapolation(Ehf_X, Ehf_Y, X, Y, alfa=4.257):
+-    num = Ehf_X * mt.exp(-alfa * mt.sqrt(Y) ) - mt.exp(-alfa * mt.sqrt(X)) * Ehf_Y
+-    den = mt.exp(-alfa * mt.sqrt(X)) - mt.exp(-alfa * mt.sqrt(Y))
+-    return num/den
+-
+Index: src/pycbs/optimization/main.py
+===================================================================
+diff --git a/src/pycbs/optimization/main.py b/src/pycbs/optimization/main.py
+deleted file mode 100644
+--- a/src/pycbs/optimization/main.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,170 +0,0 @@
+-#!/usr/bin/env python3
+-"""
+-Unified CLI entry point for pyCBS.
+-
+-Supports the following commands:
+-  - pycbs -input: Process input files
+-  - pycbs -opt: Run optimization
+-"""
+-
+-import argparse
+-import sys
+-from pathlib import Path
+-
+-
+-def create_parser():
+-    """Create and configure the argument parser."""
+-    parser = argparse.ArgumentParser(
+-        prog='pycbs',
+-        description='pyCBS - A Python-based Conflict-Based Search solver',
+-        formatter_class=argparse.RawDescriptionHelpFormatter,
+-        epilog='''
+-Examples:
+-  pycbs -input config.yaml
+-  pycbs -opt --output results.json
+-        '''
+-    )
+-    
+-    parser.add_argument(
+-        '--version',
+-        action='version',
+-        version='%(prog)s 1.0.0'
+-    )
+-    
+-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+-    
+-    # Input command
+-    input_parser = subparsers.add_parser(
+-        '-input',
+-        help='Process input files for pyCBS'
+-    )
+-    input_parser.add_argument(
+-        'config',
+-        type=str,
+-        help='Path to input configuration file'
+-    )
+-    input_parser.add_argument(
+-        '-v', '--verbose',
+-        action='store_true',
+-        help='Enable verbose output'
+-    )
+-    input_parser.add_argument(
+-        '-o', '--output',
+-        type=str,
+-        help='Output file path for processed input'
+-    )
+-    
+-    # Optimization command
+-    opt_parser = subparsers.add_parser(
+-        '-opt',
+-        help='Run optimization algorithm'
+-    )
+-    opt_parser.add_argument(
+-        '-i', '--input',
+-        type=str,
+-        required=False,
+-        help='Path to input file or configuration'
+-    )
+-    opt_parser.add_argument(
+-        '-o', '--output',
+-        type=str,
+-        help='Output file path for optimization results'
+-    )
+-    opt_parser.add_argument(
+-        '--timeout',
+-        type=float,
+-        default=300.0,
+-        help='Timeout in seconds for optimization (default: 300.0)'
+-    )
+-    opt_parser.add_argument(
+-        '-v', '--verbose',
+-        action='store_true',
+-        help='Enable verbose output'
+-    )
+-    opt_parser.add_argument(
+-        '--seed',
+-        type=int,
+-        help='Random seed for reproducibility'
+-    )
+-    
+-    return parser
+-
+-
+-def handle_input_command(args):
+-    """Handle the -input command."""
+-    if args.verbose:
+-        print(f"Processing input from: {args.config}")
+-    
+-    # Validate input file exists
+-    config_path = Path(args.config)
+-    if not config_path.exists():
+-        print(f"Error: Input file '{args.config}' not found", file=sys.stderr)
+-        return 1
+-    
+-    try:
+-        # TODO: Implement input processing logic
+-        if args.verbose:
+-            print(f"Successfully processed: {args.config}")
+-        
+-        if args.output:
+-            print(f"Output would be written to: {args.output}")
+-            if args.verbose:
+-                print(f"Output file: {args.output}")
+-        
+-        return 0
+-    except Exception as e:
+-        print(f"Error processing input: {e}", file=sys.stderr)
+-        return 1
+-
+-
+-def handle_opt_command(args):
+-    """Handle the -opt command."""
+-    if args.verbose:
+-        print("Starting optimization algorithm")
+-    
+-    try:
+-        if args.input and args.verbose:
+-            print(f"Using input: {args.input}")
+-        
+-        if args.seed is not None and args.verbose:
+-            print(f"Random seed: {args.seed}")
+-        
+-        print(f"Optimization timeout: {args.timeout} seconds")
+-        
+-        # TODO: Implement optimization logic
+-        if args.verbose:
+-            print("Optimization completed successfully")
+-        
+-        if args.output:
+-            print(f"Results would be written to: {args.output}")
+-            if args.verbose:
+-                print(f"Output file: {args.output}")
+-        
+-        return 0
+-    except Exception as e:
+-        print(f"Error running optimization: {e}", file=sys.stderr)
+-        return 1
+-
+-
+-def main():
+-    """Main entry point."""
+-    parser = create_parser()
+-    args = parser.parse_args()
+-    
+-    # Handle no command provided
+-    if args.command is None:
+-        parser.print_help()
+-        return 0
+-    
+-    # Route to appropriate command handler
+-    if args.command == '-input':
+-        return handle_input_command(args)
+-    elif args.command == '-opt':
+-        return handle_opt_command(args)
+-    else:
+-        print(f"Unknown command: {args.command}", file=sys.stderr)
+-        return 1
+-
+-
+-if __name__ == '__main__':
+-    sys.exit(main())
+Index: src/pycbs/corr_component/Huh-Lee.py
+===================================================================
+diff --git a/src/pycbs/corr_component/Huh-Lee.py b/src/pycbs/corr_component/Huh-Lee.py
+deleted file mode 100644
+--- a/src/pycbs/corr_component/Huh-Lee.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,5 +0,0 @@
+-def Huh_Lee_HF_extrapolation(Ec_X, Ec_Y, X, Y, beta=0.220):
+-    num = Ec_Y * ((X+beta)**-3) - Ec_X * ((Y+beta)**-3)
+-    den = ((X+beta)**-3) - ((Y+beta)**-3)
+-    return num/den
+-
+Index: src/pycbs/optimization/config_parser.py
+===================================================================
+diff --git a/src/pycbs/optimization/config_parser.py b/src/pycbs/optimization/config_parser.py
+deleted file mode 100644
+--- a/src/pycbs/optimization/config_parser.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,465 +0,0 @@
+-"""Configuration parser for INI files with methodology selection support.
+-
+-This module provides functionality to parse INI configuration files and
+-handle methodology selection for the pyCBS application.
+-"""
+-
+-import configparser
+-import logging
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional, Set
+-
+-logger = logging.getLogger(__name__)
+-
+-
+-class ConfigurationError(Exception):
+-    """Raised when there is an error in configuration parsing or validation."""
+-
+-    pass
+-
+-
+-class ConfigParser:
+-    """Parser for INI configuration files with methodology selection support.
+-
+-    This class handles reading, parsing, and validating INI configuration files
+-    with special support for methodology selection and section management.
+-
+-    Attributes:
+-        config_path: Path to the configuration file.
+-        parser: Internal ConfigParser instance.
+-        methodology: Selected methodology for processing.
+-    """
+-
+-    # Default methodology selection
+-    DEFAULT_METHODOLOGY = "default"
+-
+-    # Valid sections in configuration
+-    VALID_SECTIONS = {
+-        "general",
+-        "methodology",
+-        "paths",
+-        "processing",
+-        "output",
+-        "logging",
+-    }
+-
+-    def __init__(self, config_path: str | Path) -> None:
+-        """Initialize the configuration parser.
+-
+-        Args:
+-            config_path: Path to the INI configuration file.
+-
+-        Raises:
+-            ConfigurationError: If the config file does not exist.
+-        """
+-        self.config_path = Path(config_path)
+-        self.parser = configparser.ConfigParser()
+-        self.methodology: Optional[str] = None
+-
+-        if not self.config_path.exists():
+-            raise ConfigurationError(
+-                f"Configuration file not found: {self.config_path}"
+-            )
+-
+-        self._load_config()
+-
+-    def _load_config(self) -> None:
+-        """Load and parse the configuration file.
+-
+-        Raises:
+-            ConfigurationError: If there is an error parsing the configuration file.
+-        """
+-        try:
+-            files_read = self.parser.read(self.config_path)
+-            if not files_read:
+-                raise ConfigurationError(
+-                    f"Failed to read configuration file: {self.config_path}"
+-                )
+-            logger.info(f"Configuration loaded from {self.config_path}")
+-        except configparser.Error as e:
+-            raise ConfigurationError(f"Error parsing configuration file: {e}") from e
+-
+-    def get_methodology(self) -> str:
+-        """Get the selected methodology from configuration.
+-
+-        Returns:
+-            The selected methodology name.
+-
+-        Raises:
+-            ConfigurationError: If methodology is not properly configured.
+-        """
+-        if self.methodology is None:
+-            try:
+-                self.methodology = self.parser.get(
+-                    "methodology", "selected", fallback=self.DEFAULT_METHODOLOGY
+-                )
+-                logger.info(f"Selected methodology: {self.methodology}")
+-            except configparser.Error as e:
+-                raise ConfigurationError(f"Error reading methodology: {e}") from e
+-
+-        return self.methodology
+-
+-    def set_methodology(self, methodology: str) -> None:
+-        """Set the methodology for processing.
+-
+-        Args:
+-            methodology: Name of the methodology to use.
+-
+-        Raises:
+-            ConfigurationError: If the methodology is not valid.
+-        """
+-        available = self.get_available_methodologies()
+-        if methodology not in available:
+-            raise ConfigurationError(
+-                f"Invalid methodology '{methodology}'. "
+-                f"Available: {', '.join(available)}"
+-            )
+-
+-        self.methodology = methodology
+-        logger.info(f"Methodology changed to: {methodology}")
+-
+-    def get_available_methodologies(self) -> List[str]:
+-        """Get list of available methodologies in configuration.
+-
+-        Returns:
+-            List of available methodology names.
+-        """
+-        methodologies = []
+-        if self.parser.has_section("methodology"):
+-            for option in self.parser.options("methodology"):
+-                if option != "selected":
+-                    methodologies.append(option)
+-
+-        return sorted(methodologies) if methodologies else [self.DEFAULT_METHODOLOGY]
+-
+-    def get_methodology_config(self, methodology: Optional[str] = None) -> Dict[str, Any]:
+-        """Get configuration for a specific methodology.
+-
+-        Args:
+-            methodology: Name of the methodology. If None, uses selected methodology.
+-
+-        Returns:
+-            Dictionary of methodology configuration parameters.
+-
+-        Raises:
+-            ConfigurationError: If the methodology section is not found.
+-        """
+-        if methodology is None:
+-            methodology = self.get_methodology()
+-
+-        if not self.parser.has_section("methodology"):
+-            return {}
+-
+-        try:
+-            config_dict = {}
+-            for key in self.parser.options("methodology"):
+-                if key == "selected":
+-                    continue
+-                value = self.parser.get("methodology", key)
+-                config_dict[key] = self._parse_value(value)
+-            return config_dict
+-        except configparser.Error as e:
+-            raise ConfigurationError(
+-                f"Error reading methodology '{methodology}' config: {e}"
+-            ) from e
+-
+-    def get_section(self, section: str) -> Dict[str, Any]:
+-        """Get all values from a configuration section.
+-
+-        Args:
+-            section: Name of the section to retrieve.
+-
+-        Returns:
+-            Dictionary of section configuration.
+-
+-        Raises:
+-            ConfigurationError: If the section does not exist.
+-        """
+-        if not self.parser.has_section(section):
+-            raise ConfigurationError(f"Configuration section not found: {section}")
+-
+-        try:
+-            section_dict = {}
+-            for key in self.parser.options(section):
+-                value = self.parser.get(section, key)
+-                section_dict[key] = self._parse_value(value)
+-            return section_dict
+-        except configparser.Error as e:
+-            raise ConfigurationError(f"Error reading section '{section}': {e}") from e
+-
+-    def get_value(
+-        self,
+-        section: str,
+-        key: str,
+-        fallback: Any = None,
+-        value_type: type = str,
+-    ) -> Any:
+-        """Get a specific configuration value.
+-
+-        Args:
+-            section: Section name.
+-            key: Configuration key.
+-            fallback: Default value if key is not found.
+-            value_type: Expected type for the value (str, int, float, bool).
+-
+-        Returns:
+-            The configuration value, converted to the specified type.
+-
+-        Raises:
+-            ConfigurationError: If the value cannot be converted to the specified type.
+-        """
+-        if not self.parser.has_section(section):
+-            if fallback is not None:
+-                return fallback
+-            raise ConfigurationError(f"Configuration section not found: {section}")
+-
+-        if not self.parser.has_option(section, key):
+-            if fallback is not None:
+-                return fallback
+-            raise ConfigurationError(
+-                f"Configuration key not found: {section}.{key}"
+-            )
+-
+-        try:
+-            value = self.parser.get(section, key)
+-
+-            if value_type == bool:
+-                return self.parser.getboolean(section, key)
+-            elif value_type == int:
+-                return self.parser.getint(section, key)
+-            elif value_type == float:
+-                return self.parser.getfloat(section, key)
+-            else:
+-                return value
+-
+-        except (ValueError, configparser.Error) as e:
+-            if fallback is not None:
+-                logger.warning(
+-                    f"Could not parse {section}.{key}, using fallback: {e}"
+-                )
+-                return fallback
+-            raise ConfigurationError(
+-                f"Error parsing configuration value {section}.{key}: {e}"
+-            ) from e
+-
+-    def get_paths(self) -> Dict[str, Path]:
+-        """Get all path configurations as Path objects.
+-
+-        Returns:
+-            Dictionary of path configurations.
+-
+-        Raises:
+-            ConfigurationError: If the paths section is not found.
+-        """
+-        paths_config = self.get_section("paths")
+-        return {key: Path(value) for key, value in paths_config.items()}
+-
+-    def get_processing_config(self) -> Dict[str, Any]:
+-        """Get processing configuration.
+-
+-        Returns:
+-            Dictionary of processing parameters.
+-
+-        Raises:
+-            ConfigurationError: If the processing section is not found.
+-        """
+-        return self.get_section("processing")
+-
+-    def get_output_config(self) -> Dict[str, Any]:
+-        """Get output configuration.
+-
+-        Returns:
+-            Dictionary of output parameters.
+-
+-        Raises:
+-            ConfigurationError: If the output section is not found.
+-        """
+-        return self.get_section("output")
+-
+-    def get_logging_config(self) -> Dict[str, Any]:
+-        """Get logging configuration.
+-
+-        Returns:
+-            Dictionary of logging parameters.
+-
+-        Raises:
+-            ConfigurationError: If the logging section is not found.
+-        """
+-        return self.get_section("logging")
+-
+-    def validate_configuration(self) -> bool:
+-        """Validate the configuration for required sections and values.
+-
+-        Returns:
+-            True if configuration is valid.
+-
+-        Raises:
+-            ConfigurationError: If required configuration is missing.
+-        """
+-        try:
+-            # Check for required sections
+-            required_sections = {"general", "methodology"}
+-            available_sections = set(self.parser.sections())
+-
+-            missing_sections = required_sections - available_sections
+-            if missing_sections:
+-                raise ConfigurationError(
+-                    f"Missing required sections: {', '.join(missing_sections)}"
+-                )
+-
+-            # Validate methodology selection
+-            self.get_methodology()
+-
+-            logger.info("Configuration validation successful")
+-            return True
+-
+-        except ConfigurationError as e:
+-            logger.error(f"Configuration validation failed: {e}")
+-            raise
+-
+-    def get_all_sections(self) -> Dict[str, Dict[str, Any]]:
+-        """Get all sections and their values from the configuration.
+-
+-        Returns:
+-            Dictionary with section names as keys and their configurations as values.
+-        """
+-        all_config = {}
+-        for section in self.parser.sections():
+-            try:
+-                all_config[section] = self.get_section(section)
+-            except ConfigurationError:
+-                logger.warning(f"Could not read section: {section}")
+-
+-        return all_config
+-
+-    def to_dict(self) -> Dict[str, Any]:
+-        """Convert the entire configuration to a dictionary.
+-
+-        Returns:
+-            Dictionary representation of the configuration.
+-        """
+-        return {
+-            "config_path": str(self.config_path),
+-            "methodology": self.get_methodology(),
+-            "sections": self.get_all_sections(),
+-        }
+-
+-    @staticmethod
+-    def _parse_value(value: str) -> Any:
+-        """Parse a configuration value to its appropriate type.
+-
+-        Args:
+-            value: String value to parse.
+-
+-        Returns:
+-            Parsed value (str, int, float, bool, or list).
+-        """
+-        if not isinstance(value, str):
+-            return value
+-
+-        # Try to parse as boolean
+-        if value.lower() in ("true", "false"):
+-            return value.lower() == "true"
+-
+-        # Try to parse as integer
+-        try:
+-            if "." not in value:
+-                return int(value)
+-        except ValueError:
+-            pass
+-
+-        # Try to parse as float
+-        try:
+-            return float(value)
+-        except ValueError:
+-            pass
+-
+-        # Try to parse as list (comma-separated)
+-        if "," in value:
+-            return [item.strip() for item in value.split(",")]
+-
+-        return value
+-
+-    def __repr__(self) -> str:
+-        """Return string representation of the parser."""
+-        return (
+-            f"ConfigParser(config_path={self.config_path}, "
+-            f"methodology={self.get_methodology()})"
+-        )
+-
+-
+-class MethodologyRegistry:
+-    """Registry for managing available methodologies and their configurations."""
+-
+-    def __init__(self) -> None:
+-        """Initialize the methodology registry."""
+-        self._methodologies: Dict[str, Dict[str, Any]] = {}
+-        self._aliases: Dict[str, str] = {}
+-
+-    def register_methodology(
+-        self,
+-        name: str,
+-        config: Dict[str, Any],
+-        aliases: Optional[List[str]] = None,
+-    ) -> None:
+-        """Register a new methodology.
+-
+-        Args:
+-            name: Name of the methodology.
+-            config: Configuration dictionary for the methodology.
+-            aliases: Alternative names for this methodology.
+-
+-        Raises:
+-            ValueError: If methodology name is already registered.
+-        """
+-        if name in self._methodologies:
+-            raise ValueError(f"Methodology '{name}' is already registered")
+-
+-        self._methodologies[name] = config
+-
+-        if aliases:
+-            for alias in aliases:
+-                if alias in self._aliases:
+-                    raise ValueError(f"Alias '{alias}' is already in use")
+-                self._aliases[alias] = name
+-
+-        logger.info(f"Registered methodology: {name}")
+-
+-    def get_methodology(self, name: str) -> Optional[Dict[str, Any]]:
+-        """Get a registered methodology configuration.
+-
+-        Args:
+-            name: Name or alias of the methodology.
+-
+-        Returns:
+-            Configuration dictionary, or None if not found.
+-        """
+-        resolved_name = self._aliases.get(name, name)
+-        return self._methodologies.get(resolved_name)
+-
+-    def get_available_methodologies(self) -> List[str]:
+-        """Get list of all registered methodologies.
+-
+-        Returns:
+-            Sorted list of methodology names.
+-        """
+-        return sorted(self._methodologies.keys())
+-
+-    def is_registered(self, name: str) -> bool:
+-        """Check if a methodology is registered.
+-
+-        Args:
+-            name: Name or alias of the methodology.
+-
+-        Returns:
+-            True if methodology is registered.
+-        """
+-        resolved_name = self._aliases.get(name, name)
+-        return resolved_name in self._methodologies
+-
+-    def __repr__(self) -> str:
+-        """Return string representation of the registry."""
+-        return (
+-            f"MethodologyRegistry(methodologies={len(self._methodologies)}, "
+-            f"aliases={len(self._aliases)})"
+-        )
+Index: src/pycbs/HF_component/HF_E.py
+===================================================================
+diff --git a/src/pycbs/HF_component/HF_E.py b/src/pycbs/HF_component/HF_E.py
+deleted file mode 100644
+--- a/src/pycbs/HF_component/HF_E.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,7 +0,0 @@
+-import math
+-from src.pycbs.basis import hf
+-def hartree_fock_energy(HF1, HF2, basis1, basis2):
+-    """Calculate the static correlation."""
+-    EHF = (HF1 * math.exp(2.284 * hf[basis1]) - HF2 * math.exp(2.284 * hf[basis2])) / \
+-          (math.exp(2.284 * hf[basis1]) - math.exp(2.284 * hf[basis2]))
+-    return EHF
+\ No newline at end of file
+Index: src/pycbs/optimization/opt_3.py
+===================================================================
+diff --git a/src/pycbs/optimization/opt_3.py b/src/pycbs/optimization/opt_3.py
+deleted file mode 100644
+--- a/src/pycbs/optimization/opt_3.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,489 +0,0 @@
+-#!/usr/bin/env python3
+-"""
+-Enhanced CBS optimizer using REDUNDANT INTERNAL COORDINATES.
+-Optimizes in bond/angle/dihedral space, outputs in Cartesian.
+-This prevents bond breaking in dimers.
+-"""
+-
+-import os
+-import math
+-import numpy as np
+-from concurrent.futures import ThreadPoolExecutor
+-from multiprocessing import cpu_count
+-from scipy.spatial.distance import pdist, squareform
+-from scipy.optimize import minimize
+-from pyscf import gto, scf, cc, mp, lib
+-
+-# USER CONFIGURATION
+-INPUT_XYZ = "/home/fab/01_Fab_Hub/01_pinchas/02_albeaker/pyCBS/xyz/meoh.xyz"
+-OUTPUT_XYZ = "optimized_meo.xyz"
+-METHOD = "MP2"
+-BASIS_SETS = ["sto-3g", "sto-6g"]
+-MAXCYCLE = 50
+-ENERGY_CRITERION = 1e-6
+-MAX_WORKERS = max(1, cpu_count() - 1)
+-PYSCF_THREADS = max(1, (max(1, cpu_count() - 1)) // 2)
+-VERBOSE = True
+-
+-# AGGREGATE-SPECIFIC CONSTRAINTS
+-BOND_THRESHOLD = 1.6  # Ångströms (for molecule detection)
+-STRONG_BOND_THRESHOLD = 1.8  # Any bond < 1.8 Å is treated as strong covalent
+-
+-os.environ['MKL_NUM_THREADS'] = str(PYSCF_THREADS)
+-os.environ['OMP_NUM_THREADS'] = str(PYSCF_THREADS)
+-os.environ['OPENBLAS_NUM_THREADS'] = str(PYSCF_THREADS)
+-lib.num_threads(PYSCF_THREADS)
+-
+-
+-def get_bond_lengths(positions, symbols):
+-    """Compute all pairwise distances"""
+-    distances = {}
+-    nat = len(symbols)
+-    for i in range(nat):
+-        for j in range(i + 1, nat):
+-            dist = np.linalg.norm(positions[i] - positions[j])
+-            distances[(i, j)] = dist
+-    return distances
+-
+-
+-def detect_molecules(positions, symbols, bond_threshold=BOND_THRESHOLD):
+-    """Cluster atoms into molecules based on distance threshold."""
+-    nat = len(symbols)
+-    dist_matrix = squareform(pdist(positions))
+-    adjacency = dist_matrix < bond_threshold
+-    np.fill_diagonal(adjacency, False)
+-
+-    visited = np.zeros(nat, dtype=bool)
+-    molecules = []
+-
+-    def dfs(atom_idx, current_mol):
+-        visited[atom_idx] = True
+-        current_mol.append(atom_idx)
+-        for neighbor in np.where(adjacency[atom_idx])[0]:
+-            if not visited[neighbor]:
+-                dfs(neighbor, current_mol)
+-
+-    for i in range(nat):
+-        if not visited[i]:
+-            mol = []
+-            dfs(i, mol)
+-            molecules.append(sorted(mol))
+-
+-    return molecules
+-
+-
+-def identify_connectivity(positions, symbols, bond_threshold=BOND_THRESHOLD):
+-    """
+-    Build connectivity graph:  for each atom, list its bonded neighbors.
+-    Used to construct internal coordinates.
+-    """
+-    nat = len(symbols)
+-    dist_matrix = squareform(pdist(positions))
+-    adjacency = dist_matrix < bond_threshold
+-    np.fill_diagonal(adjacency, False)
+-
+-    connectivity = {i: [] for i in range(nat)}
+-    for i in range(nat):
+-        for j in range(nat):
+-            if adjacency[i, j]:
+-                connectivity[i].append(j)
+-
+-    return connectivity
+-
+-
+-def build_internal_coordinates(positions, symbols, connectivity):
+-    """
+-    Build a list of internal coordinates:
+-    - distances:  (i, j) pairs for bonds
+-    - angles: (i, j, k) triplets for angles (j is central atom)
+-    - dihedrals: (i, j, k, l) for torsions
+-
+-    Returns: (distances_list, angles_list, dihedrals_list, reference_values)
+-    """
+-    distances = []
+-    angles = []
+-    dihedrals = []
+-
+-    nat = len(symbols)
+-
+-    # Build bonds from connectivity
+-    for i in range(nat):
+-        for j in connectivity[i]:
+-            if i < j:  # Avoid duplicates
+-                distances.append((i, j))
+-
+-    # Build angles:  for each atom j, use pairs of neighbors
+-    for j in range(nat):
+-        neighbors = connectivity[j]
+-        if len(neighbors) >= 2:
+-            for k1_idx, k1 in enumerate(neighbors):
+-                for k2 in neighbors[k1_idx + 1:]:
+-                    angles.append((k1, j, k2))
+-
+-    # Build dihedrals: only for bonds between atoms with multiple neighbors
+-    for j in range(nat):
+-        for k in connectivity[j]:
+-            if j < k:
+-                # j-k is a bond; find atoms bonded to j and k
+-                atoms_bonded_to_j = [a for a in connectivity[j] if a != k]
+-                atoms_bonded_to_k = [a for a in connectivity[k] if a != j]
+-
+-                if atoms_bonded_to_j and atoms_bonded_to_k:
+-                    i = atoms_bonded_to_j[0]
+-                    l = atoms_bonded_to_k[0]
+-                    dihedrals.append((i, j, k, l))
+-
+-    return distances, angles, dihedrals
+-
+-
+-def get_distance(r1, r2):
+-    """Calculate distance between two points"""
+-    return np.linalg.norm(r2 - r1)
+-
+-
+-def get_angle(r1, r2, r3):
+-    """
+-    Calculate angle (in degrees) at r2 between r1-r2-r3.
+-    r2 is the central atom.
+-    """
+-    v1 = r1 - r2
+-    v2 = r3 - r2
+-    cos_angle = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2) + 1e-12)
+-    cos_angle = np.clip(cos_angle, -1.0, 1.0)
+-    return np.degrees(np.arccos(cos_angle))
+-
+-
+-def get_dihedral(r1, r2, r3, r4):
+-    """
+-    Calculate dihedral angle (in degrees) i-j-k-l.
+-    """
+-    b1 = r2 - r1
+-    b2 = r3 - r2
+-    b3 = r4 - r3
+-
+-    n1 = np.cross(b1, b2)
+-    n2 = np.cross(b2, b3)
+-
+-    norm_n1 = np.linalg.norm(n1) + 1e-12
+-    norm_n2 = np.linalg.norm(n2) + 1e-12
+-
+-    n1 /= norm_n1
+-    n2 /= norm_n2
+-
+-    cos_phi = np.dot(n1, n2)
+-    cos_phi = np.clip(cos_phi, -1.0, 1.0)
+-    phi = np.degrees(np.arccos(cos_phi))
+-
+-    return phi
+-
+-
+-def cartesian_to_internal(positions, distances_list, angles_list, dihedrals_list):
+-    """
+-    Convert Cartesian coordinates to internal coordinates.
+-    Returns array:  [d1, d2, ..., a1, a2, ..., dih1, dih2, ...]
+-    """
+-    internal = []
+-
+-    # Distances
+-    for i, j in distances_list:
+-        d = get_distance(positions[i], positions[j])
+-        internal.append(d)
+-
+-    # Angles
+-    for i, j, k in angles_list:
+-        angle = get_angle(positions[i], positions[j], positions[k])
+-        internal.append(angle)
+-
+-    # Dihedrals
+-    for i, j, k, l in dihedrals_list:
+-        dih = get_dihedral(positions[i], positions[j], positions[k], positions[l])
+-        internal.append(dih)
+-
+-    return np.array(internal, dtype=float)
+-
+-
+-def internal_to_cartesian(internal_coords, distances_list, angles_list, dihedrals_list,
+-                          reference_positions, connectivity):
+-    """
+-    Convert internal coordinates back to Cartesian.
+-    Uses reference positions to build a Z-matrix-like structure.
+-    This is the inverse of cartesian_to_internal.
+-    """
+-    positions = reference_positions.copy()
+-    nat = len(positions)
+-
+-    n_dist = len(distances_list)
+-    n_angles = len(angles_list)
+-
+-    distances_dict = {pair: internal_coords[i] for i, pair in enumerate(distances_list)}
+-    angles_dict = {triplet: internal_coords[n_dist + i] for i, triplet in enumerate(angles_list)}
+-    dihedrals_dict = {quad: internal_coords[n_dist + n_angles + i] for i, quad in enumerate(dihedrals_list)}
+-
+-    # Update positions based on internal coordinates
+-    # This is a simplified approach:  adjust atoms to match target distances/angles
+-    # For a more robust solution, use constrained optimization or proper Z-matrix construction
+-
+-    for idx, (i, j) in enumerate(distances_list):
+-        target_dist = internal_coords[idx]
+-        current_dist = get_distance(positions[i], positions[j])
+-
+-        if current_dist > 1e-6:
+-            # Move j closer to or away from i
+-            direction = (positions[j] - positions[i]) / current_dist
+-            positions[j] = positions[i] + direction * target_dist
+-
+-    for idx, (i, j, k) in enumerate(angles_list):
+-        target_angle = internal_coords[n_dist + idx]
+-        current_angle = get_angle(positions[i], positions[j], positions[k])
+-
+-        if abs(current_angle - target_angle) > 0.1:
+-            # Rotate k around bond j-i to match target angle
+-            bond_vec = positions[i] - positions[j]
+-            bond_vec /= (np.linalg.norm(bond_vec) + 1e-12)
+-
+-            vec_to_k = positions[k] - positions[j]
+-
+-            # Simple rotation: adjust k's position
+-            angle_diff = np.radians(target_angle - current_angle)
+-            rotation_axis = np.cross(bond_vec, vec_to_k / (np.linalg.norm(vec_to_k) + 1e-12))
+-            rotation_axis /= (np.linalg.norm(rotation_axis) + 1e-12)
+-
+-            # Rodrigues rotation formula
+-            cos_a = np.cos(angle_diff)
+-            sin_a = np.sin(angle_diff)
+-            cross_product = np.cross(rotation_axis, vec_to_k)
+-
+-            rotated_vec = (vec_to_k * cos_a +
+-                           cross_product * sin_a +
+-                           rotation_axis * np.dot(rotation_axis, vec_to_k) * (1 - cos_a))
+-
+-            positions[k] = positions[j] + rotated_vec
+-
+-    return positions
+-
+-
+-def read_xyz(path):
+-    with open(path, 'r') as f:
+-        n = int(f.readline().strip())
+-        _ = f.readline()
+-        symbols = []
+-        pos = []
+-        for _ in range(n):
+-            parts = f.readline().split()
+-            symbols.append(parts[0])
+-            pos.append([float(parts[1]), float(parts[2]), float(parts[3])])
+-    return symbols, np.array(pos, dtype=float)
+-
+-
+-def write_xyz(path, symbols, positions, comment="Optimized geometry"):
+-    with open(path, 'w') as f:
+-        f.write(f"{len(symbols)}\n{comment}\n")
+-        for s, p in zip(symbols, positions):
+-            f.write(f"{s} {p[0]:.10f} {p[1]:.10f} {p[2]:.10f}\n")
+-
+-
+-X1 = 2.792
+-X2 = 3.719
+-X1_HF = 2.96
+-X2_HF = 3.87
+-BETA = 1.62
+-
+-A_CORR = (X1 ** 3) / (X2 ** 3 - X1 ** 3)
+-B_HF = (math.exp(BETA * X1_HF)) / (math.exp(BETA * X2_HF) - math.exp(BETA * X1_HF))
+-
+-
+-def cbs_compose(ex1_corr, ex2_corr, ex1_hf, ex2_hf):
+-    return ex2_corr + A_CORR * (ex2_corr - ex1_corr) + (A_CORR - B_HF) * (ex2_hf - ex1_hf)
+-
+-
+-_local_cache = {}
+-
+-
+-def xyz_text_from_positions(positions, symbols):
+-    lines = []
+-    for s, p in zip(symbols, positions):
+-        lines.append(f"{s} {p[0]:.10f} {p[1]:.10f} {p[2]:.10f}")
+-    return "\n".join(lines)
+-
+-
+-def compute_cbs_energy(method, positions, symbols):
+-    """Compute CBS energy from Cartesian positions"""
+-    key = (method, tuple(np.round(positions.flatten(), 10)))
+-    if key in _local_cache:
+-        return _local_cache[key]
+-
+-    results_scf = []
+-    results_corr = []
+-    xyz_text = xyz_text_from_positions(positions, symbols)
+-
+-    for basis in BASIS_SETS:
+-        mol = gto.Mole()
+-        mol.atom = xyz_text
+-        mol.basis = basis
+-        mol.spin = 0
+-        mol.charge = 0
+-        mol.nthread = PYSCF_THREADS
+-        mol.max_memory = 8000
+-        mol.build()
+-
+-        mf = scf.RHF(mol)
+-        mf.max_memory = 12000
+-        mf.conv_tol = 1e-8
+-        mf.max_cycle = 150
+-        scf_e = float(mf.kernel())
+-
+-        if method.upper() == "CCSD(T)":
+-            mycc = cc.CCSD(mf)
+-            mycc.conv_tol = 1e-7
+-            mycc.max_cycle = 200
+-            mycc.kernel()
+-            try:
+-                triples = mycc.ccsd_t()
+-            except Exception:
+-                triples = 0.0
+-            corr_tot = float(mycc.e_tot + (triples if triples is not None else 0.0))
+-        elif method.upper() == "MP2":
+-            mymp = mp.MP2(mf)
+-            mymp.max_memory = 12000
+-            mp_res = mymp.run()
+-            mp2_total = getattr(mp_res, 'e_tot', None)
+-            if mp2_total is None:
+-                mp2_total = getattr(mymp, 'e_tot', None)
+-            if mp2_total is None:
+-                e_corr = getattr(mp_res, 'e_corr', getattr(mymp, 'e_corr', None))
+-                if e_corr is not None:
+-                    mp2_total = scf_e + e_corr
+-            if mp2_total is None:
+-                raise RuntimeError("Could not retrieve MP2 energy")
+-            corr_tot = float(mp2_total)
+-        else:
+-            raise ValueError("Unknown method: " + str(method))
+-
+-        results_scf.append(scf_e)
+-        results_corr.append(corr_tot)
+-
+-    energy = cbs_compose(results_corr[0], results_corr[1], results_scf[0], results_scf[1])
+-    _local_cache[key] = float(energy)
+-    return float(energy)
+-
+-
+-def run():
+-    symbols, positions = read_xyz(INPUT_XYZ)
+-    natoms = len(symbols)
+-
+-    # Detect molecules and connectivity
+-    molecules = detect_molecules(positions, symbols)
+-    connectivity = identify_connectivity(positions, symbols)
+-
+-    # Build internal coordinates
+-    distances_list, angles_list, dihedrals_list = build_internal_coordinates(
+-        positions, symbols, connectivity
+-    )
+-
+-    # Get reference internal values
+-    reference_internal = cartesian_to_internal(positions, distances_list, angles_list, dihedrals_list)
+-
+-    if VERBOSE:
+-        print("=" * 80)
+-        print("INTERNAL COORDINATE CBS OPTIMIZER FOR AGGREGATES")
+-        print(f"Input:    {INPUT_XYZ}")
+-        print(f"Atoms:  {natoms}  Method: {METHOD}")
+-        print(f"Molecules detected: {len(molecules)}")
+-        for i, mol in enumerate(molecules):
+-            print(f"  Molecule {i}:    atoms {mol} ({[symbols[a] for a in mol]})")
+-
+-        print(f"\nInternal coordinates built:")
+-        print(f"  Distances: {len(distances_list)}")
+-        print(f"  Angles:  {len(angles_list)}")
+-        print(f"  Dihedrals: {len(dihedrals_list)}")
+-        print("=" * 80)
+-
+-    # Energy function in internal coordinate space
+-    def energy_func(internal_coords):
+-        try:
+-            # Convert internal to Cartesian
+-            current_positions = internal_to_cartesian(
+-                internal_coords, distances_list, angles_list, dihedrals_list,
+-                positions.copy(), connectivity
+-            )
+-
+-            # Compute energy
+-            en = compute_cbs_energy(METHOD, current_positions, symbols)
+-            return float(en)
+-        except Exception as e:
+-            if VERBOSE:
+-                print(f"Energy evaluation failed: {e}")
+-            return np.inf
+-
+-    # Optimize using L-BFGS-B (supports bounds)
+-    if VERBOSE:
+-        print(f"\nStarting optimization in {len(reference_internal)}-dimensional internal coordinate space.. .\n")
+-
+-    result = minimize(
+-        energy_func,
+-        reference_internal,
+-        method='L-BFGS-B',
+-        options={
+-            'maxiter': MAXCYCLE,
+-            'ftol': ENERGY_CRITERION,
+-            'gtol': 1e-4,
+-            'disp': VERBOSE
+-        }
+-    )
+-
+-    # Convert final internal coordinates back to Cartesian
+-    optimized_positions = internal_to_cartesian(
+-        result.x, distances_list, angles_list, dihedrals_list,
+-        positions.copy(), connectivity
+-    )
+-
+-    final_energy = compute_cbs_energy(METHOD, optimized_positions, symbols)
+-
+-    # Write output
+-    write_xyz(OUTPUT_XYZ, symbols, optimized_positions,
+-              comment=f"Optimized aggregate ({len(molecules)} molecules)")
+-
+-    if VERBOSE:
+-        print("\n" + "=" * 80)
+-        print("OPTIMIZATION FINISHED")
+-        print(f" Final CBS energy = {final_energy:.10f} Ha")
+-        print(f" Optimized geometry written to:    {OUTPUT_XYZ}")
+-
+-        # Verify bond integrity
+-        print(f"\nBond verification (should be unchanged):")
+-        final_distances = get_bond_lengths(optimized_positions, symbols)
+-        initial_distances = get_bond_lengths(positions, symbols)
+-
+-        all_intact = True
+-        for (i, j) in sorted(distances_list):
+-            initial_d = initial_distances[(i, j)]
+-            final_d = final_distances[(i, j)]
+-            change = abs(final_d - initial_d)
+-            status = "✓ OK" if change < 0.01 else "✗ CHANGED"
+-
+-
+-            if change >= 0.05:
+-                all_intact = False
+-
+-        if all_intact:
+-            print("\n✓ All bonds preserved during optimization!")
+-        else:
+-            print("\n⚠ Some bonds changed significantly!")
+-
+-        print("=" * 80)
+-
+-    return {
+-        'positions': optimized_positions,
+-        'energy': final_energy,
+-        'converged': result.success,
+-        'molecules': molecules,
+-        'result': result
+-    }
+-
+-
+-if __name__ == "__main__":
+-    res = run()
+-    if res['converged']:
+-        print("\n✓ Result:  converged")
+-    else:
+-        print(f"\n✗ Result:  finished (message: {res['result'].message})")
+\ No newline at end of file
+Index: src/pycbs/HF_component/Truhlar_hf.py
+===================================================================
+diff --git a/src/pycbs/HF_component/Truhlar_hf.py b/src/pycbs/HF_component/Truhlar_hf.py
+deleted file mode 100644
+--- a/src/pycbs/HF_component/Truhlar_hf.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,5 +0,0 @@
+-def Truhlar_HF_extrapolation(Ehf_X, Ehf_Y, X, Y, alfa=3.337):
+-    num = (Ehf_Y * X**-alfa) - (Ehf_X * Y**-alfa)
+-    den = (X**-alfa) - (Y**-alfa)
+-    return num/den
+-
+Index: src/pycbs/corr_component/OAN.py
+===================================================================
+diff --git a/src/pycbs/corr_component/OAN.py b/src/pycbs/corr_component/OAN.py
+deleted file mode 100644
+--- a/src/pycbs/corr_component/OAN.py	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
++++ /dev/null	(revision 212c7eb6dde352da7fa4a271ad4225b9a70b078b)
+@@ -1,4 +0,0 @@
+-def OAN_corr_extrapolation(Ec_X, Ec_Y, beta=2.086):
+-    num = Ec_Y * 27 - (beta**3) * Ec_X
+-    den = 27 - (beta**3)
+-    return num/den
+\ No newline at end of file
+Index: src/pycbs/writer2.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/src/pycbs/writer2.py b/src/pycbs/writer2.py
+new file mode 100644
+--- /dev/null	(date 1768590905574)
++++ b/src/pycbs/writer2.py	(date 1768590905574)
+@@ -0,0 +1,4499 @@
++[calculation_01_MARTIN]
++scheme = MARTIN
++Ec_X = -1.1726356
++Ec_Y = -1.1738669
++Ehf_X = -1.1330054
++Ehf_Y = -1.1334497
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_01_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -1.1726356
++Ec_Y = -1.1738669
++Ehf_X = -1.1330054
++Ehf_Y = -1.1334497
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_01_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -1.1726356
++Ec_Y = -1.1738669
++Ehf_X = -1.1330054
++Ehf_Y = -1.1334497
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_01_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -1.1726356
++Ec_Y = -1.1738669
++Ehf_X = -1.1330054
++Ehf_Y = -1.1334497
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_01_OAN]
++scheme = OANc
++Ec_X = -1.1726356
++Ec_Y = -1.1738669
++Ehf_X = -1.1330054
++Ehf_Y = -1.1334497
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_01_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -1.1726356
++Ec_Y = -1.1738669
++Ehf_X = -1.1330054
++Ehf_Y = -1.1334497
++X = 3
++Y = 4
++
++[calculation_01_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -1.1330054
++hf2 = -1.1334497
++e1 = -1.1726356
++e2 = -1.1738669
++
++[calculation_01_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -1.1330054
++hf2 = -1.1334497
++e1 = -1.1726356
++e2 = -1.1738669
++
++[calculation_01_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -1.1334497
++Etot = -1.17434565
++
++[calculation_02_MARTIN]
++scheme = MARTIN
++Ec_X = -109.3804283
++Ec_Y = -109.4070255
++Ehf_X = -108.9857967
++Ehf_Y = -108.9927084
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_02_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -109.3804283
++Ec_Y = -109.4070255
++Ehf_X = -108.9857967
++Ehf_Y = -108.9927084
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_02_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -109.3804283
++Ec_Y = -109.4070255
++Ehf_X = -108.9857967
++Ehf_Y = -108.9927084
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_02_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -109.3804283
++Ec_Y = -109.4070255
++Ehf_X = -108.9857967
++Ehf_Y = -108.9927084
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_02_OAN]
++scheme = OANc
++Ec_X = -109.3804283
++Ec_Y = -109.4070255
++Ehf_X = -108.9857967
++Ehf_Y = -108.9927084
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_02_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -109.3804283
++Ec_Y = -109.4070255
++Ehf_X = -108.9857967
++Ehf_Y = -108.9927084
++X = 3
++Y = 4
++
++[calculation_02_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -108.9857967
++hf2 = -108.9927084
++e1 = -109.3804283
++e2 = -109.4070255
++
++[calculation_02_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -108.9857967
++hf2 = -108.9927084
++e1 = -109.3804283
++e2 = -109.4070255
++
++[calculation_02_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -108.9927084
++Etot = -109.41838454
++
++[calculation_03_MARTIN]
++scheme = MARTIN
++Ec_X = -150.1409468
++Ec_Y = -150.1786745
++Ehf_X = -149.6784703
++Ehf_Y = -149.6887618
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_03_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -150.1409468
++Ec_Y = -150.1786745
++Ehf_X = -149.6784703
++Ehf_Y = -149.6887618
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_03_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -150.1409468
++Ec_Y = -150.1786745
++Ehf_X = -149.6784703
++Ehf_Y = -149.6887618
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_03_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -150.1409468
++Ec_Y = -150.1786745
++Ehf_X = -149.6784703
++Ehf_Y = -149.6887618
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_03_OAN]
++scheme = OANc
++Ec_X = -150.1409468
++Ec_Y = -150.1786745
++Ehf_X = -149.6784703
++Ehf_Y = -149.6887618
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_03_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -150.1409468
++Ec_Y = -150.1786745
++Ehf_X = -149.6784703
++Ehf_Y = -149.6887618
++X = 3
++Y = 4
++
++[calculation_03_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -149.6784703
++hf2 = -149.6887618
++e1 = -150.1409468
++e2 = -150.1786745
++
++[calculation_03_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -149.6784703
++hf2 = -149.6887618
++e1 = -150.1409468
++e2 = -150.1786745
++
++[calculation_03_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -149.6887618
++Etot = -150.19524528
++
++[calculation_04_MARTIN]
++scheme = MARTIN
++Ec_X = -225.1528965
++Ec_Y = -225.2104936
++Ehf_X = -224.3506895
++Ehf_Y = -224.3658497
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_04_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -225.1528965
++Ec_Y = -225.2104936
++Ehf_X = -224.3506895
++Ehf_Y = -224.3658497
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_04_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -225.1528965
++Ec_Y = -225.2104936
++Ehf_X = -224.3506895
++Ehf_Y = -224.3658497
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_04_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -225.1528965
++Ec_Y = -225.2104936
++Ehf_X = -224.3506895
++Ehf_Y = -224.3658497
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_04_OAN]
++scheme = OANc
++Ec_X = -225.1528965
++Ec_Y = -225.2104936
++Ehf_X = -224.3506895
++Ehf_Y = -224.3658497
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_04_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -225.1528965
++Ec_Y = -225.2104936
++Ehf_X = -224.3506895
++Ehf_Y = -224.3658497
++X = 3
++Y = 4
++
++[calculation_04_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -224.3506895
++hf2 = -224.3658497
++e1 = -225.1528965
++e2 = -225.2104936
++
++[calculation_04_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -224.3506895
++hf2 = -224.3658497
++e1 = -225.1528965
++e2 = -225.2104936
++
++[calculation_04_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -224.3658497
++Etot = -224.361738
++
++[calculation_05_MARTIN]
++scheme = MARTIN
++Ec_X = -113.161984
++Ec_Y = -113.1903007
++Ehf_X = -112.7816852
++Ehf_Y = -112.7893096
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_05_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -113.161984
++Ec_Y = -113.1903007
++Ehf_X = -112.7816852
++Ehf_Y = -112.7893096
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_05_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -113.161984
++Ec_Y = -113.1903007
++Ehf_X = -112.7816852
++Ehf_Y = -112.7893096
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_05_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -113.161984
++Ec_Y = -113.1903007
++Ehf_X = -112.7816852
++Ehf_Y = -112.7893096
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_05_OAN]
++scheme = OANc
++Ec_X = -113.161984
++Ec_Y = -113.1903007
++Ehf_X = -112.7816852
++Ehf_Y = -112.7893096
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_05_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -113.161984
++Ec_Y = -113.1903007
++Ehf_X = -112.7816852
++Ehf_Y = -112.7893096
++X = 3
++Y = 4
++
++[calculation_05_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -112.7816852
++hf2 = -112.7893096
++e1 = -113.161984
++e2 = -113.1903007
++
++[calculation_05_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -112.7816852
++hf2 = -112.7893096
++e1 = -113.161984
++e2 = -113.1903007
++
++[calculation_05_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -112.7893096
++Etot = -113.20238616
++
++[calculation_06_MARTIN]
++scheme = MARTIN
++Ec_X = -188.3404244
++Ec_Y = -188.3895659
++Ehf_X = -187.7094239
++Ehf_Y = -187.7221281
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_06_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -188.3404244
++Ec_Y = -188.3895659
++Ehf_X = -187.7094239
++Ehf_Y = -187.7221281
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_06_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -188.3404244
++Ec_Y = -188.3895659
++Ehf_X = -187.7094239
++Ehf_Y = -187.7221281
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_06_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -188.3404244
++Ec_Y = -188.3895659
++Ehf_X = -187.7094239
++Ehf_Y = -187.7221281
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_06_OAN]
++scheme = OANc
++Ec_X = -188.3404244
++Ec_Y = -188.3895659
++Ehf_X = -187.7094239
++Ehf_Y = -187.7221281
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_06_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -188.3404244
++Ec_Y = -188.3895659
++Ehf_X = -187.7094239
++Ehf_Y = -187.7221281
++X = 3
++Y = 4
++
++[calculation_06_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -187.7094239
++hf2 = -187.7221281
++e1 = -188.3404244
++e2 = -188.3895659
++
++[calculation_06_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -187.7094239
++hf2 = -187.7221281
++e1 = -188.3404244
++e2 = -188.3895659
++
++[calculation_06_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -187.7221281
++Etot = -188.41065307
++
++[calculation_07_MARTIN]
++scheme = MARTIN
++Ec_X = -76.3423226
++Ec_Y = -76.3635765
++Ehf_X = -76.0603284
++Ehf_Y = -76.0656957
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_07_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -76.3423226
++Ec_Y = -76.3635765
++Ehf_X = -76.0603284
++Ehf_Y = -76.0656957
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_07_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -76.3423226
++Ec_Y = -76.3635765
++Ehf_X = -76.0603284
++Ehf_Y = -76.0656957
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_07_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -76.3423226
++Ec_Y = -76.3635765
++Ehf_X = -76.0603284
++Ehf_Y = -76.0656957
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_07_OAN]
++scheme = OANc
++Ec_X = -76.3423226
++Ec_Y = -76.3635765
++Ehf_X = -76.0603284
++Ehf_Y = -76.0656957
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_07_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -76.3423226
++Ec_Y = -76.3635765
++Ehf_X = -76.0603284
++Ehf_Y = -76.0656957
++X = 3
++Y = 4
++
++[calculation_07_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -76.0603284
++hf2 = -76.0656957
++e1 = -76.3423226
++e2 = -76.3635765
++
++[calculation_07_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -76.0603284
++hf2 = -76.0656957
++e1 = -76.3423226
++e2 = -76.3635765
++
++[calculation_07_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -76.0656957
++Etot = -76.3724963
++
++[calculation_08_MARTIN]
++scheme = MARTIN
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_08_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_08_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_08_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_08_OAN]
++scheme = OANc
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_08_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++
++[calculation_08_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -56.2127423
++hf2 = -56.2164646
++e1 = -56.4717365
++e2 = -56.4872254
++
++[calculation_08_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -56.2127423
++hf2 = -56.2164646
++e1 = -56.4717365
++e2 = -56.4872254
++
++[calculation_08_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -56.2164646
++Etot = -56.50173726
++
++[calculation_09_MARTIN]
++scheme = MARTIN
++Ec_X = -40.4409213
++Ec_Y = -40.4517281
++Ehf_X = -40.2136085
++Ehf_Y = -40.2162338
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_09_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -40.4409213
++Ec_Y = -40.4517281
++Ehf_X = -40.2136085
++Ehf_Y = -40.2162338
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_09_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -40.4409213
++Ec_Y = -40.4517281
++Ehf_X = -40.2136085
++Ehf_Y = -40.2162338
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_09_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -40.4409213
++Ec_Y = -40.4517281
++Ehf_X = -40.2136085
++Ehf_Y = -40.2162338
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_09_OAN]
++scheme = OANc
++Ec_X = -40.4409213
++Ec_Y = -40.4517281
++Ehf_X = -40.2136085
++Ehf_Y = -40.2162338
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_09_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -40.4409213
++Ec_Y = -40.4517281
++Ehf_X = -40.2136085
++Ehf_Y = -40.2162338
++X = 3
++Y = 4
++
++[calculation_09_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -40.2136085
++hf2 = -40.2162338
++e1 = -40.4409213
++e2 = -40.4517281
++
++[calculation_09_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -40.2136085
++hf2 = -40.2162338
++e1 = -40.4409213
++e2 = -40.4517281
++
++[calculation_09_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -40.2162338
++Etot = -40.45591426
++
++[calculation_10_MARTIN]
++scheme = MARTIN
++Ec_X = -78.4435434
++Ec_Y = -78.4634617
++Ehf_X = -78.0649477
++Ehf_Y = -78.069654
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_10_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -78.4435434
++Ec_Y = -78.4634617
++Ehf_X = -78.0649477
++Ehf_Y = -78.069654
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_10_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -78.4435434
++Ec_Y = -78.4634617
++Ehf_X = -78.0649477
++Ehf_Y = -78.069654
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_10_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -78.4435434
++Ec_Y = -78.4634617
++Ehf_X = -78.0649477
++Ehf_Y = -78.069654
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_10_OAN]
++scheme = OANc
++Ec_X = -78.4435434
++Ec_Y = -78.4634617
++Ehf_X = -78.0649477
++Ehf_Y = -78.069654
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_10_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -78.4435434
++Ec_Y = -78.4634617
++Ehf_X = -78.0649477
++Ehf_Y = -78.069654
++X = 3
++Y = 4
++
++[calculation_10_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -78.0649477
++hf2 = -78.069654
++e1 = -78.4435434
++e2 = -78.4634617
++
++[calculation_10_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -78.0649477
++hf2 = -78.069654
++e1 = -78.4435434
++e2 = -78.4634617
++
++[calculation_10_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -78.069654
++Etot = -78.4712368
++
++[calculation_11_MARTIN]
++scheme = MARTIN
++Ec_X = -77.1917979
++Ec_Y = -77.210761
++Ehf_X = -76.8507559
++Ehf_Y = -76.8551893
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_11_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -77.1917979
++Ec_Y = -77.210761
++Ehf_X = -76.8507559
++Ehf_Y = -76.8551893
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_11_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -77.1917979
++Ec_Y = -77.210761
++Ehf_X = -76.8507559
++Ehf_Y = -76.8551893
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_11_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -77.1917979
++Ec_Y = -77.210761
++Ehf_X = -76.8507559
++Ehf_Y = -76.8551893
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_11_OAN]
++scheme = OANc
++Ec_X = -77.1917979
++Ec_Y = -77.210761
++Ehf_X = -76.8507559
++Ehf_Y = -76.8551893
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_11_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -77.1917979
++Ec_Y = -77.210761
++Ehf_X = -76.8507559
++Ehf_Y = -76.8551893
++X = 3
++Y = 4
++
++[calculation_11_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -76.8507559
++hf2 = -76.8551893
++e1 = -77.1917979
++e2 = -77.210761
++
++[calculation_11_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -76.8507559
++hf2 = -76.8551893
++e1 = -77.1917979
++e2 = -77.210761
++
++[calculation_11_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -76.8551893
++Etot = -77.21837199
++
++[calculation_12_MARTIN]
++scheme = MARTIN
++Ec_X = -93.2807511
++Ec_Y = -93.3032165
++Ehf_X = -92.9100033
++Ehf_Y = -92.915489
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_12_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -93.2807511
++Ec_Y = -93.3032165
++Ehf_X = -92.9100033
++Ehf_Y = -92.915489
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_12_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -93.2807511
++Ec_Y = -93.3032165
++Ehf_X = -92.9100033
++Ehf_Y = -92.915489
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_12_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -93.2807511
++Ec_Y = -93.3032165
++Ehf_X = -92.9100033
++Ehf_Y = -92.915489
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_12_OAN]
++scheme = OANc
++Ec_X = -93.2807511
++Ec_Y = -93.3032165
++Ehf_X = -92.9100033
++Ehf_Y = -92.915489
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_12_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -93.2807511
++Ec_Y = -93.3032165
++Ehf_X = -92.9100033
++Ehf_Y = -92.915489
++X = 3
++Y = 4
++
++[calculation_12_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -92.9100033
++hf2 = -92.915489
++e1 = -93.2807511
++e2 = -93.3032165
++
++[calculation_12_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -92.9100033
++hf2 = -92.915489
++e1 = -93.2807511
++e2 = -93.3032165
++
++[calculation_12_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -92.915489
++Etot = -93.31260899
++
++[calculation_13_MARTIN]
++scheme = MARTIN
++Ec_X = -129.7202392
++Ec_Y = -129.7507631
++Ehf_X = -129.2990625
++Ehf_Y = -129.3076387
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_13_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -129.7202392
++Ec_Y = -129.7507631
++Ehf_X = -129.2990625
++Ehf_Y = -129.3076387
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_13_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -129.7202392
++Ec_Y = -129.7507631
++Ehf_X = -129.2990625
++Ehf_Y = -129.3076387
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_13_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -129.7202392
++Ec_Y = -129.7507631
++Ehf_X = -129.2990625
++Ehf_Y = -129.3076387
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_13_OAN]
++scheme = OANc
++Ec_X = -129.7202392
++Ec_Y = -129.7507631
++Ehf_X = -129.2990625
++Ehf_Y = -129.3076387
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_13_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -129.7202392
++Ec_Y = -129.7507631
++Ehf_X = -129.2990625
++Ehf_Y = -129.3076387
++X = 3
++Y = 4
++
++[calculation_13_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -129.2990625
++hf2 = -129.3076387
++e1 = -129.7202392
++e2 = -129.7507631
++
++[calculation_13_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -129.2990625
++hf2 = -129.3076387
++e1 = -129.7202392
++e2 = -129.7507631
++
++[calculation_13_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -129.3076387
++Etot = -129.77215638
++
++[calculation_14_MARTIN]
++scheme = MARTIN
++Ec_X = -204.8170251
++Ec_Y = -204.8693457
++Ehf_X = -204.1137363
++Ehf_Y = -204.1275371
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_14_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -204.8170251
++Ec_Y = -204.8693457
++Ehf_X = -204.1137363
++Ehf_Y = -204.1275371
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_14_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -204.8170251
++Ec_Y = -204.8693457
++Ehf_X = -204.1137363
++Ehf_Y = -204.1275371
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_14_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -204.8170251
++Ec_Y = -204.8693457
++Ehf_X = -204.1137363
++Ehf_Y = -204.1275371
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_14_OAN]
++scheme = OANc
++Ec_X = -204.8170251
++Ec_Y = -204.8693457
++Ehf_X = -204.1137363
++Ehf_Y = -204.1275371
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_14_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -204.8170251
++Ec_Y = -204.8693457
++Ehf_X = -204.1137363
++Ehf_Y = -204.1275371
++X = 3
++Y = 4
++
++[calculation_14_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -204.1137363
++hf2 = -204.1275371
++e1 = -204.8170251
++e2 = -204.8693457
++
++[calculation_14_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -204.1137363
++hf2 = -204.1275371
++e1 = -204.8170251
++e2 = -204.8693457
++
++[calculation_14_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -204.1275371
++Etot = -204.89215757
++
++[calculation_15_MARTIN]
++scheme = MARTIN
++Ec_X = -100.3495746
++Ec_Y = -100.3773604
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_15_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -100.3495746
++Ec_Y = -100.3773604
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_15_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -100.3495746
++Ec_Y = -100.3773604
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_15_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -100.3495746
++Ec_Y = -100.3773604
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_15_OAN]
++scheme = OANc
++Ec_X = -100.3495746
++Ec_Y = -100.3773604
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_15_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -100.3495746
++Ec_Y = -100.3773604
++Ehf_X = -100.0608065
++Ehf_Y = -100.0682738
++X = 3
++Y = 4
++
++[calculation_15_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -100.0608065
++hf2 = -100.0682738
++e1 = -100.3495746
++e2 = -100.3773604
++
++[calculation_15_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -100.0608065
++hf2 = -100.0682738
++e1 = -100.3495746
++e2 = -100.3773604
++
++[calculation_15_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -100.0682738
++Etot = -100.38975378
++
++[calculation_16_MARTIN]
++scheme = MARTIN
++Ec_X = -199.3134008
++Ec_Y = -199.3655995
++Ehf_X = -198.7566037
++Ehf_Y = -198.7708316
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_16_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -199.3134008
++Ec_Y = -199.3655995
++Ehf_X = -198.7566037
++Ehf_Y = -198.7708316
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_16_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -199.3134008
++Ec_Y = -199.3655995
++Ehf_X = -198.7566037
++Ehf_Y = -198.7708316
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_16_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -199.3134008
++Ec_Y = -199.3655995
++Ehf_X = -198.7566037
++Ehf_Y = -198.7708316
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_16_OAN]
++scheme = OANc
++Ec_X = -199.3134008
++Ec_Y = -199.3655995
++Ehf_X = -198.7566037
++Ehf_Y = -198.7708316
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_16_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -199.3134008
++Ec_Y = -199.3655995
++Ehf_X = -198.7566037
++Ehf_Y = -198.7708316
++X = 3
++Y = 4
++
++[calculation_16_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -198.7566037
++hf2 = -198.7708316
++e1 = -199.3134008
++e2 = -199.3655995
++
++[calculation_16_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -198.7566037
++hf2 = -198.7708316
++e1 = -199.3134008
++e2 = -199.3655995
++
++[calculation_16_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -198.7708316
++Etot = -199.39006224
++
++[calculation_17_MARTIN]
++scheme = MARTIN
++Ec_X = -151.3742461
++Ec_Y = -151.4142945
++Ehf_X = -150.8391843
++Ehf_Y = -150.8491165
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_17_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -151.3742461
++Ec_Y = -151.4142945
++Ehf_X = -150.8391843
++Ehf_Y = -150.8491165
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_17_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -151.3742461
++Ec_Y = -151.4142945
++Ehf_X = -150.8391843
++Ehf_Y = -150.8491165
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_17_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -151.3742461
++Ec_Y = -151.4142945
++Ehf_X = -150.8391843
++Ehf_Y = -150.8491165
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_17_OAN]
++scheme = OANc
++Ec_X = -151.3742461
++Ec_Y = -151.4142945
++Ehf_X = -150.8391843
++Ehf_Y = -150.8491165
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_17_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -151.3742461
++Ec_Y = -151.4142945
++Ehf_X = -150.8391843
++Ehf_Y = -150.8491165
++X = 3
++Y = 4
++
++[calculation_17_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -150.8391843
++hf2 = -150.8491165
++e1 = -151.3742461
++e2 = -151.4142945
++
++[calculation_17_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -150.8391843
++hf2 = -150.8491165
++e1 = -151.3742461
++e2 = -151.4142945
++
++[calculation_17_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -150.8491165
++Etot = -151.43162411
++
++[calculation_18_MARTIN]
++scheme = MARTIN
++Ec_X = -150.7266172
++Ec_Y = -150.7653847
++Ehf_X = -150.239531
++Ehf_Y = -150.2495353
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_18_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -150.7266172
++Ec_Y = -150.7653847
++Ehf_X = -150.239531
++Ehf_Y = -150.2495353
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_18_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -150.7266172
++Ec_Y = -150.7653847
++Ehf_X = -150.239531
++Ehf_Y = -150.2495353
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_18_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -150.7266172
++Ec_Y = -150.7653847
++Ehf_X = -150.239531
++Ehf_Y = -150.2495353
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_18_OAN]
++scheme = OANc
++Ec_X = -150.7266172
++Ec_Y = -150.7653847
++Ehf_X = -150.239531
++Ehf_Y = -150.2495353
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_18_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -150.7266172
++Ec_Y = -150.7653847
++Ehf_X = -150.239531
++Ehf_Y = -150.2495353
++X = 3
++Y = 4
++
++[calculation_18_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -150.239531
++hf2 = -150.2495353
++e1 = -150.7266172
++e2 = -150.7653847
++
++[calculation_18_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -150.239531
++hf2 = -150.2495353
++e1 = -150.7266172
++e2 = -150.7653847
++
++[calculation_18_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -150.2495353
++Etot = -150.78235025
++
++[calculation_19_MARTIN]
++scheme = MARTIN
++Ec_X = -130.3093815
++Ec_Y = -130.3423995
++Ehf_X = -129.8401888
++Ehf_Y = -129.8486338
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_19_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -130.3093815
++Ec_Y = -130.3423995
++Ehf_X = -129.8401888
++Ehf_Y = -129.8486338
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_19_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -130.3093815
++Ec_Y = -130.3423995
++Ehf_X = -129.8401888
++Ehf_Y = -129.8486338
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_19_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -130.3093815
++Ec_Y = -130.3423995
++Ehf_X = -129.8401888
++Ehf_Y = -129.8486338
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_19_OAN]
++scheme = OANc
++Ec_X = -130.3093815
++Ec_Y = -130.3423995
++Ehf_X = -129.8401888
++Ehf_Y = -129.8486338
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_19_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -130.3093815
++Ec_Y = -130.3423995
++Ehf_X = -129.8401888
++Ehf_Y = -129.8486338
++X = 3
++Y = 4
++
++[calculation_19_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -129.8401888
++hf2 = -129.8486338
++e1 = -130.3093815
++e2 = -130.3423995
++
++[calculation_19_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -129.8401888
++hf2 = -129.8486338
++e1 = -130.3093815
++e2 = -130.3423995
++
++[calculation_19_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -129.8486338
++Etot = -130.35672231
++
++[calculation_20_MARTIN]
++scheme = MARTIN
++Ec_X = -113.6923424
++Ec_Y = -113.7209822
++Ehf_X = -113.2947633
++Ehf_Y = -113.3022304
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_20_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -113.6923424
++Ec_Y = -113.7209822
++Ehf_X = -113.2947633
++Ehf_Y = -113.3022304
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_20_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -113.6923424
++Ec_Y = -113.7209822
++Ehf_X = -113.2947633
++Ehf_Y = -113.3022304
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_20_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -113.6923424
++Ec_Y = -113.7209822
++Ehf_X = -113.2947633
++Ehf_Y = -113.3022304
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_20_OAN]
++scheme = OANc
++Ec_X = -113.6923424
++Ec_Y = -113.7209822
++Ehf_X = -113.2947633
++Ehf_Y = -113.3022304
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_20_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -113.6923424
++Ec_Y = -113.7209822
++Ehf_X = -113.2947633
++Ehf_Y = -113.3022304
++X = 3
++Y = 4
++
++[calculation_20_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -113.2947633
++hf2 = -113.3022304
++e1 = -113.6923424
++e2 = -113.7209822
++
++[calculation_20_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -113.2947633
++hf2 = -113.3022304
++e1 = -113.6923424
++e2 = -113.7209822
++
++[calculation_20_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -113.3022304
++Etot = -113.73320328
++
++[calculation_21_MARTIN]
++scheme = MARTIN
++Ec_X = -957.4010976
++Ec_Y = -957.4510432
++Ehf_X = -956.8076714
++Ehf_Y = -956.817242
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_21_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -957.4010976
++Ec_Y = -957.4510432
++Ehf_X = -956.8076714
++Ehf_Y = -956.817242
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_21_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -957.4010976
++Ec_Y = -957.4510432
++Ehf_X = -956.8076714
++Ehf_Y = -956.817242
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_21_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -957.4010976
++Ec_Y = -957.4510432
++Ehf_X = -956.8076714
++Ehf_Y = -956.817242
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_21_OAN]
++scheme = OANc
++Ec_X = -957.4010976
++Ec_Y = -957.4510432
++Ehf_X = -956.8076714
++Ehf_Y = -956.817242
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_21_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -957.4010976
++Ec_Y = -957.4510432
++Ehf_X = -956.8076714
++Ehf_Y = -956.817242
++X = 3
++Y = 4
++
++[calculation_21_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -956.8076714
++hf2 = -956.817242
++e1 = -957.4010976
++e2 = -957.4510432
++
++[calculation_21_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -956.8076714
++hf2 = -956.817242
++e1 = -957.4010976
++e2 = -957.4510432
++
++[calculation_21_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -956.817242
++Etot = -957.47621541
++
++[calculation_22_MARTIN]
++scheme = MARTIN
++Ec_X = -139.5712776
++Ec_Y = -139.6083646
++Ehf_X = -139.0972054
++Ehf_Y = -139.1066537
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_22_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -139.5712776
++Ec_Y = -139.6083646
++Ehf_X = -139.0972054
++Ehf_Y = -139.1066537
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_22_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -139.5712776
++Ec_Y = -139.6083646
++Ehf_X = -139.0972054
++Ehf_Y = -139.1066537
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_22_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -139.5712776
++Ec_Y = -139.6083646
++Ehf_X = -139.0972054
++Ehf_Y = -139.1066537
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_22_OAN]
++scheme = OANc
++Ec_X = -139.5712776
++Ec_Y = -139.6083646
++Ehf_X = -139.0972054
++Ehf_Y = -139.1066537
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_22_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -139.5712776
++Ec_Y = -139.6083646
++Ehf_X = -139.0972054
++Ehf_Y = -139.1066537
++X = 3
++Y = 4
++
++[calculation_22_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -139.0972054
++hf2 = -139.1066537
++e1 = -139.5712776
++e2 = -139.6083646
++
++[calculation_22_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -139.0972054
++hf2 = -139.1066537
++e1 = -139.5712776
++e2 = -139.6083646
++
++[calculation_22_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -139.1066537
++Etot = -139.62464178
++
++[calculation_23_MARTIN]
++scheme = MARTIN
++Ec_X = -189.5176594
++Ec_Y = -189.567645
++Ehf_X = -188.8444802
++Ehf_Y = -188.8569548
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_23_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -189.5176594
++Ec_Y = -189.567645
++Ehf_X = -188.8444802
++Ehf_Y = -188.8569548
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_23_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -189.5176594
++Ec_Y = -189.567645
++Ehf_X = -188.8444802
++Ehf_Y = -188.8569548
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_23_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -189.5176594
++Ec_Y = -189.567645
++Ehf_X = -188.8444802
++Ehf_Y = -188.8569548
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_23_OAN]
++scheme = OANc
++Ec_X = -189.5176594
++Ec_Y = -189.567645
++Ehf_X = -188.8444802
++Ehf_Y = -188.8569548
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_23_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -189.5176594
++Ec_Y = -189.567645
++Ehf_X = -188.8444802
++Ehf_Y = -188.8569548
++X = 3
++Y = 4
++
++[calculation_23_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -188.8444802
++hf2 = -188.8569548
++e1 = -189.5176594
++e2 = -189.567645
++
++[calculation_23_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -188.8444802
++hf2 = -188.8569548
++e1 = -189.5176594
++e2 = -189.567645
++
++[calculation_23_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -188.8569548
++Etot = -189.5833697
++
++[calculation_24_MARTIN]
++scheme = MARTIN
++Ec_X = -115.5623496
++Ec_Y = -115.5931578
++Ehf_X = -115.0920221
++Ehf_Y = -115.0995167
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_24_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -115.5623496
++Ec_Y = -115.5931578
++Ehf_X = -115.0920221
++Ehf_Y = -115.0995167
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_24_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -115.5623496
++Ec_Y = -115.5931578
++Ehf_X = -115.0920221
++Ehf_Y = -115.0995167
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_24_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -115.5623496
++Ec_Y = -115.5931578
++Ehf_X = -115.0920221
++Ehf_Y = -115.0995167
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_24_OAN]
++scheme = OANc
++Ec_X = -115.5623496
++Ec_Y = -115.5931578
++Ehf_X = -115.0920221
++Ehf_Y = -115.0995167
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_24_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -115.5623496
++Ec_Y = -115.5931578
++Ehf_X = -115.0920221
++Ehf_Y = -115.0995167
++X = 3
++Y = 4
++
++[calculation_24_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -115.0920221
++hf2 = -115.0995167
++e1 = -115.5623496
++e2 = -115.5931578
++
++[calculation_24_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -115.0920221
++hf2 = -115.0995167
++e1 = -115.5623496
++e2 = -115.5931578
++
++[calculation_24_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -115.0995167
++Etot = -115.60256419
++
++[calculation_25_MARTIN]
++scheme = MARTIN
++Ec_X = -114.2611181
++Ec_Y = -114.2901281
++Ehf_X = -113.8378354
++Ehf_Y = -113.8450841
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_25_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -114.2611181
++Ec_Y = -114.2901281
++Ehf_X = -113.8378354
++Ehf_Y = -113.8450841
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_25_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -114.2611181
++Ec_Y = -114.2901281
++Ehf_X = -113.8378354
++Ehf_Y = -113.8450841
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_25_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -114.2611181
++Ec_Y = -114.2901281
++Ehf_X = -113.8378354
++Ehf_Y = -113.8450841
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_25_OAN]
++scheme = OANc
++Ec_X = -114.2611181
++Ec_Y = -114.2901281
++Ehf_X = -113.8378354
++Ehf_Y = -113.8450841
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_25_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -114.2611181
++Ec_Y = -114.2901281
++Ehf_X = -113.8378354
++Ehf_Y = -113.8450841
++X = 3
++Y = 4
++
++[calculation_25_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -113.8378354
++hf2 = -113.8450841
++e1 = -114.2611181
++e2 = -114.2901281
++
++[calculation_25_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -113.8378354
++hf2 = -113.8450841
++e1 = -114.2611181
++e2 = -114.2901281
++
++[calculation_25_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -113.8450841
++Etot = -213.59548644
++
++[calculation_26_MARTIN]
++scheme = MARTIN
++Ec_X = -213.5144161
++Ec_Y = -213.5707519
++Ehf_X = -212.8351348
++Ehf_Y = -212.8497483
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_26_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -213.5144161
++Ec_Y = -213.5707519
++Ehf_X = -212.8351348
++Ehf_Y = -212.8497483
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_26_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -213.5144161
++Ec_Y = -213.5707519
++Ehf_X = -212.8351348
++Ehf_Y = -212.8497483
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_26_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -213.5144161
++Ec_Y = -213.5707519
++Ehf_X = -212.8351348
++Ehf_Y = -212.8497483
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_26_OAN]
++scheme = OANc
++Ec_X = -213.5144161
++Ec_Y = -213.5707519
++Ehf_X = -212.8351348
++Ehf_Y = -212.8497483
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_26_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -213.5144161
++Ec_Y = -213.5707519
++Ehf_X = -212.8351348
++Ehf_Y = -212.8497483
++X = 3
++Y = 4
++
++[calculation_26_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -212.8351348
++hf2 = -212.8497483
++e1 = -213.5144161
++e2 = -213.5707519
++
++[calculation_26_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -212.8351348
++hf2 = -212.8497483
++e1 = -213.5144161
++e2 = -213.5707519
++
++[calculation_26_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -212.8497483
++Etot = -213.59548644
++
++[calculation_27_MARTIN]
++scheme = MARTIN
++Ec_X = -275.4117138
++Ec_Y = -275.4838823
++Ehf_X = -274.5713827
++Ehf_Y = -274.590083
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_27_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -275.4117138
++Ec_Y = -275.4838823
++Ehf_X = -274.5713827
++Ehf_Y = -274.590083
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_27_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -275.4117138
++Ec_Y = -275.4838823
++Ehf_X = -274.5713827
++Ehf_Y = -274.590083
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_27_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -275.4117138
++Ec_Y = -275.4838823
++Ehf_X = -274.5713827
++Ehf_Y = -274.590083
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_27_OAN]
++scheme = OANc
++Ec_X = -275.4117138
++Ec_Y = -275.4838823
++Ehf_X = -274.5713827
++Ehf_Y = -274.590083
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_27_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -275.4117138
++Ec_Y = -275.4838823
++Ehf_X = -274.5713827
++Ehf_Y = -274.590083
++X = 3
++Y = 4
++
++[calculation_27_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -274.5713827
++hf2 = -274.590083
++e1 = -275.4117138
++e2 = -275.4838823
++
++[calculation_27_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -274.5713827
++hf2 = -274.590083
++e1 = -275.4117138
++e2 = -275.4838823
++
++[calculation_27_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -274.590083
++Etot = -275.51560695
++
++[calculation_28_MARTIN]
++scheme = MARTIN
++Ec_X = -238.7210222
++Ec_Y = -238.7846054
++Ehf_X = -237.9987311
++Ehf_Y = -238.0151323
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_28_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -238.7210222
++Ec_Y = -238.7846054
++Ehf_X = -237.9987311
++Ehf_Y = -238.0151323
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_28_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -238.7210222
++Ec_Y = -238.7846054
++Ehf_X = -237.9987311
++Ehf_Y = -238.0151323
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_28_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -238.7210222
++Ec_Y = -238.7846054
++Ehf_X = -237.9987311
++Ehf_Y = -238.0151323
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_28_OAN]
++scheme = OANc
++Ec_X = -238.7210222
++Ec_Y = -238.7846054
++Ehf_X = -237.9987311
++Ehf_Y = -238.0151323
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_28_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -238.7210222
++Ec_Y = -238.7846054
++Ehf_X = -237.9987311
++Ehf_Y = -238.0151323
++X = 3
++Y = 4
++
++[calculation_28_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -237.9987311
++hf2 = -238.0151323
++e1 = -238.7210222
++e2 = -238.7846054
++
++[calculation_28_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -237.9987311
++hf2 = -238.0151323
++e1 = -238.7210222
++e2 = -238.7846054
++
++[calculation_28_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -238.0151323
++Etot = -238.8130459
++
++[calculation_29_MARTIN]
++scheme = MARTIN
++Ec_X = -552.4084824
++Ec_Y = -552.4513691
++Ehf_X = -551.8325129
++Ehf_Y = -551.841998
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_29_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -552.4084824
++Ec_Y = -552.4513691
++Ehf_X = -551.8325129
++Ehf_Y = -551.841998
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_29_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -552.4084824
++Ec_Y = -552.4513691
++Ehf_X = -551.8325129
++Ehf_Y = -551.841998
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_29_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -552.4084824
++Ec_Y = -552.4513691
++Ehf_X = -551.8325129
++Ehf_Y = -551.841998
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_29_OAN]
++scheme = OANc
++Ec_X = -552.4084824
++Ec_Y = -552.4513691
++Ehf_X = -551.8325129
++Ehf_Y = -551.841998
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_29_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -552.4084824
++Ec_Y = -552.4513691
++Ehf_X = -551.8325129
++Ehf_Y = -551.841998
++X = 3
++Y = 4
++
++[calculation_29_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -551.8325129
++hf2 = -551.841998
++e1 = -552.4084824
++e2 = -552.4513691
++
++[calculation_29_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -551.8325129
++hf2 = -551.841998
++e1 = -552.4084824
++e2 = -552.4513691
++
++[calculation_29_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -551.841998
++Etot = -552.47162459
++
++[calculation_30_MARTIN]
++scheme = MARTIN
++Ec_X = -77.7569036
++Ec_Y = -77.7755454
++Ehf_X = -77.4204862
++Ehf_Y = -77.4250116
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_30_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -77.7569036
++Ec_Y = -77.7755454
++Ehf_X = -77.4204862
++Ehf_Y = -77.4250116
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_30_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -77.7569036
++Ec_Y = -77.7755454
++Ehf_X = -77.4204862
++Ehf_Y = -77.4250116
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_30_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -77.7569036
++Ec_Y = -77.7755454
++Ehf_X = -77.4204862
++Ehf_Y = -77.4250116
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_30_OAN]
++scheme = OANc
++Ec_X = -77.7569036
++Ec_Y = -77.7755454
++Ehf_X = -77.4204862
++Ehf_Y = -77.4250116
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_30_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -77.7569036
++Ec_Y = -77.7755454
++Ehf_X = -77.4204862
++Ehf_Y = -77.4250116
++X = 3
++Y = 4
++
++[calculation_30_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -77.4204862
++hf2 = -77.4250116
++e1 = -77.7569036
++e2 = -77.7755454
++
++[calculation_30_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -77.4204862
++hf2 = -77.4250116
++e1 = -77.7569036
++e2 = -77.7755454
++
++[calculation_30_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -77.4250116
++Etot = -77.78139571
++
++[calculation_31_MARTIN]
++scheme = MARTIN
++Ec_X = -116.4050285
++Ec_Y = -116.4340291
++Ehf_X = -115.8664311
++Ehf_Y = -115.8732863
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_31_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -116.4050285
++Ec_Y = -116.4340291
++Ehf_X = -115.8664311
++Ehf_Y = -115.8732863
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_31_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -116.4050285
++Ec_Y = -116.4340291
++Ehf_X = -115.8664311
++Ehf_Y = -115.8732863
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_31_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -116.4050285
++Ec_Y = -116.4340291
++Ehf_X = -115.8664311
++Ehf_Y = -115.8732863
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_31_OAN]
++scheme = OANc
++Ec_X = -116.4050285
++Ec_Y = -116.4340291
++Ehf_X = -115.8664311
++Ehf_Y = -115.8732863
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_31_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -116.4050285
++Ec_Y = -116.4340291
++Ehf_X = -115.8664311
++Ehf_Y = -115.8732863
++X = 3
++Y = 4
++
++[calculation_31_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -115.8664311
++hf2 = -115.8732863
++e1 = -116.4050285
++e2 = -116.4340291
++
++[calculation_31_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -115.8664311
++hf2 = -115.8732863
++e1 = -116.4050285
++e2 = -116.4340291
++
++[calculation_31_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -115.8732863
++Etot = -116.47965223
++
++[calculation_32_MARTIN]
++scheme = MARTIN
++Ec_X = -94.4802394
++Ec_Y = -94.5040143
++Ehf_X = -94.0697668
++Ehf_Y = -94.0754896
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_32_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -94.4802394
++Ec_Y = -94.5040143
++Ehf_X = -94.0697668
++Ehf_Y = -94.0754896
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_32_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -94.4802394
++Ec_Y = -94.5040143
++Ehf_X = -94.0697668
++Ehf_Y = -94.0754896
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_32_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -94.4802394
++Ec_Y = -94.5040143
++Ehf_X = -94.0697668
++Ehf_Y = -94.0754896
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_32_OAN]
++scheme = OANc
++Ec_X = -94.4802394
++Ec_Y = -94.5040143
++Ehf_X = -94.0697668
++Ehf_Y = -94.0754896
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_32_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -94.4802394
++Ec_Y = -94.5040143
++Ehf_X = -94.0697668
++Ehf_Y = -94.0754896
++X = 3
++Y = 4
++
++[calculation_32_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -94.0697668
++hf2 = -94.0754896
++e1 = -94.4802394
++e2 = -94.5040143
++
++[calculation_32_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -94.0697668
++hf2 = -94.0754896
++e1 = -94.4802394
++e2 = -94.5040143
++
++[calculation_32_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -94.0754896
++Etot = -94.51366582
++
++[calculation_33_MARTIN]
++scheme = MARTIN
++Ec_X = -184.4201
++Ec_Y = -184.4666873
++Ehf_X = -183.7530387
++Ehf_Y = -183.7649319
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_33_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -184.4201
++Ec_Y = -184.4666873
++Ehf_X = -183.7530387
++Ehf_Y = -183.7649319
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_33_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -184.4201
++Ec_Y = -184.4666873
++Ehf_X = -183.7530387
++Ehf_Y = -183.7649319
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_33_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -184.4201
++Ec_Y = -184.4666873
++Ehf_X = -183.7530387
++Ehf_Y = -183.7649319
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_33_OAN]
++scheme = OANc
++Ec_X = -184.4201
++Ec_Y = -184.4666873
++Ehf_X = -183.7530387
++Ehf_Y = -183.7649319
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_33_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -184.4201
++Ec_Y = -184.4666873
++Ehf_X = -183.7530387
++Ehf_Y = -183.7649319
++X = 3
++Y = 4
++
++[calculation_33_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -183.7530387
++hf2 = -183.7649319
++e1 = -184.4201
++e2 = -184.4666873
++
++[calculation_33_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -183.7530387
++hf2 = -183.7649319
++e1 = -184.4201
++e2 = -184.4666873
++
++[calculation_33_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -183.7649319
++Etot = -184.48660318
++
++[calculation_34_MARTIN]
++scheme = MARTIN
++Ec_X = -110.4478229
++Ec_Y = -110.475732
++Ehf_X = -110.0116009
++Ehf_Y = -110.0184635
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_34_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -110.4478229
++Ec_Y = -110.475732
++Ehf_X = -110.0116009
++Ehf_Y = -110.0184635
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_34_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -110.4478229
++Ec_Y = -110.475732
++Ehf_X = -110.0116009
++Ehf_Y = -110.0184635
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_34_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -110.4478229
++Ec_Y = -110.475732
++Ehf_X = -110.0116009
++Ehf_Y = -110.0184635
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_34_OAN]
++scheme = OANc
++Ec_X = -110.4478229
++Ec_Y = -110.475732
++Ehf_X = -110.0116009
++Ehf_Y = -110.0184635
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_34_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -110.4478229
++Ec_Y = -110.475732
++Ehf_X = -110.0116009
++Ehf_Y = -110.0184635
++X = 3
++Y = 4
++
++[calculation_34_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -110.0116009
++hf2 = -110.0184635
++e1 = -110.4478229
++e2 = -110.475732
++
++[calculation_34_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -110.0116009
++hf2 = -110.0184635
++e1 = -110.4478229
++e2 = -110.475732
++
++[calculation_34_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -110.0184635
++Etot = -110.52691061
++
++[calculation_35_MARTIN]
++scheme = MARTIN
++Ec_X = -55.1451231
++Ec_Y = -55.1561326
++Ehf_X = -54.9824269
++Ehf_Y = -54.985437
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_35_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -55.1451231
++Ec_Y = -55.1561326
++Ehf_X = -54.9824269
++Ehf_Y = -54.985437
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_35_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -55.1451231
++Ec_Y = -55.1561326
++Ehf_X = -54.9824269
++Ehf_Y = -54.985437
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_35_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -55.1451231
++Ec_Y = -55.1561326
++Ehf_X = -54.9824269
++Ehf_Y = -54.985437
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_35_OAN]
++scheme = OANc
++Ec_X = -55.1451231
++Ec_Y = -55.1561326
++Ehf_X = -54.9824269
++Ehf_Y = -54.985437
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_35_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -55.1451231
++Ec_Y = -55.1561326
++Ehf_X = -54.9824269
++Ehf_Y = -54.985437
++X = 3
++Y = 4
++
++[calculation_35_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -54.9824269
++hf2 = -54.985437
++e1 = -55.1451231
++e2 = -55.1561326
++
++[calculation_35_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -54.9824269
++hf2 = -54.985437
++e1 = -55.1451231
++e2 = -55.1561326
++
++[calculation_35_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -54.985437
++Etot = -55.16052463
++
++[calculation_36_MARTIN]
++scheme = MARTIN
++Ec_X = -75.7190251
++Ec_Y = -75.7401291
++Ehf_X = -75.4214479
++Ehf_Y = -75.4264287
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_36_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -75.7190251
++Ec_Y = -75.7401291
++Ehf_X = -75.4214479
++Ehf_Y = -75.4264287
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_36_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -75.7190251
++Ec_Y = -75.7401291
++Ehf_X = -75.4214479
++Ehf_Y = -75.4264287
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_36_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -75.7190251
++Ec_Y = -75.7401291
++Ehf_X = -75.4214479
++Ehf_Y = -75.4264287
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_36_OAN]
++scheme = OANc
++Ec_X = -75.7190251
++Ec_Y = -75.7401291
++Ehf_X = -75.4214479
++Ehf_Y = -75.4264287
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_36_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -75.7190251
++Ec_Y = -75.7401291
++Ehf_X = -75.4214479
++Ehf_Y = -75.4264287
++X = 3
++Y = 4
++
++[calculation_36_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -75.4214479
++hf2 = -75.4264287
++e1 = -75.7190251
++e2 = -75.7401291
++
++[calculation_36_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -75.4214479
++hf2 = -75.4264287
++e1 = -75.7190251
++e2 = -75.7401291
++
++[calculation_36_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -75.4264287
++Etot = -75.6726002
++
++[calculation_37_MARTIN]
++scheme = MARTIN
++Ec_X = -92.5706549
++Ec_Y = -92.5917567
++Ehf_X = -92.2361755
++Ehf_Y = -92.2418107
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_37_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -92.5706549
++Ec_Y = -92.5917567
++Ehf_X = -92.2361755
++Ehf_Y = -92.2418107
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_37_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -92.5706549
++Ec_Y = -92.5917567
++Ehf_X = -92.2361755
++Ehf_Y = -92.2418107
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_37_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -92.5706549
++Ec_Y = -92.5917567
++Ehf_X = -92.2361755
++Ehf_Y = -92.2418107
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_37_OAN]
++scheme = OANc
++Ec_X = -92.5706549
++Ec_Y = -92.5917567
++Ehf_X = -92.2361755
++Ehf_Y = -92.2418107
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_37_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -92.5706549
++Ec_Y = -92.5917567
++Ehf_X = -92.2361755
++Ehf_Y = -92.2418107
++X = 3
++Y = 4
++
++[calculation_37_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -92.2361755
++hf2 = -92.2418107
++e1 = -92.5706549
++e2 = -92.5917567
++
++[calculation_37_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -92.2361755
++hf2 = -92.2418107
++e1 = -92.5706549
++e2 = -92.5917567
++
++[calculation_37_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -92.2418107
++Etot = -92.60224341
++
++[calculation_38_MARTIN]
++scheme = MARTIN
++Ec_X = -55.7998496
++Ec_Y = -55.8130765
++Ehf_X = -55.5878344
++Ehf_Y = -55.5911626
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_38_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -55.7998496
++Ec_Y = -55.8130765
++Ehf_X = -55.5878344
++Ehf_Y = -55.5911626
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_38_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -55.7998496
++Ec_Y = -55.8130765
++Ehf_X = -55.5878344
++Ehf_Y = -55.5911626
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_38_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -55.7998496
++Ec_Y = -55.8130765
++Ehf_X = -55.5878344
++Ehf_Y = -55.5911626
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_38_OAN]
++scheme = OANc
++Ec_X = -55.7998496
++Ec_Y = -55.8130765
++Ehf_X = -55.5878344
++Ehf_Y = -55.5911626
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_38_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -55.7998496
++Ec_Y = -55.8130765
++Ehf_X = -55.5878344
++Ehf_Y = -55.5911626
++X = 3
++Y = 4
++
++[calculation_38_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -55.5878344
++hf2 = -55.5911626
++e1 = -55.7998496
++e2 = -55.8130765
++
++[calculation_38_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -55.5878344
++hf2 = -55.5911626
++e1 = -55.7998496
++e2 = -55.8130765
++
++[calculation_38_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -55.5911626
++Etot = -55.81837685
++
++[calculation_39_MARTIN]
++scheme = MARTIN
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_39_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_39_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_39_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_39_OAN]
++scheme = OANc
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_39_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -56.4717365
++Ec_Y = -56.4872254
++Ehf_X = -56.2127423
++Ehf_Y = -56.2164646
++X = 3
++Y = 4
++
++[calculation_39_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -56.2127423
++hf2 = -56.2164646
++e1 = -56.4717365
++e2 = -56.4872254
++
++[calculation_39_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -56.2127423
++hf2 = -56.2164646
++e1 = -56.4717365
++e2 = -56.4872254
++
++[calculation_39_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -56.2164646
++Etot = -56.50173726
++
++[calculation_40_MARTIN]
++scheme = MARTIN
++Ec_X = -681.8122489
++Ec_Y = -681.8341447
++Ehf_X = -681.4907378
++Ehf_Y = -681.4972669
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_40_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -681.8122489
++Ec_Y = -681.8341447
++Ehf_X = -681.4907378
++Ehf_Y = -681.4972669
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_40_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -681.8122489
++Ec_Y = -681.8341447
++Ehf_X = -681.4907378
++Ehf_Y = -681.4972669
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_40_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -681.8122489
++Ec_Y = -681.8341447
++Ehf_X = -681.4907378
++Ehf_Y = -681.4972669
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_40_OAN]
++scheme = OANc
++Ec_X = -681.8122489
++Ec_Y = -681.8341447
++Ehf_X = -681.4907378
++Ehf_Y = -681.4972669
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_40_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -681.8122489
++Ec_Y = -681.8341447
++Ehf_X = -681.4907378
++Ehf_Y = -681.4972669
++X = 3
++Y = 4
++
++[calculation_40_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -681.4907378
++hf2 = -681.4972669
++e1 = -681.8122489
++e2 = -681.8341447
++
++[calculation_40_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -681.4907378
++hf2 = -681.4972669
++e1 = -681.8122489
++e2 = -681.8341447
++
++[calculation_40_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -681.4972669
++Etot = -681.84549421
++
++[calculation_41_MARTIN]
++scheme = MARTIN
++Ec_X = -547.9908386
++Ec_Y = -548.0542974
++Ehf_X = -547.2882744
++Ehf_Y = -547.3095986
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_41_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -547.9908386
++Ec_Y = -548.0542974
++Ehf_X = -547.2882744
++Ehf_Y = -547.3095986
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_41_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -547.9908386
++Ec_Y = -548.0542974
++Ehf_X = -547.2882744
++Ehf_Y = -547.3095986
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_41_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -547.9908386
++Ec_Y = -548.0542974
++Ehf_X = -547.2882744
++Ehf_Y = -547.3095986
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_41_OAN]
++scheme = OANc
++Ec_X = -547.9908386
++Ec_Y = -548.0542974
++Ehf_X = -547.2882744
++Ehf_Y = -547.3095986
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_41_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -547.9908386
++Ec_Y = -548.0542974
++Ehf_X = -547.2882744
++Ehf_Y = -547.3095986
++X = 3
++Y = 4
++
++[calculation_41_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -547.2882744
++hf2 = -547.3095986
++e1 = -547.9908386
++e2 = -548.0542974
++
++[calculation_41_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -547.2882744
++hf2 = -547.3095986
++e1 = -547.9908386
++e2 = -548.0542974
++
++[calculation_41_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -547.3095986
++Etot = -548.08953843
++
++[calculation_42_MARTIN]
++scheme = MARTIN
++Ec_X = -623.0883617
++Ec_Y = -623.1781533
++Ehf_X = -622.1427441
++Ehf_Y = -622.1736886
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_42_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -623.0883617
++Ec_Y = -623.1781533
++Ehf_X = -622.1427441
++Ehf_Y = -622.1736886
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_42_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -623.0883617
++Ec_Y = -623.1781533
++Ehf_X = -622.1427441
++Ehf_Y = -622.1736886
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_42_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -623.0883617
++Ec_Y = -623.1781533
++Ehf_X = -622.1427441
++Ehf_Y = -622.1736886
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_42_OAN]
++scheme = OANc
++Ec_X = -623.0883617
++Ec_Y = -623.1781533
++Ehf_X = -622.1427441
++Ehf_Y = -622.1736886
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_42_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -623.0883617
++Ec_Y = -623.1781533
++Ehf_X = -622.1427441
++Ehf_Y = -622.1736886
++X = 3
++Y = 4
++
++[calculation_42_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -622.1427441
++hf2 = -622.1736886
++e1 = -623.0883617
++e2 = -623.1781533
++
++[calculation_42_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -622.1427441
++hf2 = -622.1736886
++e1 = -623.0883617
++e2 = -623.1781533
++
++[calculation_42_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -622.1736886
++Etot = -623.22854882
++
++[calculation_43_MARTIN]
++scheme = MARTIN
++Ec_X = -364.20415
++Ec_Y = -364.232751
++Ehf_X = -363.8406139
++Ehf_Y = -363.8502596
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_43_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -364.20415
++Ec_Y = -364.232751
++Ehf_X = -363.8406139
++Ehf_Y = -363.8502596
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_43_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -364.20415
++Ec_Y = -364.232751
++Ehf_X = -363.8406139
++Ehf_Y = -363.8502596
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_43_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -364.20415
++Ec_Y = -364.232751
++Ehf_X = -363.8406139
++Ehf_Y = -363.8502596
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_43_OAN]
++scheme = OANc
++Ec_X = -364.20415
++Ec_Y = -364.232751
++Ehf_X = -363.8406139
++Ehf_Y = -363.8502596
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_43_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -364.20415
++Ec_Y = -364.232751
++Ehf_X = -363.8406139
++Ehf_Y = -363.8502596
++X = 3
++Y = 4
++
++[calculation_43_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -363.8406139
++hf2 = -363.8502596
++e1 = -364.20415
++e2 = -364.232751
++
++[calculation_43_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -363.8406139
++hf2 = -363.8502596
++e1 = -364.20415
++e2 = -364.232751
++
++[calculation_43_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -363.8502596
++Etot = -364.24658381
++
++[calculation_44_MARTIN]
++scheme = MARTIN
++Ec_X = -291.4400684
++Ec_Y = -291.4515682
++Ehf_X = -291.2608213
++Ehf_Y = -291.2660603
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_44_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -291.4400684
++Ec_Y = -291.4515682
++Ehf_X = -291.2608213
++Ehf_Y = -291.2660603
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_44_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -291.4400684
++Ec_Y = -291.4515682
++Ehf_X = -291.2608213
++Ehf_Y = -291.2660603
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_44_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -291.4400684
++Ec_Y = -291.4515682
++Ehf_X = -291.2608213
++Ehf_Y = -291.2660603
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_44_OAN]
++scheme = OANc
++Ec_X = -291.4400684
++Ec_Y = -291.4515682
++Ehf_X = -291.2608213
++Ehf_Y = -291.2660603
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_44_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -291.4400684
++Ec_Y = -291.4515682
++Ehf_X = -291.2608213
++Ehf_Y = -291.2660603
++X = 3
++Y = 4
++
++[calculation_44_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -291.2608213
++hf2 = -291.2660603
++e1 = -291.4400684
++e2 = -291.4515682
++
++[calculation_44_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -291.2608213
++hf2 = -291.2660603
++e1 = -291.4400684
++e2 = -291.4515682
++
++[calculation_44_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -291.2660603
++Etot = -291.45641997
++
++[calculation_45_MARTIN]
++scheme = MARTIN
++Ec_X = -388.7788312
++Ec_Y = -388.8138685
++Ehf_X = -388.4179109
++Ehf_Y = -388.4295069
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_45_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -388.7788312
++Ec_Y = -388.8138685
++Ehf_X = -388.4179109
++Ehf_Y = -388.4295069
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_45_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -388.7788312
++Ec_Y = -388.8138685
++Ehf_X = -388.4179109
++Ehf_Y = -388.4295069
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_45_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -388.7788312
++Ec_Y = -388.8138685
++Ehf_X = -388.4179109
++Ehf_Y = -388.4295069
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_45_OAN]
++scheme = OANc
++Ec_X = -388.7788312
++Ec_Y = -388.8138685
++Ehf_X = -388.4179109
++Ehf_Y = -388.4295069
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_45_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -388.7788312
++Ec_Y = -388.8138685
++Ehf_X = -388.4179109
++Ehf_Y = -388.4295069
++X = 3
++Y = 4
++
++[calculation_45_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -388.4179109
++hf2 = -388.4295069
++e1 = -388.7788312
++e2 = -388.8138685
++
++[calculation_45_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -388.4179109
++hf2 = -388.4295069
++e1 = -388.7788312
++e2 = -388.8138685
++
++[calculation_45_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -388.4295069
++Etot = -388.83030483
++
++[calculation_46_MARTIN]
++scheme = MARTIN
++Ec_X = -289.5481949
++Ec_Y = -289.5541696
++Ehf_X = -289.439219
++Ehf_Y = -289.4417994
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_46_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -289.5481949
++Ec_Y = -289.5541696
++Ehf_X = -289.439219
++Ehf_Y = -289.4417994
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_46_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -289.5481949
++Ec_Y = -289.5541696
++Ehf_X = -289.439219
++Ehf_Y = -289.4417994
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_46_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -289.5481949
++Ec_Y = -289.5541696
++Ehf_X = -289.439219
++Ehf_Y = -289.4417994
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_46_OAN]
++scheme = OANc
++Ec_X = -289.5481949
++Ec_Y = -289.5541696
++Ehf_X = -289.439219
++Ehf_Y = -289.4417994
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_46_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -289.5481949
++Ec_Y = -289.5541696
++Ehf_X = -289.439219
++Ehf_Y = -289.4417994
++X = 3
++Y = 4
++
++[calculation_46_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -289.439219
++hf2 = -289.4417994
++e1 = -289.5481949
++e2 = -289.5541696
++
++[calculation_46_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -289.439219
++hf2 = -289.4417994
++e1 = -289.5481949
++e2 = -289.5541696
++
++[calculation_46_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -289.4417994
++Etot = -289.5568242
++
++[calculation_47_MARTIN]
++scheme = MARTIN
++Ec_X = -243.7651307
++Ec_Y = -243.7722014
++Ehf_X = -243.6444695
++Ehf_Y = -243.6481086
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_47_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -243.7651307
++Ec_Y = -243.7722014
++Ehf_X = -243.6444695
++Ehf_Y = -243.6481086
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_47_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -243.7651307
++Ec_Y = -243.7722014
++Ehf_X = -243.6444695
++Ehf_Y = -243.6481086
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_47_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -243.7651307
++Ec_Y = -243.7722014
++Ehf_X = -243.6444695
++Ehf_Y = -243.6481086
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_47_OAN]
++scheme = OANc
++Ec_X = -243.7651307
++Ec_Y = -243.7722014
++Ehf_X = -243.6444695
++Ehf_Y = -243.6481086
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_47_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -243.7651307
++Ec_Y = -243.7722014
++Ehf_X = -243.6444695
++Ehf_Y = -243.6481086
++X = 3
++Y = 4
++
++[calculation_47_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -243.6444695
++hf2 = -243.6481086
++e1 = -243.7651307
++e2 = -243.7722014
++
++[calculation_47_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -243.6444695
++hf2 = -243.6481086
++e1 = -243.7651307
++e2 = -243.7722014
++
++[calculation_47_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -243.6481086
++Etot = -243.77505789
++
++[calculation_48_MARTIN]
++scheme = MARTIN
++Ec_X = -341.8110663
++Ec_Y = -341.8440476
++Ehf_X = -341.472989
++Ehf_Y = -341.4839235
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_48_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -341.8110663
++Ec_Y = -341.8440476
++Ehf_X = -341.472989
++Ehf_Y = -341.4839235
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_48_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -341.8110663
++Ec_Y = -341.8440476
++Ehf_X = -341.472989
++Ehf_Y = -341.4839235
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_48_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -341.8110663
++Ec_Y = -341.8440476
++Ehf_X = -341.472989
++Ehf_Y = -341.4839235
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_48_OAN]
++scheme = OANc
++Ec_X = -341.8110663
++Ec_Y = -341.8440476
++Ehf_X = -341.472989
++Ehf_Y = -341.4839235
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_48_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -341.8110663
++Ec_Y = -341.8440476
++Ehf_X = -341.472989
++Ehf_Y = -341.4839235
++X = 3
++Y = 4
++
++[calculation_48_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -341.472989
++hf2 = -341.4839235
++e1 = -341.8110663
++e2 = -341.8440476
++
++[calculation_48_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -341.472989
++hf2 = -341.4839235
++e1 = -341.8110663
++e2 = -341.8440476
++
++[calculation_48_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -341.4839235
++Etot = -341.85922831
++
++[calculation_49_MARTIN]
++scheme = MARTIN
++Ec_X = -79.2712153
++Ec_Y = -79.2883406
++Ehf_X = -79.0162404
++Ehf_Y = -79.0207922
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_49_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -79.2712153
++Ec_Y = -79.2883406
++Ehf_X = -79.0162404
++Ehf_Y = -79.0207922
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_49_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -79.2712153
++Ec_Y = -79.2883406
++Ehf_X = -79.0162404
++Ehf_Y = -79.0207922
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_49_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -79.2712153
++Ec_Y = -79.2883406
++Ehf_X = -79.0162404
++Ehf_Y = -79.0207922
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_49_OAN]
++scheme = OANc
++Ec_X = -79.2712153
++Ec_Y = -79.2883406
++Ehf_X = -79.0162404
++Ehf_Y = -79.0207922
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_49_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -79.2712153
++Ec_Y = -79.2883406
++Ehf_X = -79.0162404
++Ehf_Y = -79.0207922
++X = 3
++Y = 4
++
++[calculation_49_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -79.0162404
++hf2 = -79.0207922
++e1 = -79.2712153
++e2 = -79.2883406
++
++[calculation_49_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -79.0162404
++hf2 = -79.0207922
++e1 = -79.2712153
++e2 = -79.2883406
++
++[calculation_49_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -79.0207922
++Etot = -79.29539519
++
++[calculation_50_MARTIN]
++scheme = MARTIN
++Ec_X = -124.5096952
++Ec_Y = -124.5416517
++Ehf_X = -124.157158
++Ehf_Y = -124.1662401
++X = 3
++Y = 4
++beta = 4.346
++
++[calculation_50_TRUHLAR_CORR]
++scheme = TRUHLAR_CORR
++Ec_X = -124.5096952
++Ec_Y = -124.5416517
++Ehf_X = -124.157158
++Ehf_Y = -124.1662401
++X = 3
++Y = 4
++beta = 3.796
++
++[calculation_50_HUH_LEE]
++scheme = HUH_LEE
++Ec_X = -124.5096952
++Ec_Y = -124.5416517
++Ehf_X = -124.157158
++Ehf_Y = -124.1662401
++X = 3
++Y = 4
++beta = -0.723
++
++[calculation_50_BAKOWIES]
++scheme = BAKOWIES
++Ec_X = -124.5096952
++Ec_Y = -124.5416517
++Ehf_X = -124.157158
++Ehf_Y = -124.1662401
++X = 3
++Y = 4
++beta = 4.894
++
++[calculation_50_OAN]
++scheme = OANc
++Ec_X = -124.5096952
++Ec_Y = -124.5416517
++Ehf_X = -124.157158
++Ehf_Y = -124.1662401
++X = 3
++Y = 4
++beta = 2.084
++
++[calculation_50_HALKIER_HELGAKER]
++scheme = HALKIER_HELGAKER
++Ec_X = -124.5096952
++Ec_Y = -124.5416517
++Ehf_X = -124.157158
++Ehf_Y = -124.1662401
++X = 3
++Y = 4
++
++[calculation_50_uste1]
++scheme = uste1
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++hf1 = -124.157158
++hf2 = -124.1662401
++e1 = -124.5096952
++e2 = -124.5416517
++
++[calculation_50_uste2]
++scheme = uste2
++method = MP2
++basis1 = AVTZ
++basis2 = AVQZ
++basis3 = AVTZ
++basis4 = AVQZ
++hf1 = -124.157158
++hf2 = -124.1662401
++e1 = -124.5096952
++e2 = -124.5416517
++
++[calculation_50_USPE]
++scheme = USPE
++method = CCSD(T)
++constant = normal
++basis1 = AVTZ
++basis2 = AVQZ
++HF = -124.1662401
++Etot = -124.55561119

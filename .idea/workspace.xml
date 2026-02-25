@@ -1,0 +1,542 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="44ef8011-1c68-47ad-a3ac-f0009c189185" name="Changes" comment="[WP] sqm all per cycle, 100 cycles max and pyscf energy woth energy disglose">
+      <change beforePath="$PROJECT_DIR$/docs/Makefile" beforeDir="false" afterPath="$PROJECT_DIR$/docs/Makefile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/authors.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/changelog.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/conf.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/contributing.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/index.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/license.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/readme.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/requirements.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/inputfile.inp" beforeDir="false" afterPath="$PROJECT_DIR$/src/inputfile.inp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pycbs/HF_component/Feller.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pycbs/HF_component/HF_E.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pycbs/HF_component/Jensen.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pycbs/HF_component/Klopper.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pycbs/HF_component/Truhlar_hf.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pycbs/corr_component/Bakoules.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pycbs/corr_component/Halkier-Helgaker.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pycbs/corr_component/Huh-Lee.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pycbs/corr_component/Martin.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pycbs/corr_component/OAN.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/pycbs/corr_component/Truhlar_corr.py" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 5
+}</component>
+  <component name="ProjectId" id="34ceErpNe50LjYSprmeNlcgHEo8" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.SQM-original.executor&quot;: &quot;Run&quot;,
+    &quot;Python.aaa.executor&quot;: &quot;Run&quot;,
+    &quot;Python.atomization.executor&quot;: &quot;Run&quot;,
+    &quot;Python.cc.executor&quot;: &quot;Run&quot;,
+    &quot;Python.opt_2.executor&quot;: &quot;Run&quot;,
+    &quot;Python.opt_3.executor&quot;: &quot;Run&quot;,
+    &quot;Python.opt_4.executor&quot;: &quot;Run&quot;,
+    &quot;Python.pyCBS_opt_v0.2.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/fab/01_Fab_Hub/PycharmProjects/pyCBS/src/pycbs/writer.py&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;,
+    &quot;two.files.diff.last.used.file&quot;: &quot;/home/fab/01_Fab_Hub/PycharmProjects/pyCBS/src/pycbs/writer.py&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/src" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/src/pycbs/tensorial" />
+      <recent name="$PROJECT_DIR$/src/pycbs/uspe" />
+      <recent name="$PROJECT_DIR$/src/pycbs/uste2" />
+      <recent name="$PROJECT_DIR$/src/pycbs/uste1" />
+      <recent name="$PROJECT_DIR$/src/pycbs" />
+    </key>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-0509580d9d50-746f403e7f0c-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-241.14494.241" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="44ef8011-1c68-47ad-a3ac-f0009c189185" name="Changes" comment="" />
+      <created>1761517178425</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1761517178425</updated>
+    </task>
+    <task id="LOCAL-00123" summary="[WP] opt cli with proper xyz file writing">
+      <option name="closed" value="true" />
+      <created>1769992155162</created>
+      <option name="number" value="00123" />
+      <option name="presentableId" value="LOCAL-00123" />
+      <option name="project" value="LOCAL" />
+      <updated>1769992155162</updated>
+    </task>
+    <task id="LOCAL-00124" summary="[WP] cli to fix opt-cycles">
+      <option name="closed" value="true" />
+      <created>1769992217143</created>
+      <option name="number" value="00124" />
+      <option name="presentableId" value="LOCAL-00124" />
+      <option name="project" value="LOCAL" />
+      <updated>1769992217143</updated>
+    </task>
+    <task id="LOCAL-00125" summary="[WP] proper cycle-xyz writing">
+      <option name="closed" value="true" />
+      <created>1769992468496</created>
+      <option name="number" value="00125" />
+      <option name="presentableId" value="LOCAL-00125" />
+      <option name="project" value="LOCAL" />
+      <updated>1769992468496</updated>
+    </task>
+    <task id="LOCAL-00126" summary="[WP] writer with one write_report func for each calculation">
+      <option name="closed" value="true" />
+      <created>1770001036897</created>
+      <option name="number" value="00126" />
+      <option name="presentableId" value="LOCAL-00126" />
+      <option name="project" value="LOCAL" />
+      <updated>1770001036898</updated>
+    </task>
+    <task id="LOCAL-00127" summary="[WP] new opt_cli with proper writing">
+      <option name="closed" value="true" />
+      <created>1770001066766</created>
+      <option name="number" value="00127" />
+      <option name="presentableId" value="LOCAL-00127" />
+      <option name="project" value="LOCAL" />
+      <updated>1770001066766</updated>
+    </task>
+    <task id="LOCAL-00128" summary="[WP] cli with writer only for extrapolations">
+      <option name="closed" value="true" />
+      <created>1770001393824</created>
+      <option name="number" value="00128" />
+      <option name="presentableId" value="LOCAL-00128" />
+      <option name="project" value="LOCAL" />
+      <updated>1770001393824</updated>
+    </task>
+    <task id="LOCAL-00129" summary="[WP] opt tryout">
+      <option name="closed" value="true" />
+      <created>1770001939190</created>
+      <option name="number" value="00129" />
+      <option name="presentableId" value="LOCAL-00129" />
+      <option name="project" value="LOCAL" />
+      <updated>1770001939190</updated>
+    </task>
+    <task id="LOCAL-00130" summary="[WP] opt back to normal">
+      <option name="closed" value="true" />
+      <created>1770002189413</created>
+      <option name="number" value="00130" />
+      <option name="presentableId" value="LOCAL-00130" />
+      <option name="project" value="LOCAL" />
+      <updated>1770002189413</updated>
+    </task>
+    <task id="LOCAL-00131" summary="[WP] opt cli with cycle counter">
+      <option name="closed" value="true" />
+      <created>1770002216780</created>
+      <option name="number" value="00131" />
+      <option name="presentableId" value="LOCAL-00131" />
+      <option name="project" value="LOCAL" />
+      <updated>1770002216780</updated>
+    </task>
+    <task id="LOCAL-00132" summary="[WP] opt cli with float convertion of config parameters">
+      <option name="closed" value="true" />
+      <created>1770005320082</created>
+      <option name="number" value="00132" />
+      <option name="presentableId" value="LOCAL-00132" />
+      <option name="project" value="LOCAL" />
+      <updated>1770005320083</updated>
+    </task>
+    <task id="LOCAL-00133" summary="[WP] opt cli with float convertion of config parameters">
+      <option name="closed" value="true" />
+      <created>1770006220314</created>
+      <option name="number" value="00133" />
+      <option name="presentableId" value="LOCAL-00133" />
+      <option name="project" value="LOCAL" />
+      <updated>1770006220314</updated>
+    </task>
+    <task id="LOCAL-00134" summary="[WP] fixing on invariant output">
+      <option name="closed" value="true" />
+      <created>1770007438814</created>
+      <option name="number" value="00134" />
+      <option name="presentableId" value="LOCAL-00134" />
+      <option name="project" value="LOCAL" />
+      <updated>1770007438814</updated>
+    </task>
+    <task id="LOCAL-00135" summary="[WP] fixing on invariant output 2">
+      <option name="closed" value="true" />
+      <created>1770007629808</created>
+      <option name="number" value="00135" />
+      <option name="presentableId" value="LOCAL-00135" />
+      <option name="project" value="LOCAL" />
+      <updated>1770007629808</updated>
+    </task>
+    <task id="LOCAL-00136" summary="[WP] opt spliting">
+      <option name="closed" value="true" />
+      <created>1770009701270</created>
+      <option name="number" value="00136" />
+      <option name="presentableId" value="LOCAL-00136" />
+      <option name="project" value="LOCAL" />
+      <updated>1770009701270</updated>
+    </task>
+    <task id="LOCAL-00137" summary="[WP] opt spliting">
+      <option name="closed" value="true" />
+      <created>1770009979602</created>
+      <option name="number" value="00137" />
+      <option name="presentableId" value="LOCAL-00137" />
+      <option name="project" value="LOCAL" />
+      <updated>1770009979602</updated>
+    </task>
+    <task id="LOCAL-00138" summary="[WP] gradient based fixing to the compose cbs formula">
+      <option name="closed" value="true" />
+      <created>1770010399807</created>
+      <option name="number" value="00138" />
+      <option name="presentableId" value="LOCAL-00138" />
+      <option name="project" value="LOCAL" />
+      <updated>1770010399807</updated>
+    </task>
+    <task id="LOCAL-00139" summary="[WP] opt modules integrated v0.1">
+      <option name="closed" value="true" />
+      <created>1770012390965</created>
+      <option name="number" value="00139" />
+      <option name="presentableId" value="LOCAL-00139" />
+      <option name="project" value="LOCAL" />
+      <updated>1770012390965</updated>
+    </task>
+    <task id="LOCAL-00140" summary="[WP] corrected naming in lbfgs">
+      <option name="closed" value="true" />
+      <created>1770013562076</created>
+      <option name="number" value="00140" />
+      <option name="presentableId" value="LOCAL-00140" />
+      <option name="project" value="LOCAL" />
+      <updated>1770013562076</updated>
+    </task>
+    <task id="LOCAL-00141" summary="[WP] correct X1hf,X2hf">
+      <option name="closed" value="true" />
+      <created>1770014597064</created>
+      <option name="number" value="00141" />
+      <option name="presentableId" value="LOCAL-00141" />
+      <option name="project" value="LOCAL" />
+      <updated>1770014597064</updated>
+    </task>
+    <task id="LOCAL-00142" summary="[WP] correct cbs_compose function">
+      <option name="closed" value="true" />
+      <created>1770014775717</created>
+      <option name="number" value="00142" />
+      <option name="presentableId" value="LOCAL-00142" />
+      <option name="project" value="LOCAL" />
+      <updated>1770014775717</updated>
+    </task>
+    <task id="LOCAL-00143" summary="[WP] writer with header">
+      <option name="closed" value="true" />
+      <created>1770015931413</created>
+      <option name="number" value="00143" />
+      <option name="presentableId" value="LOCAL-00143" />
+      <option name="project" value="LOCAL" />
+      <updated>1770015931413</updated>
+    </task>
+    <task id="LOCAL-00144" summary="[WP] cli with no write_reports">
+      <option name="closed" value="true" />
+      <created>1770016152217</created>
+      <option name="number" value="00144" />
+      <option name="presentableId" value="LOCAL-00144" />
+      <option name="project" value="LOCAL" />
+      <updated>1770016152217</updated>
+    </task>
+    <task id="LOCAL-00145" summary="[WP] cli adapted to writer">
+      <option name="closed" value="true" />
+      <created>1770016346913</created>
+      <option name="number" value="00145" />
+      <option name="presentableId" value="LOCAL-00145" />
+      <option name="project" value="LOCAL" />
+      <updated>1770016346913</updated>
+    </task>
+    <task id="LOCAL-00146" summary="[WP] writer with no notes and no extrap. summary">
+      <option name="closed" value="true" />
+      <created>1770016567970</created>
+      <option name="number" value="00146" />
+      <option name="presentableId" value="LOCAL-00146" />
+      <option name="project" value="LOCAL" />
+      <updated>1770016567970</updated>
+    </task>
+    <task id="LOCAL-00147" summary="[WP] writer back to normal">
+      <option name="closed" value="true" />
+      <created>1770016660446</created>
+      <option name="number" value="00147" />
+      <option name="presentableId" value="LOCAL-00147" />
+      <option name="project" value="LOCAL" />
+      <updated>1770016660446</updated>
+    </task>
+    <task id="LOCAL-00148" summary="[WP] max cycle from 20 to 50">
+      <option name="closed" value="true" />
+      <created>1770165038379</created>
+      <option name="number" value="00148" />
+      <option name="presentableId" value="LOCAL-00148" />
+      <option name="project" value="LOCAL" />
+      <updated>1770165038379</updated>
+    </task>
+    <task id="LOCAL-00149" summary="[WP] opt with proper output naming and geometric approach in sqm">
+      <option name="closed" value="true" />
+      <created>1770255570409</created>
+      <option name="number" value="00149" />
+      <option name="presentableId" value="LOCAL-00149" />
+      <option name="project" value="LOCAL" />
+      <updated>1770255570409</updated>
+    </task>
+    <task id="LOCAL-00150" summary="[WP] geometric approach included">
+      <option name="closed" value="true" />
+      <created>1770255621358</created>
+      <option name="number" value="00150" />
+      <option name="presentableId" value="LOCAL-00150" />
+      <option name="project" value="LOCAL" />
+      <updated>1770255621358</updated>
+    </task>
+    <task id="LOCAL-00151" summary="[WP] geometric approach only">
+      <option name="closed" value="true" />
+      <created>1770260593419</created>
+      <option name="number" value="00151" />
+      <option name="presentableId" value="LOCAL-00151" />
+      <option name="project" value="LOCAL" />
+      <updated>1770260593419</updated>
+    </task>
+    <task id="LOCAL-00152" summary="[WP] geometric approach only with molecule generator">
+      <option name="closed" value="true" />
+      <created>1770261007798</created>
+      <option name="number" value="00152" />
+      <option name="presentableId" value="LOCAL-00152" />
+      <option name="project" value="LOCAL" />
+      <updated>1770261007798</updated>
+    </task>
+    <task id="LOCAL-00153" summary="[WP] geometric approach only with molecule generator">
+      <option name="closed" value="true" />
+      <created>1770261160761</created>
+      <option name="number" value="00153" />
+      <option name="presentableId" value="LOCAL-00153" />
+      <option name="project" value="LOCAL" />
+      <updated>1770261160761</updated>
+    </task>
+    <task id="LOCAL-00154" summary="[WP] geometric approach with autonomous RIc constructor fallback">
+      <option name="closed" value="true" />
+      <created>1770261349018</created>
+      <option name="number" value="00154" />
+      <option name="presentableId" value="LOCAL-00154" />
+      <option name="project" value="LOCAL" />
+      <updated>1770261349018</updated>
+    </task>
+    <task id="LOCAL-00155" summary="[WP] geometric approach with autonomous RIC constructor fallback">
+      <option name="closed" value="true" />
+      <created>1770269925381</created>
+      <option name="number" value="00155" />
+      <option name="presentableId" value="LOCAL-00155" />
+      <option name="project" value="LOCAL" />
+      <updated>1770269925381</updated>
+    </task>
+    <task id="LOCAL-00156" summary="[WP] geometric approach with autonomous RIC constructor fallback. doing one improvement per cycle that lowers the energy as much as possible">
+      <option name="closed" value="true" />
+      <created>1770270026240</created>
+      <option name="number" value="00156" />
+      <option name="presentableId" value="LOCAL-00156" />
+      <option name="project" value="LOCAL" />
+      <updated>1770270026240</updated>
+    </task>
+    <task id="LOCAL-00157" summary="[WP] swm approach with 3-points approach">
+      <option name="closed" value="true" />
+      <created>1770316605512</created>
+      <option name="number" value="00157" />
+      <option name="presentableId" value="LOCAL-00157" />
+      <option name="project" value="LOCAL" />
+      <updated>1770316605512</updated>
+    </task>
+    <task id="LOCAL-00158" summary="[WP] optimizers with augmented pyscf threads">
+      <option name="closed" value="true" />
+      <created>1770406074971</created>
+      <option name="number" value="00158" />
+      <option name="presentableId" value="LOCAL-00158" />
+      <option name="project" value="LOCAL" />
+      <updated>1770406074972</updated>
+    </task>
+    <task id="LOCAL-00159" summary="[WP] sqm paralellized with ProcessPoolExecutor">
+      <option name="closed" value="true" />
+      <created>1770406738409</created>
+      <option name="number" value="00159" />
+      <option name="presentableId" value="LOCAL-00159" />
+      <option name="project" value="LOCAL" />
+      <updated>1770406738409</updated>
+    </task>
+    <task id="LOCAL-00160" summary="[WP] sqm paralellized with ProcessPoolExecutor fixed pickeling">
+      <option name="closed" value="true" />
+      <created>1770407072247</created>
+      <option name="number" value="00160" />
+      <option name="presentableId" value="LOCAL-00160" />
+      <option name="project" value="LOCAL" />
+      <updated>1770407072248</updated>
+    </task>
+    <task id="LOCAL-00161" summary="[WP] sqm paralellized with ProcessPoolExecutor fixed mp calling">
+      <option name="closed" value="true" />
+      <created>1770407381402</created>
+      <option name="number" value="00161" />
+      <option name="presentableId" value="LOCAL-00161" />
+      <option name="project" value="LOCAL" />
+      <updated>1770407381402</updated>
+    </task>
+    <task id="LOCAL-00162" summary="[WP] sqm removed PPE">
+      <option name="closed" value="true" />
+      <created>1770407708335</created>
+      <option name="number" value="00162" />
+      <option name="presentableId" value="LOCAL-00162" />
+      <option name="project" value="LOCAL" />
+      <updated>1770407708335</updated>
+    </task>
+    <task id="LOCAL-00163" summary="[WP] sqm with TPE">
+      <option name="closed" value="true" />
+      <created>1770413802496</created>
+      <option name="number" value="00163" />
+      <option name="presentableId" value="LOCAL-00163" />
+      <option name="project" value="LOCAL" />
+      <updated>1770413802496</updated>
+    </task>
+    <task id="LOCAL-00164" summary="[WP] sqm with TPE default workers 2">
+      <option name="closed" value="true" />
+      <created>1770414368026</created>
+      <option name="number" value="00164" />
+      <option name="presentableId" value="LOCAL-00164" />
+      <option name="project" value="LOCAL" />
+      <updated>1770414368026</updated>
+    </task>
+    <task id="LOCAL-00165" summary="[WP] sqm with TPE default workers 1">
+      <option name="closed" value="true" />
+      <created>1770415219472</created>
+      <option name="number" value="00165" />
+      <option name="presentableId" value="LOCAL-00165" />
+      <option name="project" value="LOCAL" />
+      <updated>1770415219472</updated>
+    </task>
+    <task id="LOCAL-00166" summary="[WP] sqm with TPE default workers 1 and instant update of geometry">
+      <option name="closed" value="true" />
+      <created>1770482695647</created>
+      <option name="number" value="00166" />
+      <option name="presentableId" value="LOCAL-00166" />
+      <option name="project" value="LOCAL" />
+      <updated>1770482695647</updated>
+    </task>
+    <task id="LOCAL-00167" summary="[WP] sqm instant update first trial">
+      <option name="closed" value="true" />
+      <created>1770482995014</created>
+      <option name="number" value="00167" />
+      <option name="presentableId" value="LOCAL-00167" />
+      <option name="project" value="LOCAL" />
+      <updated>1770482995014</updated>
+    </task>
+    <task id="LOCAL-00168" summary="[WP] sqm all per cycle">
+      <option name="closed" value="true" />
+      <created>1771434623659</created>
+      <option name="number" value="00168" />
+      <option name="presentableId" value="LOCAL-00168" />
+      <option name="project" value="LOCAL" />
+      <updated>1771434623660</updated>
+    </task>
+    <task id="LOCAL-00169" summary="[WP] sqm all per cycle, 70 cycles max and pyscf energy inclusion on csv">
+      <option name="closed" value="true" />
+      <created>1771442537788</created>
+      <option name="number" value="00169" />
+      <option name="presentableId" value="LOCAL-00169" />
+      <option name="project" value="LOCAL" />
+      <updated>1771442537789</updated>
+    </task>
+    <task id="LOCAL-00170" summary="[WP] sqm all per cycle, 70 cycles max and pyscf energy (HF+ Corr)">
+      <option name="closed" value="true" />
+      <created>1771447821789</created>
+      <option name="number" value="00170" />
+      <option name="presentableId" value="LOCAL-00170" />
+      <option name="project" value="LOCAL" />
+      <updated>1771447821789</updated>
+    </task>
+    <task id="LOCAL-00171" summary="[WP] sqm all per cycle, 100 cycles max and pyscf energy woth energy disglose">
+      <option name="closed" value="true" />
+      <created>1771517997611</created>
+      <option name="number" value="00171" />
+      <option name="presentableId" value="LOCAL-00171" />
+      <option name="project" value="LOCAL" />
+      <updated>1771517997611</updated>
+    </task>
+    <option name="localTasksCounter" value="172" />
+    <servers />
+  </component>
+  <component name="Vcs.Log.History.Properties">
+    <option name="COLUMN_ID_ORDER">
+      <list>
+        <option value="Default.Root" />
+        <option value="Default.Author" />
+        <option value="Default.Date" />
+        <option value="Default.Subject" />
+      </list>
+    </option>
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="[WP] writer with no notes and no extrap. summary" />
+    <MESSAGE value="[WP] writer back to normal" />
+    <MESSAGE value="[WP] max cycle from 20 to 50" />
+    <MESSAGE value="[WP] opt with proper output naming and geometric approach in sqm" />
+    <MESSAGE value="[WP] geometric approach included" />
+    <MESSAGE value="[WP] geometric approach only" />
+    <MESSAGE value="[WP] geometric approach only with molecule generator" />
+    <MESSAGE value="[WP] geometric approach with autonomous RIc constructor fallback" />
+    <MESSAGE value="[WP] geometric approach with autonomous RIC constructor fallback" />
+    <MESSAGE value="[WP] geometric approach with autonomous RIC constructor fallback. doing one improvement per cycle that lowers the energy as much as possible" />
+    <MESSAGE value="[WP] swm approach with 3-points approach" />
+    <MESSAGE value="[WP] optimizers with augmented pyscf threads" />
+    <MESSAGE value="[WP] sqm paralellized with ProcessPoolExecutor" />
+    <MESSAGE value="[WP] sqm paralellized with ProcessPoolExecutor fixed pickeling" />
+    <MESSAGE value="[WP] sqm paralellized with ProcessPoolExecutor fixed mp calling" />
+    <MESSAGE value="[WP] sqm removed PPE" />
+    <MESSAGE value="[WP] sqm with TPE" />
+    <MESSAGE value="[WP] sqm with TPE default workers 2" />
+    <MESSAGE value="[WP] sqm with TPE default workers 1" />
+    <MESSAGE value="[WP] sqm with TPE default workers 1 and instant update of geometry" />
+    <MESSAGE value="[WP] sqm instant update first trial" />
+    <MESSAGE value="[WP] sqm all per cycle" />
+    <MESSAGE value="[WP] sqm all per cycle, 70 cycles max and pyscf energy inclusion on csv" />
+    <MESSAGE value="[WP] sqm all per cycle, 70 cycles max and pyscf energy (HF+ Corr)" />
+    <MESSAGE value="[WP] sqm all per cycle, 100 cycles max and pyscf energy woth energy disglose" />
+    <option name="LAST_COMMIT_MESSAGE" value="[WP] sqm all per cycle, 100 cycles max and pyscf energy woth energy disglose" />
+  </component>
+</project>
