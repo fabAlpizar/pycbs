@@ -4,16 +4,39 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="44ef8011-1c68-47ad-a3ac-f0009c189185" name="Changes" comment="[WP] sqm all per cycle, 100 cycles max and pyscf energy woth energy disglose">
-      <change beforePath="$PROJECT_DIR$/docs/Makefile" beforeDir="false" afterPath="$PROJECT_DIR$/docs/Makefile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/authors.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/changelog.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/conf.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/contributing.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/index.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/license.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/readme.md" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/requirements.txt" beforeDir="false" />
+    <list default="true" id="44ef8011-1c68-47ad-a3ac-f0009c189185" name="Changes" comment="[WP] expanded atomic mass dict">
+      <change afterPath="$PROJECT_DIR$/docs/source/TC.rst" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/source/basis.rst" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/source/hierarchical.rst" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/source/opto.rst" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/docs/source/outputs.rst" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/doctrees/configuration.doctree" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/configuration.doctree" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/doctrees/environment.pickle" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/environment.pickle" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/doctrees/extrapolations.doctree" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/extrapolations.doctree" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/doctrees/index.doctree" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/index.doctree" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/doctrees/installation.doctree" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/installation.doctree" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/doctrees/optimization.doctree" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/optimization.doctree" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/_sources/configuration.rst.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/_sources/configuration.rst.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/_sources/extrapolations.rst.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/_sources/extrapolations.rst.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/_sources/index.rst.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/_sources/index.rst.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/_sources/installation.rst.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/_sources/installation.rst.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/_sources/optimization.rst.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/_sources/optimization.rst.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/configuration.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/configuration.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/extrapolations.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/extrapolations.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/genindex.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/genindex.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/installation.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/installation.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/objects.inv" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/objects.inv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/optimization.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/optimization.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/search.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/search.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/searchindex.js" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/searchindex.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/source/conf.py" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/conf.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/source/configuration.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/configuration.rst" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/source/extrapolations.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/extrapolations.rst" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/source/index.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/index.rst" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/source/installation.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/installation.rst" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/source/optimization.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/optimization.rst" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/inputfile.inp" beforeDir="false" afterPath="$PROJECT_DIR$/src/inputfile.inp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pycbs/HF_component/Feller.py" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pycbs/HF_component/HF_E.py" beforeDir="false" />
@@ -50,23 +73,24 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;Python.SQM-original.executor&quot;: &quot;Run&quot;,
-    &quot;Python.aaa.executor&quot;: &quot;Run&quot;,
-    &quot;Python.atomization.executor&quot;: &quot;Run&quot;,
-    &quot;Python.cc.executor&quot;: &quot;Run&quot;,
-    &quot;Python.opt_2.executor&quot;: &quot;Run&quot;,
-    &quot;Python.opt_3.executor&quot;: &quot;Run&quot;,
-    &quot;Python.opt_4.executor&quot;: &quot;Run&quot;,
-    &quot;Python.pyCBS_opt_v0.2.executor&quot;: &quot;Run&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/home/fab/01_Fab_Hub/PycharmProjects/pyCBS/src/pycbs/writer.py&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;,
-    &quot;two.files.diff.last.used.file&quot;: &quot;/home/fab/01_Fab_Hub/PycharmProjects/pyCBS/src/pycbs/writer.py&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "Python docs.Docutils Task in index.rst.executor": "Run",
+    "Python.SQM-original.executor": "Run",
+    "Python.aaa.executor": "Run",
+    "Python.atomization.executor": "Run",
+    "Python.cc.executor": "Run",
+    "Python.opt_2.executor": "Run",
+    "Python.opt_3.executor": "Run",
+    "Python.opt_4.executor": "Run",
+    "Python.pyCBS_opt_v0.2.executor": "Run",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "/home/fab/01_Fab_Hub/PycharmProjects/pyCBS/src/pycbs/writer.py",
+    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
+    "two.files.diff.last.used.file": "/home/fab/01_Fab_Hub/PycharmProjects/pyCBS/src/pycbs/writer.py"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/src" />
@@ -94,70 +118,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1761517178425</updated>
-    </task>
-    <task id="LOCAL-00123" summary="[WP] opt cli with proper xyz file writing">
-      <option name="closed" value="true" />
-      <created>1769992155162</created>
-      <option name="number" value="00123" />
-      <option name="presentableId" value="LOCAL-00123" />
-      <option name="project" value="LOCAL" />
-      <updated>1769992155162</updated>
-    </task>
-    <task id="LOCAL-00124" summary="[WP] cli to fix opt-cycles">
-      <option name="closed" value="true" />
-      <created>1769992217143</created>
-      <option name="number" value="00124" />
-      <option name="presentableId" value="LOCAL-00124" />
-      <option name="project" value="LOCAL" />
-      <updated>1769992217143</updated>
-    </task>
-    <task id="LOCAL-00125" summary="[WP] proper cycle-xyz writing">
-      <option name="closed" value="true" />
-      <created>1769992468496</created>
-      <option name="number" value="00125" />
-      <option name="presentableId" value="LOCAL-00125" />
-      <option name="project" value="LOCAL" />
-      <updated>1769992468496</updated>
-    </task>
-    <task id="LOCAL-00126" summary="[WP] writer with one write_report func for each calculation">
-      <option name="closed" value="true" />
-      <created>1770001036897</created>
-      <option name="number" value="00126" />
-      <option name="presentableId" value="LOCAL-00126" />
-      <option name="project" value="LOCAL" />
-      <updated>1770001036898</updated>
-    </task>
-    <task id="LOCAL-00127" summary="[WP] new opt_cli with proper writing">
-      <option name="closed" value="true" />
-      <created>1770001066766</created>
-      <option name="number" value="00127" />
-      <option name="presentableId" value="LOCAL-00127" />
-      <option name="project" value="LOCAL" />
-      <updated>1770001066766</updated>
-    </task>
-    <task id="LOCAL-00128" summary="[WP] cli with writer only for extrapolations">
-      <option name="closed" value="true" />
-      <created>1770001393824</created>
-      <option name="number" value="00128" />
-      <option name="presentableId" value="LOCAL-00128" />
-      <option name="project" value="LOCAL" />
-      <updated>1770001393824</updated>
-    </task>
-    <task id="LOCAL-00129" summary="[WP] opt tryout">
-      <option name="closed" value="true" />
-      <created>1770001939190</created>
-      <option name="number" value="00129" />
-      <option name="presentableId" value="LOCAL-00129" />
-      <option name="project" value="LOCAL" />
-      <updated>1770001939190</updated>
-    </task>
-    <task id="LOCAL-00130" summary="[WP] opt back to normal">
-      <option name="closed" value="true" />
-      <created>1770002189413</created>
-      <option name="number" value="00130" />
-      <option name="presentableId" value="LOCAL-00130" />
-      <option name="project" value="LOCAL" />
-      <updated>1770002189413</updated>
     </task>
     <task id="LOCAL-00131" summary="[WP] opt cli with cycle counter">
       <option name="closed" value="true" />
@@ -487,7 +447,71 @@
       <option name="project" value="LOCAL" />
       <updated>1771517997611</updated>
     </task>
-    <option name="localTasksCounter" value="172" />
+    <task id="LOCAL-00172" summary="[WP] documentation in progress">
+      <option name="closed" value="true" />
+      <created>1771980859056</created>
+      <option name="number" value="00172" />
+      <option name="presentableId" value="LOCAL-00172" />
+      <option name="project" value="LOCAL" />
+      <updated>1771980859057</updated>
+    </task>
+    <task id="LOCAL-00173" summary="[WP] documentation in progress">
+      <option name="closed" value="true" />
+      <created>1771981098293</created>
+      <option name="number" value="00173" />
+      <option name="presentableId" value="LOCAL-00173" />
+      <option name="project" value="LOCAL" />
+      <updated>1771981098293</updated>
+    </task>
+    <task id="LOCAL-00174" summary="[WP] pyCBS -&gt; pycbs">
+      <option name="closed" value="true" />
+      <created>1772093930930</created>
+      <option name="number" value="00174" />
+      <option name="presentableId" value="LOCAL-00174" />
+      <option name="project" value="LOCAL" />
+      <updated>1772093930931</updated>
+    </task>
+    <task id="LOCAL-00175" summary="[WP] pyCBS -&gt; pycbs">
+      <option name="closed" value="true" />
+      <created>1772093956897</created>
+      <option name="number" value="00175" />
+      <option name="presentableId" value="LOCAL-00175" />
+      <option name="project" value="LOCAL" />
+      <updated>1772093956898</updated>
+    </task>
+    <task id="LOCAL-00176" summary="[WP] pyCBS -&gt; pycbs">
+      <option name="closed" value="true" />
+      <created>1772093980671</created>
+      <option name="number" value="00176" />
+      <option name="presentableId" value="LOCAL-00176" />
+      <option name="project" value="LOCAL" />
+      <updated>1772093980671</updated>
+    </task>
+    <task id="LOCAL-00177" summary="[WP] no geometric">
+      <option name="closed" value="true" />
+      <created>1772095811377</created>
+      <option name="number" value="00177" />
+      <option name="presentableId" value="LOCAL-00177" />
+      <option name="project" value="LOCAL" />
+      <updated>1772095811377</updated>
+    </task>
+    <task id="LOCAL-00178" summary="[WP] expanded basis dict">
+      <option name="closed" value="true" />
+      <created>1772096783080</created>
+      <option name="number" value="00178" />
+      <option name="presentableId" value="LOCAL-00178" />
+      <option name="project" value="LOCAL" />
+      <updated>1772096783081</updated>
+    </task>
+    <task id="LOCAL-00179" summary="[WP] expanded atomic mass dict">
+      <option name="closed" value="true" />
+      <created>1772096977934</created>
+      <option name="number" value="00179" />
+      <option name="presentableId" value="LOCAL-00179" />
+      <option name="project" value="LOCAL" />
+      <updated>1772096977934</updated>
+    </task>
+    <option name="localTasksCounter" value="180" />
     <servers />
   </component>
   <component name="Vcs.Log.History.Properties">
@@ -512,11 +536,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="[WP] writer with no notes and no extrap. summary" />
-    <MESSAGE value="[WP] writer back to normal" />
-    <MESSAGE value="[WP] max cycle from 20 to 50" />
-    <MESSAGE value="[WP] opt with proper output naming and geometric approach in sqm" />
-    <MESSAGE value="[WP] geometric approach included" />
     <MESSAGE value="[WP] geometric approach only" />
     <MESSAGE value="[WP] geometric approach only with molecule generator" />
     <MESSAGE value="[WP] geometric approach with autonomous RIc constructor fallback" />
@@ -537,6 +556,11 @@
     <MESSAGE value="[WP] sqm all per cycle, 70 cycles max and pyscf energy inclusion on csv" />
     <MESSAGE value="[WP] sqm all per cycle, 70 cycles max and pyscf energy (HF+ Corr)" />
     <MESSAGE value="[WP] sqm all per cycle, 100 cycles max and pyscf energy woth energy disglose" />
-    <option name="LAST_COMMIT_MESSAGE" value="[WP] sqm all per cycle, 100 cycles max and pyscf energy woth energy disglose" />
+    <MESSAGE value="[WP] documentation in progress" />
+    <MESSAGE value="[WP] pyCBS -&gt; pycbs" />
+    <MESSAGE value="[WP] no geometric" />
+    <MESSAGE value="[WP] expanded basis dict" />
+    <MESSAGE value="[WP] expanded atomic mass dict" />
+    <option name="LAST_COMMIT_MESSAGE" value="[WP] expanded atomic mass dict" />
   </component>
 </project>

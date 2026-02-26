@@ -45,9 +45,21 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<p class="caption" role="heading"><span class="caption-text">Theory &amp; Computation</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="configuration.html">Config file example</a></li>
+<li class="toctree-l1"><a class="reference internal" href="TC.html">Theoretical Background</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basis.html">Basis Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hierarchical.html">Hierarchical Numbers</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Setting up the Config File</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="extrapolations.html">Extrapolation schemes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optimization.html">Geometrical optimization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analyze the Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Output Analysis Report</a></li>
+<li class="toctree-l1"><a class="reference internal" href="opto.html">Output Files Overview</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Academic Record</span></p>
 <ul>
@@ -84,30 +96,114 @@
 </a>
 <p><strong>pyCBS</strong> is a high-performance Python package designed to perform Complete Basis Set extrapolations accros several schemes.
 It also provides a novel geometrical optimization implementation via de Succesive Quadratic Minimization (SQM) or the gradient based L-BFGS-B method, in which you obtain both CBS-optimized geometry and energy .</p>
+</section>
 <section id="features">
-<h2>Features<a class="headerlink" href="#features" title="Link to this heading"></a></h2>
+<h1>Features<a class="headerlink" href="#features" title="Link to this heading"></a></h1>
+<p id="id1"><strong>1. Extrapolation</strong></p>
+<p>Support for multiple Complete Basis Set (CBS) extrapolation schemes,
+organized by energy component.</p>
+<p>1.1 Hartree–Fock schemes</p>
 <ul class="simple">
-<li><p><strong>Extrapolation:</strong> Support for multiple CBS extrapolation schemes.</p></li>
-<li><p>Hartree-Fock extrapolations schemes: Jensen, Klopper, Feller, Truhlar, HF-E</p></li>
-<li><p>Correlation Energy extrapolations schemes: Truhlar, Huh-Lee, Bakowies, OANc, Halkier-Helgaker, Martin, USPE, USTE</p></li>
-<li><p><strong>Optimization:</strong> High-dimensional optimization using L-BFGS-B and SQM.</p></li>
-<li><p><strong>Flexibility:</strong> input file based configuration for reproducible workflows.</p></li>
+<li><p>Jensen</p></li>
+<li><p>Klopper</p></li>
+<li><p>Feller</p></li>
+<li><p>Truhlar</p></li>
+<li><p>HF-E</p></li>
+</ul>
+<p>1.2 Correlation energy schemes</p>
+<ul class="simple">
+<li><p>Truhlar</p></li>
+<li><p>Huh–Lee</p></li>
+<li><p>Bakowies</p></li>
+<li><p>OANc</p></li>
+<li><p>Halkier–Helgaker</p></li>
+<li><p>Martin</p></li>
+<li><p>USPE</p></li>
+<li><p>USTE</p></li>
+</ul>
+<p><strong>2. Optimization</strong></p>
+<ul class="simple">
+<li><p>L-BFGS-B</p></li>
+<li><p>SQM</p></li>
 </ul>
 <div class="toctree-wrapper compound">
 <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#prerequisites">Prerequisites</a></li>
 <li class="toctree-l2"><a class="reference internal" href="installation.html#from-source">From Source</a></li>
+<li class="toctree-l2"><a class="reference internal" href="installation.html#notes">Notes</a></li>
 </ul>
 </li>
 </ul>
 </div>
 <div class="toctree-wrapper compound">
-<p class="caption" role="heading"><span class="caption-text">Configuration Reference</span></p>
+<p class="caption" role="heading"><span class="caption-text">Theory &amp; Computation</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="configuration.html">Config file example</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="configuration.html#extrapolation-schemes">Extrapolation schemes</a></li>
-<li class="toctree-l2"><a class="reference internal" href="configuration.html#geometrical-optimization">Geometrical optimization</a></li>
+<li class="toctree-l1"><a class="reference internal" href="TC.html">Theoretical Background</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="TC.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="TC.html#energy-partitioning">Energy Partitioning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="TC.html#hartreefock-convergence">Hartree–Fock Convergence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="TC.html#correlation-energy-convergence">Correlation Energy Convergence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="TC.html#hierarchical-numbers">Hierarchical Numbers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="TC.html#cbs-for-molecular-properties">CBS for Molecular Properties</a></li>
+<li class="toctree-l2"><a class="reference internal" href="TC.html#cbs-geometry-optimization">CBS Geometry Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="TC.html#practical-recommendations">Practical Recommendations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="TC.html#error-sources">Error Sources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="TC.html#limitations">Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="basis.html">Basis Sets</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="basis.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="basis.html#supported-basis-sets">Supported Basis Sets</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="hierarchical.html">Hierarchical Numbers</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="hierarchical.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hierarchical.html#hartreefock-hierarchical-numbers">Hartree–Fock Hierarchical Numbers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="hierarchical.html#correlation-energy-hierarchical-numbers">Correlation Energy Hierarchical Numbers</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Setting up the Config File</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="extrapolations.html">Extrapolation schemes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="extrapolations.html#hf-component">HF component</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extrapolations.html#correlation-component">Correlation component</a></li>
+<li class="toctree-l2"><a class="reference internal" href="extrapolations.html#hf-correlation-full-cbs-schemes">HF + Correlation (full CBS schemes)</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="optimization.html">Geometrical optimization</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="optimization.html#gradient-based">Gradient based</a></li>
+<li class="toctree-l2"><a class="reference internal" href="optimization.html#sqm">SQM</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Analyze the Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Output Analysis Report</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="outputs.html#summary">Summary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outputs.html#key-metrics">Key Metrics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outputs.html#energy-convergence-analysis">Energy Convergence Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outputs.html#error-analysis">Error Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outputs.html#statistical-indicators">Statistical Indicators</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outputs.html#reproducibility">Reproducibility</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outputs.html#conclusions">Conclusions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="outputs.html#appendix">Appendix</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="opto.html">Output Files Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="opto.html#introduction">Introduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="opto.html#directory-structure">Directory Structure</a></li>
+<li class="toctree-l2"><a class="reference internal" href="opto.html#file-descriptions">File Descriptions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="opto.html#visualization">Visualization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="opto.html#interpretation-guidelines">Interpretation Guidelines</a></li>
+<li class="toctree-l2"><a class="reference internal" href="opto.html#common-issues">Common Issues</a></li>
+<li class="toctree-l2"><a class="reference internal" href="opto.html#cross-references">Cross-References</a></li>
 </ul>
 </li>
 </ul>
@@ -118,7 +214,6 @@ It also provides a novel geometrical optimization implementation via de Succesiv
 <li class="toctree-l1"><a class="reference internal" href="citing.html">Citing pyCBS</a></li>
 </ul>
 </div>
-</section>
 </section>
 
 

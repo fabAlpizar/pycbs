@@ -14,25 +14,69 @@ pyCBS: Python Complete Basis Set Tools
 It also provides a novel geometrical optimization implementation via de Succesive Quadratic Minimization (SQM) or the gradient based L-BFGS-B method, in which you obtain both CBS-optimized geometry and energy .
 
 Features
---------
-* **Extrapolation:** Support for multiple CBS extrapolation schemes.
-* Hartree-Fock extrapolations schemes: Jensen, Klopper, Feller, Truhlar, HF-E
-* Correlation Energy extrapolations schemes: Truhlar, Huh-Lee, Bakowies, OANc, Halkier-Helgaker, Martin, USPE, USTE
-* **Optimization:** High-dimensional optimization using L-BFGS-B and SQM.
-* **Flexibility:** input file based configuration for reproducible workflows.
+========
+
+.. _features:
+
+**1. Extrapolation**
+
+Support for multiple Complete Basis Set (CBS) extrapolation schemes,
+organized by energy component.
+
+1.1 Hartree–Fock schemes
+
+- Jensen
+- Klopper
+- Feller
+- Truhlar
+- HF-E
+
+1.2 Correlation energy schemes
+
+- Truhlar
+- Huh–Lee
+- Bakowies
+- OANc
+- Halkier–Helgaker
+- Martin
+- USPE
+- USTE
+
+
+**2. Optimization**
+
+- L-BFGS-B
+- SQM
+
 
 .. toctree::
    :maxdepth: 2
    :caption: Getting Started
 
    installation
-   user_guide
+.. toctree::
+   :maxdepth: 2
+   :caption: Theory & Computation
+
+   TC
+   basis
+   hierarchical
+
 
 .. toctree::
    :maxdepth: 2
-   :caption: Configuration Reference
+   :caption: Setting up the Config File
 
-   configuration
+   extrapolations
+   optimization
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Analyze the Results
+
+   outputs
+   opto
+
 
 .. toctree::
    :maxdepth: 1

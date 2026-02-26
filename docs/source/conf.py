@@ -7,8 +7,8 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'pyCBS'
-copyright = '2026, Fabio J. Delgado-Alpizar'
-author = 'Fabio J. Delgado-Alpizar'
+copyright = '2026, Fabio J. Delgado-Alpizar; Alberto Guerra-Barroso; Antonio J.C. Varandas'
+author = 'Fabio J. Delgado-Alpizar; Alberto Guerra-Barroso; Antonio J.C. Varandas'
 release = '1.0.0'
 
 # -- General configuration ---------------------------------------------------
