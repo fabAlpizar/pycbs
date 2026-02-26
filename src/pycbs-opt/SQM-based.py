@@ -730,7 +730,8 @@ def write_cycle_energies_with_pyscf(outputs_dir, prefix, history, basis1, basis2
 def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DEFAULT, fac_mult=FAC_DEFAULT,
                       x1=X1_DEFAULT, x2=X2_DEFAULT, x1_hf=X1HF_DEFAULT, x2_hf=X2HF_DEFAULT, beta=BETA_DEFAULT,
                       basis_pair=None, spin: int = 0, debug: bool = False, energy_accept_tol: float | None = None,
-                      workers: int = 1, outputs_dir: Path | None = None, base_name: str = "geometry"):
+                      workers: int = 1, outputs_dir: Path | None = None, base_name: str = "geometry",
+                      energy_crit: float = ENERGY_CRIT, cut: float = CUT):
     """
     ALL-PER-CYCLE OPTIMIZATION STRATEGY
     ====================================
@@ -1021,12 +1022,12 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         if cycle > 1:
             ediff = abs(history[-1]['energy'] - history[-2]['energy'])
             print(f"  ΔE since last cycle: {ediff:.4e} Ha")
-            if ediff < ENERGY_CRIT:
+            if ediff < energy_crit:
                 print("Converged by energy criterion")
                 converged = True
                 break
 
-        displacement_factor *= CUT
+        displacement_factor *= cut
 
     return atoms, current_coords, history, converged, baseline_labels, internals_trace, cycle_geometries
 
@@ -1056,6 +1057,8 @@ def run_optimization(params: dict, outputs_dir: Path):
     debug = bool(params.get("debug", False))
     energy_accept_tol = params.get("energy_accept_tol", None)
     workers = int(params.get("workers", 1))
+    energy_crit = float(params.get("energy_crit", ENERGY_CRIT))
+    cut = float(params.get("cut", CUT))
 
     atoms, coords0, comment = read_xyz(input_xyz)
     print(f"Loaded {len(atoms)} atoms from {input_xyz}")
@@ -1076,7 +1079,9 @@ def run_optimization(params: dict, outputs_dir: Path):
         energy_accept_tol=energy_accept_tol,
         workers=workers,
         outputs_dir=outputs_dir,
-        base_name=Path(input_xyz).stem
+        base_name=Path(input_xyz).stem,
+        energy_crit=energy_crit,
+        cut=cut
     )
 
     base = Path(input_xyz).stem
@@ -1149,6 +1154,8 @@ if __name__ == "__main__":
     p.add_argument("--debug", action="store_true", help="Enable verbose diagnostics")
     p.add_argument("--energy_accept_tol", type=float, default=None, help="Per-move acceptance energy (Ha)")
     p.add_argument("--workers", type=int, default=1, help="Number of parallel internal evaluators (default 1)")
+    p.add_argument("--energy-crit", type=float, default=ENERGY_CRIT,help="Cycle convergence energy (Ha). Default: %(default)s")
+    p.add_argument("--cut", type=float, default=CUT,help="Per-cycle displacement shrink factor (multiply displacement by this each cycle). Default: %(default)s")
     args = p.parse_args()
 
     params = {
@@ -1164,7 +1171,9 @@ if __name__ == "__main__":
         "spin": args.spin,
         "debug": args.debug,
         "energy_accept_tol": args.energy_accept_tol,
-        "workers": args.workers
+        "workers": args.workers,
+        "energy_crit": args.energy_crit,
+        "cut": args.cut
     }
     out = Path(args.out)
     result = run_optimization(params, out)
