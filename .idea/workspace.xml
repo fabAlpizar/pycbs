@@ -4,24 +4,16 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="44ef8011-1c68-47ad-a3ac-f0009c189185" name="Changes" comment="[WP] expanded atomic mass dict">
-      <change afterPath="$PROJECT_DIR$/docs/source/TC.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/source/basis.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/source/hierarchical.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/source/opto.rst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/source/outputs.rst" afterDir="false" />
+    <list default="true" id="44ef8011-1c68-47ad-a3ac-f0009c189185" name="Changes" comment="[WP] refinements">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/build/doctrees/configuration.doctree" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/configuration.doctree" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/build/doctrees/environment.pickle" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/environment.pickle" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/build/doctrees/extrapolations.doctree" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/extrapolations.doctree" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/build/doctrees/index.doctree" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/index.doctree" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/build/doctrees/installation.doctree" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/installation.doctree" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/build/doctrees/optimization.doctree" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/doctrees/optimization.doctree" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/build/html/_sources/configuration.rst.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/_sources/configuration.rst.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/.buildinfo" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/.buildinfo" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/.buildinfo.bak" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/.buildinfo.bak" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/build/html/_sources/extrapolations.rst.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/_sources/extrapolations.rst.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/build/html/_sources/index.rst.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/_sources/index.rst.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/build/html/_sources/installation.rst.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/_sources/installation.rst.txt" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/build/html/_sources/optimization.rst.txt" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/_sources/optimization.rst.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/build/html/citing.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/citing.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/build/html/configuration.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/configuration.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/build/html/extrapolations.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/extrapolations.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/build/html/genindex.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/genindex.html" afterDir="false" />
@@ -32,12 +24,8 @@
       <change beforePath="$PROJECT_DIR$/docs/build/html/search.html" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/search.html" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/build/html/searchindex.js" beforeDir="false" afterPath="$PROJECT_DIR$/docs/build/html/searchindex.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/source/conf.py" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/conf.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/source/configuration.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/configuration.rst" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/source/extrapolations.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/extrapolations.rst" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/source/index.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/index.rst" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/source/installation.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/installation.rst" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docs/source/optimization.rst" beforeDir="false" afterPath="$PROJECT_DIR$/docs/source/optimization.rst" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/inputfile.inp" beforeDir="false" afterPath="$PROJECT_DIR$/src/inputfile.inp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pycbs/HF_component/Feller.py" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pycbs/HF_component/HF_E.py" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/pycbs/HF_component/Jensen.py" beforeDir="false" />
@@ -118,46 +106,6 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1761517178425</updated>
-    </task>
-    <task id="LOCAL-00131" summary="[WP] opt cli with cycle counter">
-      <option name="closed" value="true" />
-      <created>1770002216780</created>
-      <option name="number" value="00131" />
-      <option name="presentableId" value="LOCAL-00131" />
-      <option name="project" value="LOCAL" />
-      <updated>1770002216780</updated>
-    </task>
-    <task id="LOCAL-00132" summary="[WP] opt cli with float convertion of config parameters">
-      <option name="closed" value="true" />
-      <created>1770005320082</created>
-      <option name="number" value="00132" />
-      <option name="presentableId" value="LOCAL-00132" />
-      <option name="project" value="LOCAL" />
-      <updated>1770005320083</updated>
-    </task>
-    <task id="LOCAL-00133" summary="[WP] opt cli with float convertion of config parameters">
-      <option name="closed" value="true" />
-      <created>1770006220314</created>
-      <option name="number" value="00133" />
-      <option name="presentableId" value="LOCAL-00133" />
-      <option name="project" value="LOCAL" />
-      <updated>1770006220314</updated>
-    </task>
-    <task id="LOCAL-00134" summary="[WP] fixing on invariant output">
-      <option name="closed" value="true" />
-      <created>1770007438814</created>
-      <option name="number" value="00134" />
-      <option name="presentableId" value="LOCAL-00134" />
-      <option name="project" value="LOCAL" />
-      <updated>1770007438814</updated>
-    </task>
-    <task id="LOCAL-00135" summary="[WP] fixing on invariant output 2">
-      <option name="closed" value="true" />
-      <created>1770007629808</created>
-      <option name="number" value="00135" />
-      <option name="presentableId" value="LOCAL-00135" />
-      <option name="project" value="LOCAL" />
-      <updated>1770007629808</updated>
     </task>
     <task id="LOCAL-00136" summary="[WP] opt spliting">
       <option name="closed" value="true" />
@@ -511,7 +459,47 @@
       <option name="project" value="LOCAL" />
       <updated>1772096977934</updated>
     </task>
-    <option name="localTasksCounter" value="180" />
+    <task id="LOCAL-00180" summary="[WP] ongoing documentation">
+      <option name="closed" value="true" />
+      <created>1772098557930</created>
+      <option name="number" value="00180" />
+      <option name="presentableId" value="LOCAL-00180" />
+      <option name="project" value="LOCAL" />
+      <updated>1772098557930</updated>
+    </task>
+    <task id="LOCAL-00181" summary="[WP] ongoing documentation">
+      <option name="closed" value="true" />
+      <created>1772098571953</created>
+      <option name="number" value="00181" />
+      <option name="presentableId" value="LOCAL-00181" />
+      <option name="project" value="LOCAL" />
+      <updated>1772098571953</updated>
+    </task>
+    <task id="LOCAL-00182" summary="[WP] ongoing docs with corrected opt xyz path">
+      <option name="closed" value="true" />
+      <created>1772098729332</created>
+      <option name="number" value="00182" />
+      <option name="presentableId" value="LOCAL-00182" />
+      <option name="project" value="LOCAL" />
+      <updated>1772098729332</updated>
+    </task>
+    <task id="LOCAL-00183" summary="[WP] opt with ENERGY_CRIT and CUT as args">
+      <option name="closed" value="true" />
+      <created>1772100003217</created>
+      <option name="number" value="00183" />
+      <option name="presentableId" value="LOCAL-00183" />
+      <option name="project" value="LOCAL" />
+      <updated>1772100003217</updated>
+    </task>
+    <task id="LOCAL-00184" summary="[WP] refinements">
+      <option name="closed" value="true" />
+      <created>1772100233116</created>
+      <option name="number" value="00184" />
+      <option name="presentableId" value="LOCAL-00184" />
+      <option name="project" value="LOCAL" />
+      <updated>1772100233116</updated>
+    </task>
+    <option name="localTasksCounter" value="185" />
     <servers />
   </component>
   <component name="Vcs.Log.History.Properties">
@@ -536,10 +524,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="[WP] geometric approach only" />
-    <MESSAGE value="[WP] geometric approach only with molecule generator" />
-    <MESSAGE value="[WP] geometric approach with autonomous RIc constructor fallback" />
-    <MESSAGE value="[WP] geometric approach with autonomous RIC constructor fallback" />
     <MESSAGE value="[WP] geometric approach with autonomous RIC constructor fallback. doing one improvement per cycle that lowers the energy as much as possible" />
     <MESSAGE value="[WP] swm approach with 3-points approach" />
     <MESSAGE value="[WP] optimizers with augmented pyscf threads" />
@@ -561,6 +545,10 @@
     <MESSAGE value="[WP] no geometric" />
     <MESSAGE value="[WP] expanded basis dict" />
     <MESSAGE value="[WP] expanded atomic mass dict" />
-    <option name="LAST_COMMIT_MESSAGE" value="[WP] expanded atomic mass dict" />
+    <MESSAGE value="[WP] ongoing documentation" />
+    <MESSAGE value="[WP] ongoing docs with corrected opt xyz path" />
+    <MESSAGE value="[WP] opt with ENERGY_CRIT and CUT as args" />
+    <MESSAGE value="[WP] refinements" />
+    <option name="LAST_COMMIT_MESSAGE" value="[WP] refinements" />
   </component>
 </project>

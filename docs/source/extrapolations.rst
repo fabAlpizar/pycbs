@@ -1,5 +1,7 @@
-Extrapolation schemes
----------------------
+Extrapolation Schemes
+=====================
+
+This section lists the available Hartree–Fock (HF), correlation, and full CBS extrapolation schemes, along with their configurable parameters and default values.
 
 HF component
 ~~~~~~~~~~~~

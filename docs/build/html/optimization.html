@@ -19,8 +19,8 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Citing pyCBS" href="citing.html" />
-    <link rel="prev" title="Extrapolation schemes" href="extrapolations.html" /> 
+    <link rel="next" title="Output Analysis Report" href="outputs.html" />
+    <link rel="prev" title="Extrapolation Schemes" href="extrapolations.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -46,15 +46,28 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 </ul>
+<p class="caption" role="heading"><span class="caption-text">Theory &amp; Computation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="TC.html">Theoretical Background</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basis.html">Basis Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hierarchical.html">Hierarchical Numbers</a></li>
+</ul>
 <p class="caption" role="heading"><span class="caption-text">Setting up the Config File</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="configuration.html">Config file example</a></li>
-<li class="toctree-l1"><a class="reference internal" href="extrapolations.html">Extrapolation schemes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extrapolations.html">Extrapolation Schemes</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Geometrical optimization</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#gradient-based">Gradient based</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#sqm">SQM</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#gradient-based">Gradient based</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sqm">SQM</a></li>
 </ul>
 </li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analyze the Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Output Analysis Report</a></li>
+<li class="toctree-l1"><a class="reference internal" href="opto.html">Output Files Overview</a></li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Academic Record</span></p>
 <ul>
@@ -87,39 +100,66 @@
              
   <section id="geometrical-optimization">
 <h1>Geometrical optimization<a class="headerlink" href="#geometrical-optimization" title="Link to this heading"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>This package provides a high-level Python implementation for geometry optimization
+using Complete Basis Set (CBS) extrapolation with PySCF. It supports <strong>CCSD(T)</strong> and
+<strong>MP2</strong> methods, generates redundant internal coordinates (RICs), evaluates
+all internal coordinates per optimization cycle, and applies energy-validated
+updates to molecular geometries.</p>
 <section id="gradient-based">
-<h2>Gradient based<a class="headerlink" href="#gradient-based" title="Link to this heading"></a></h2>
+<h3>Gradient based<a class="headerlink" href="#gradient-based" title="Link to this heading"></a></h3>
 <div class="highlight-ini notranslate"><div class="highlight"><pre><span></span><span class="k">[optimization3]</span>
-<span class="na">optimization</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">True</span>
-<span class="na">input_xyz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">/home/fab/01_Fab_Hub/01_pinchas/02_albeaker/pyCBS/tests/molecules_for_paper/estructuras-opt/h2co.xyz</span>
-<span class="na">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">CCSD(T)</span>
-<span class="na">optimizer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">L-BFGS-B</span>
-<span class="na">basis1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvdz</span>
-<span class="na">basis2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvtz</span>
-<span class="na">spin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0</span>
-<span class="na">x1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1.852</span>
-<span class="na">x2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2.639</span>
-<span class="na">x1hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.02</span>
-<span class="na">x2hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.64</span>
+<span class="na">optimization</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">True</span><span class="w">            </span><span class="c1">; Enable optimization (True/False), default: True</span>
+<span class="na">input_xyz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">path/to/xyz/file</span><span class="w">   </span><span class="c1">; Path to input XYZ geometry file, no default</span>
+<span class="na">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">CCSD(T)</span><span class="w">               </span><span class="c1">; Method for energy evaluation (&#39;CCSD(T)&#39; or &#39;MP2&#39;), default: CCSD(T)</span>
+<span class="na">optimizer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">L-BFGS-B</span><span class="w">           </span><span class="c1">; Optimization algorithm (&#39;L-BFGS-B&#39;, &#39;sqm&#39;), default: L-BFGS-B</span>
+<span class="na">basis1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvdz</span><span class="w">               </span><span class="c1">; First basis set for CBS extrapolation, default: cc-pvdz</span>
+<span class="na">basis2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvtz</span><span class="w">               </span><span class="c1">; Second basis set for CBS extrapolation, default: cc-pvtz</span>
+<span class="na">spin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0</span><span class="w">                       </span><span class="c1">; Spin multiplicity (0=singlet, 1=doublet, etc.), default: 0</span>
+<span class="na">x1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1.852</span><span class="w">                     </span><span class="c1">; CBS extrapolation coefficient a_corr or first basis distance, default: 1.852</span>
+<span class="na">x2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2.639</span><span class="w">                     </span><span class="c1">; CBS extrapolation coefficient b_hf or second basis distance, default: 2.639</span>
+<span class="na">x1hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.02</span><span class="w">                    </span><span class="c1">; HF exponential factor for basis1, default: 3.02</span>
+<span class="na">x2hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.64</span><span class="w">                    </span><span class="c1">; HF exponential factor for basis2, default: 3.64</span>
+<span class="na">beta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1.0</span><span class="w">                     </span><span class="c1">; HF exponential scaling factor, default: 1.0</span>
+<span class="na">maxcycle</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">100</span><span class="w">                 </span><span class="c1">; Maximum number of optimization cycles, default: 100</span>
+<span class="na">fac_mult</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0.05</span><span class="w">                </span><span class="c1">; Displacement factor multiplier for internal coordinates, default: 0.05</span>
+<span class="na">energy_crit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1e-8</span><span class="w">             </span><span class="c1">; Energy convergence criterion in Hartree, default: 1e-8</span>
+<span class="na">cut</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0.75</span><span class="w">                     </span><span class="c1">; Per-cycle reduction factor for displacement, default: 0.75</span>
+<span class="na">workers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1</span><span class="w">                    </span><span class="c1">; Number of parallel threads for PySCF evaluations, default: 1</span>
+<span class="na">debug</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">False</span><span class="w">                  </span><span class="c1">; Print detailed per-cycle information, default: False</span>
+<span class="na">output_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">./results</span><span class="w">         </span><span class="c1">; Directory to store cycle geometries and CSV, default: ./results</span>
 </pre></div>
 </div>
 </section>
 <section id="sqm">
-<h2>SQM<a class="headerlink" href="#sqm" title="Link to this heading"></a></h2>
+<h3>SQM<a class="headerlink" href="#sqm" title="Link to this heading"></a></h3>
 <div class="highlight-ini notranslate"><div class="highlight"><pre><span></span><span class="k">[optimization3]</span>
-<span class="na">optimization</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">True</span>
-<span class="na">input_xyz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">/home/fab/01_Fab_Hub/01_pinchas/02_albeaker/pyCBS/tests/molecules_for_paper/estructuras-opt/h2co.xyz</span>
-<span class="na">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">CCSD(T)</span>
-<span class="na">optimizer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">sqm</span>
-<span class="na">basis1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvdz</span>
-<span class="na">basis2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvtz</span>
-<span class="na">spin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0</span>
-<span class="na">x1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1.852</span>
-<span class="na">x2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2.639</span>
-<span class="na">x1hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.02</span>
-<span class="na">x2hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.64</span>
+<span class="na">optimization</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">True</span><span class="w">            </span><span class="c1">; Enable optimization (True/False), default: True</span>
+<span class="na">input_xyz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">path/to/xyz/file</span><span class="w">   </span><span class="c1">; Path to input XYZ geometry file, no default</span>
+<span class="na">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">CCSD(T)</span><span class="w">               </span><span class="c1">; Method for energy evaluation (&#39;CCSD(T)&#39; or &#39;MP2&#39;), default: CCSD(T)</span>
+<span class="na">optimizer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">sqm</span><span class="w">                </span><span class="c1">; Optimization algorithm (&#39;sqm&#39; for internal coordinates), default: sqm</span>
+<span class="na">basis1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvdz</span><span class="w">               </span><span class="c1">; First basis set for CBS extrapolation, default: cc-pvdz</span>
+<span class="na">basis2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvtz</span><span class="w">               </span><span class="c1">; Second basis set for CBS extrapolation, default: cc-pvtz</span>
+<span class="na">spin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0</span><span class="w">                       </span><span class="c1">; Spin multiplicity (0=singlet, 1=doublet, etc.), default: 0</span>
+<span class="na">x1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1.852</span><span class="w">                     </span><span class="c1">; CBS extrapolation coefficient a_corr or first basis distance, default: 1.852</span>
+<span class="na">x2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2.639</span><span class="w">                     </span><span class="c1">; CBS extrapolation coefficient b_hf or second basis distance, default: 2.639</span>
+<span class="na">x1hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.02</span><span class="w">                    </span><span class="c1">; HF exponential factor for basis1, default: 3.02</span>
+<span class="na">x2hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.64</span><span class="w">                    </span><span class="c1">; HF exponential factor for basis2, default: 3.64</span>
+<span class="na">beta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1.0</span><span class="w">                     </span><span class="c1">; HF exponential scaling factor, default: 1.0</span>
+<span class="na">maxcycle</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">100</span><span class="w">                 </span><span class="c1">; Maximum number of optimization cycles, default: 100</span>
+<span class="na">fac_mult</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0.05</span><span class="w">                </span><span class="c1">; Displacement factor multiplier for internal coordinates, default: 0.05</span>
+<span class="na">energy_crit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1e-8</span><span class="w">             </span><span class="c1">; Energy convergence criterion in Hartree, default: 1e-8</span>
+<span class="na">cut</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0.75</span><span class="w">                     </span><span class="c1">; Per-cycle reduction factor for displacement, default: 0.75</span>
+<span class="na">workers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1</span><span class="w">                    </span><span class="c1">; Number of parallel threads for PySCF evaluations, default: 1</span>
+<span class="na">debug</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">False</span><span class="w">                  </span><span class="c1">; Print detailed per-cycle information, default: False</span>
+<span class="na">output_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">./results</span><span class="w">         </span><span class="c1">; Directory to store cycle geometries and CSV, default: ./results</span>
+<span class="na">energy_accept_tol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1e-6</span><span class="w">       </span><span class="c1">; Minimum energy improvement to accept step, default: 1e-6</span>
+<span class="na">geom_rebuild</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">True</span><span class="w">             </span><span class="c1">; Regenerate internal coordinates each cycle, default: True</span>
+<span class="na">label_internals</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">True</span><span class="w">          </span><span class="c1">; Include human-readable labels for bonds/angles/dihedrals, default: True</span>
 </pre></div>
 </div>
+</section>
 </section>
 </section>
 
@@ -127,14 +167,14 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="extrapolations.html" class="btn btn-neutral float-left" title="Extrapolation schemes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="citing.html" class="btn btn-neutral float-right" title="Citing pyCBS" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="extrapolations.html" class="btn btn-neutral float-left" title="Extrapolation Schemes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="outputs.html" class="btn btn-neutral float-right" title="Output Analysis Report" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2026, Fabio J. Delgado-Alpizar.</p>
+    <p>&#169; Copyright 2026, Fabio J. Delgado-Alpizar; Alberto Guerra-Barroso; Antonio J.C. Varandas.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
