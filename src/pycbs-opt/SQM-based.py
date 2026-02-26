@@ -1,103 +1,7 @@
 #!/usr/bin/env python3
-"""
-SQM-based optimizer module (ALL-PER-CYCLE approach)
 
-OPTIMIZATION STRATEGY: ALL-PER-CYCLE APPROACH
-==============================================
-
-This optimizer performs SEQUENTIAL QUADRATIC MINIMIZATION (SQM) with an
-ALL-PER-CYCLE update strategy:
-
-STEP-BY-STEP WORKFLOW:
-======================
-
-1. INITIAL SETUP & READING
-   - Reads XYZ file (atomic symbols + Cartesian coordinates)
-   - Generates REDUNDANT INTERNAL COORDINATES (RICs):
-     * Bonds: based on covalent radii cutoff
-     * Angles: i-j-k where (i,j) and (j,k) are bonded
-     * Dihedrals: i-j-k-l where (i,j), (j,k), (k,l) are bonded
-
-2. CBS ENERGY CALCULATION (Composite Basis Set approach)
-   - Evaluates energy at TWO basis sets: cc-pVDZ (small) and cc-pVTZ (large)
-   - For each basis:
-     * Performs RHF-SCF calculation (Hartree-Fock)
-     * Calculates correlation energy (CCSD(T) or MP2)
-   - Extrapolates to CBS limit using:
-     * Exponential formula for correlation: E_corr(X) = E_∞ + a*exp(-β*X)
-     * Exponential formula for HF: E_HF(X) = E_∞ + b*exp(-β*X)
-     * Final CBS energy: E_CBS = E_HF_CBS + E_corr_CBS
-
-3. PER-CYCLE OPTIMIZATION LOOP (ALL-PER-CYCLE STRATEGY)
-   ======================================================
-
-   For each optimization cycle:
-
-   a) EVALUATE ALL INTERNAL COORDINATES
-      - For EACH internal coordinate (bond, angle, dihedral):
-        * Sample 3 points: -displacement, 0, +displacement
-        * Calculate CBS energy at each point
-        * Fit parabola through 3 points
-        * Extract predicted minimum (x_min, E_min) and curvature
-
-   b) UPDATE ALL INTERNALS THAT IMPROVE ENERGY
-      - For each internal coordinate:
-        * Check if predicted energy drop exceeds threshold (ENERGY_ACCEPT_TOL)
-        * If YES: Calculate new coordinates using predicted minimum
-        * Validate by computing actual CBS energy at that geometry
-        * If validation confirms improvement: APPLY THE CHANGE
-        * If validation fails: SKIP this internal
-      - Internal coordinates are REGENERATED after EACH change (accounts for coupling)
-      - Process continues until all profitable internals are attempted
-
-   c) CONVERGENCE CHECK
-      - Monitor total energy change in this cycle
-      - Reduce displacement factor (multiply by 0.75) for next cycle
-      - Check if ΔE < 1e-8 Ha → converged
-      - Check if max cycles reached → stop
-
-4. GEOMETRIC UPDATES (Local approximate moves)
-   - Bond changes: Mass-weighted displacement
-     * p_i -> p_i - w_i * Δr * direction
-     * p_j -> p_j + (1-w_i) * Δr * direction
-     * weights based on atomic masses
-
-   - Angle changes: Rodrigues rotation
-     * Rotate atom i around central atom j
-     * Uses rotation axis and angle from geometry
-
-   - Dihedral changes: Rodrigues rotation
-     * Rotate atom i around j-k bond axis
-     * Maintains bond lengths
-
-5. OUTPUT GENERATION
-   - Saves per-cycle XYZ geometries (cycle_000_initial, cycle_001, ...)
-   - Saves final optimized XYZ
-   - Saves energy vs cycle plot (with PySCF HF, PySCF Correlation, and CBS energies)
-   - Prints internal coordinate trace (values per cycle)
-
-KEY DIFFERENCES FROM SINGLE-BEST STRATEGY:
-============================================
-Single-Best: Evaluates all → picks ONE → applies → re-evaluates
-All-Per-Cycle: Evaluates all → APPLIES EACH profitable one → regenerates → repeats
-
-Advantages of ALL-PER-CYCLE:
-  ✓ Faster convergence (multiple improvements per cycle)
-  ✓ More efficient for weakly-coupled coordinates
-  ✓ Better for large molecules
-
-Disadvantages of ALL-PER-CYCLE:
-  ✗ Risk of unphysical geometries (coordinate coupling)
-  ✗ Coordination effects between changes not fully accounted for
-  ✗ May require more careful validation
-
-Usage:
-    python sqm_optimizer_all_per_cycle.py -i input.xyz --out PyCBS-OUTPUTS --workers 4 --debug
-"""
 from pathlib import Path
 import math
-import sys
-import traceback
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -152,47 +56,9 @@ ATOMIC_MASS = {
     "P": 30.9738,
     "S": 32.065,
     "Cl": 35.453,
-    "Ar": 39.948,
+    "Ar": 39.948
 
-    # Period 4
-    "K": 39.0983,
-    "Ca": 40.078,
-    "Sc": 44.9559,
-    "Ti": 47.867,
-    "V": 50.9415,
-    "Cr": 51.9961,
-    "Mn": 54.938,
-    "Fe": 55.845,
-    "Co": 58.9332,
-    "Ni": 58.6934,
-    "Cu": 63.546,
-    "Zn": 65.38,
-    "Ga": 69.723,
-    "Ge": 72.64,
-    "As": 74.9216,
-    "Se": 78.96,
-    "Br": 79.904,
-    "Kr": 83.798,
 
-    # Period 5
-    "Rb": 85.4678,
-    "Sr": 87.62,
-    "Y": 88.9059,
-    "Zr": 91.224,
-    "Nb": 92.9064,
-    "Mo": 95.96,
-    "Tc": 98.0,
-    "Ru": 101.07,
-    "Rh": 102.9055,
-    "Pd": 106.42,
-    "Ag": 107.8682,
-    "Cd": 112.411,
-    "In": 114.818,
-    "Sn": 118.71,
-    "Sb": 121.76,
-    "Te": 127.6,
-    "I": 126.9045,
-    "Xe": 131.293,
 }
 
 # Covalent radii (Å) - used by geometry fallback
