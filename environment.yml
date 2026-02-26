@@ -1,4 +1,4 @@
-name: pyCBS
+name: pycbs
 channels:
   - conda-forge
   - defaults
