@@ -13,15 +13,84 @@ import importlib.util
 logger = logging.getLogger(__name__)
 
 BASIS_MAP = {
-    "vdz": "cc-pvdz",
-    "vtz": "cc-pvtz",
-    "vqz": "cc-pvqz",
-    "v5z": "cc-pv5z",
-    "avdz": "aug-cc-pvdz",
-    "avtz": "aug-cc-pvtz",
-    "avqz": "aug-cc-pvqz",
+
+    # =====================
+    # Minimal
+    # =====================
+    "STO-3G": "sto3g",
+    "sto-3g": "sto3g",
+    "Sto-3G": "sto3g",
+    "sto3g": "sto3g",
+
+    "STO-6G": "sto6g",
+    "sto-6g": "sto6g",
+    "Sto-6G": "sto6g",
+    "sto6g": "sto6g",
+
+    # =====================
+    # Pople
+    # =====================
+    "3-21G": "3-21g",
+    "3-21g": "3-21g",
+
+    "3-21++G": "3-21++g",
+    "3-21++g": "3-21++g",
+
+    "4-31G": "4-31g",
+    "4-31g": "4-31g",
+
+    # =====================
+    # Dunning
+    # =====================
     "VDZ": "cc-pvdz",
+    "vdz": "cc-pvdz",
+    "Vdz": "cc-pvdz",
+
     "VTZ": "cc-pvtz",
+    "vtz": "cc-pvtz",
+    "Vtz": "cc-pvtz",
+
+    "VQZ": "cc-pvqz",
+    "vqz": "cc-pvqz",
+    "Vqz": "cc-pvqz",
+
+    "V5Z": "cc-pv5z",
+    "v5z": "cc-pv5z",
+    "V5z": "cc-pv5z",
+
+    # =====================
+    # Augmented Dunning
+    # =====================
+    "AVDZ": "aug-cc-pvdz",
+    "avdz": "aug-cc-pvdz",
+    "Avdz": "aug-cc-pvdz",
+
+    "AVTZ": "aug-cc-pvtz",
+    "avtz": "aug-cc-pvtz",
+    "Avtz": "aug-cc-pvtz",
+
+    "AVQZ": "aug-cc-pvqz",
+    "avqz": "aug-cc-pvqz",
+    "Avqz": "aug-cc-pvqz",
+
+    "AV5Z": "aug-cc-pv5z",
+    "av5z": "aug-cc-pv5z",
+    "Av5z": "aug-cc-pv5z",
+
+    # =====================
+    # F12 (OptRI in PySCF)
+    # =====================
+    "VDZ-F12": "cc-pVDZ-F12-OptRI",
+    "vdz-f12": "cc-pVDZ-F12-OptRI",
+    "Vdz-F12": "cc-pVDZ-F12-OptRI",
+
+    "VTZ-F12": "cc-pVTZ-F12-OptRI",
+    "vtz-f12": "cc-pVTZ-F12-OptRI",
+    "Vtz-F12": "cc-pVTZ-F12-OptRI",
+
+    "VQZ-F12": "cc-pVQZ-F12-OptRI",
+    "vqz-f12": "cc-pVQZ-F12-OptRI",
+    "Vqz-F12": "cc-pVQZ-F12-OptRI",
 }
 
 
