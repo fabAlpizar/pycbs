@@ -41,7 +41,7 @@ In order to set up the necessary environment:
 1. Clone this repository:
    ```
    git clone https://github.com/fabAlpizar/pycbs
-   cd pyCBS
+   cd pycbs
    ```
 2. Create the new environment with:
    ```
@@ -49,7 +49,7 @@ In order to set up the necessary environment:
    ```
 3. Activate the new environment with: 
    ```
-   conda activate pyCBS
+   conda activate pycbs
    ```
 4. Make it editable:
    ```
