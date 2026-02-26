@@ -40,7 +40,7 @@ In order to set up the necessary environment:
 
 1. Clone this repository:
    ```
-   git clone https://github.com/fabAlpizar/pyCBS
+   git clone https://github.com/fabAlpizar/pycbs
    cd pyCBS
    ```
 2. Create the new environment with:
