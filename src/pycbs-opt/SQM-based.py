@@ -4,6 +4,8 @@ from pathlib import Path
 import math
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import re
+from typing import Optional, Tuple
 
 import numpy as np
 from pycbs.writer import write_cycle_energies, write_final_xyz
@@ -33,11 +35,9 @@ FAC_DEFAULT = 0.05
 CUT = 0.75
 
 ATOMIC_MASS = {
-
     # Period 1
     "H": 1.0079,
     "He": 4.0026,
-
     # Period 2
     "Li": 6.941,
     "Be": 9.0122,
@@ -47,7 +47,6 @@ ATOMIC_MASS = {
     "O": 15.999,
     "F": 18.998,
     "Ne": 20.1797,
-
     # Period 3
     "Na": 22.9897,
     "Mg": 24.305,
@@ -57,8 +56,6 @@ ATOMIC_MASS = {
     "S": 32.065,
     "Cl": 35.453,
     "Ar": 39.948
-
-
 }
 
 # Covalent radii (Å) - used by geometry fallback
@@ -71,6 +68,82 @@ COVALENT_RADII = {
 DEFAULT_COV_RAD = 0.77  # fallback if element not in dict
 
 DEFAULT_SPIN = 0
+
+
+# -------------------------
+# Frozen parsing helpers
+# -------------------------
+def normalize_frozen_param(frozen_raw) -> Optional[Tuple]:
+    """
+    Normalize user-provided `frozen` param into a hashable tuple token for caching.
+
+    Returns:
+      None             -> no freezing
+      ('set_frozen',)  -> use .set_frozen() automatic detection
+      ('int', n)       -> freeze n core orbitals (integer)
+      ('list', i0,i1,...) -> freeze explicit orbital indices (0-based)
+    Accepts:
+      - None
+      - int
+      - list/tuple of ints
+      - strings: "2", "0,1", "[0,1]", "set_frozen", "auto"
+    """
+    if frozen_raw is None:
+        return None
+
+    # direct ints or tuples/lists
+    if isinstance(frozen_raw, int):
+        return ('int', int(frozen_raw))
+    if isinstance(frozen_raw, (list, tuple)):
+        try:
+            ints = tuple(int(x) for x in frozen_raw)
+        except Exception:
+            raise ValueError("If passing a list for 'frozen' it must contain integer indices.")
+        if len(ints) == 0:
+            return None
+        return ('list',) + ints
+
+    # string handling
+    if isinstance(frozen_raw, str):
+        s = frozen_raw.strip()
+        low = s.lower()
+        if low in ('set_frozen', 'setfrozen', 'auto', 'autodetect'):
+            return ('set_frozen',)
+        # bracketed list like "[0,1]" or "0,1" or "0 1"
+        # extract integers
+        tokens = re.findall(r'-?\d+', s)
+        if tokens:
+            ints = tuple(int(t) for t in tokens)
+            if len(ints) == 0:
+                return None
+            if len(ints) == 1:
+                return ('int', ints[0])
+            return ('list',) + ints
+        # try single integer
+        try:
+            n = int(s)
+            return ('int', n)
+        except Exception:
+            raise ValueError(f"Unrecognized frozen value: {frozen_raw!r}. Expected integer, list of integers, or 'set_frozen'.")
+    # fallback
+    raise ValueError(f"Unsupported frozen param type: {type(frozen_raw)}")
+
+
+def frozen_token_to_pyscf_arg(frozen_token):
+    """
+    Convert normalized token into a value that can be passed to PySCF constructors
+    or into the special marker 'set_frozen' for the .set_frozen() workflow.
+    """
+    if frozen_token is None:
+        return None
+    if frozen_token[0] == 'set_frozen':
+        return 'set_frozen'
+    if frozen_token[0] == 'int':
+        return int(frozen_token[1])
+    if frozen_token[0] == 'list':
+        return [int(x) for x in frozen_token[1:]]
+    # unreachable
+    return None
 
 
 # -------------------------
@@ -287,7 +360,13 @@ def apply_dihedral_change(coords, i, j, k, l, new_dihedral_deg):
 # -------------------------
 @lru_cache(maxsize=10000)
 def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str,
-                                 spin: int):
+                                 spin: int, frozen_token):
+    """
+    cached routine expects a hashable `frozen_token` (tuple or None).
+    The actual call will translate frozen_token to the proper PySCF argument.
+    """
+    pyscf_frozen_arg = frozen_token_to_pyscf_arg(frozen_token)
+
     scf_vals = []
     corr_vals = []
     for basis in (bs1, bs2):
@@ -313,7 +392,11 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
         corr_energy = None
         if method.upper().startswith('CCSD'):
             try:
-                mycc = cc.CCSD(mf)
+                if pyscf_frozen_arg == 'set_frozen':
+                    mycc = cc.CCSD(mf)
+                    mycc.set_frozen()
+                else:
+                    mycc = cc.CCSD(mf, frozen=pyscf_frozen_arg) if pyscf_frozen_arg is not None else cc.CCSD(mf)
                 mycc.conv_tol = 1e-7
                 mycc.max_cycle = 100
                 mycc.kernel()
@@ -327,9 +410,15 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
 
         if corr_energy is None and method.upper().startswith('MP2'):
             try:
-                mymp = mp.MP2(mf)
-                mymp.max_memory = 14330
-                res = mymp.run()
+                if pyscf_frozen_arg == 'set_frozen':
+                    mymp = mp.MP2(mf)
+                    mymp.set_frozen()
+                    res = mymp.run()
+                else:
+                    # int or list or None acceptable directly
+                    mymp = mp.MP2(mf, frozen=pyscf_frozen_arg) if pyscf_frozen_arg is not None else mp.MP2(mf)
+                    mymp.max_memory = 14330
+                    res = mymp.run()
                 mp2_total = getattr(res, 'e_tot', None)
                 if mp2_total is None:
                     mp2_total = getattr(mymp, 'e_tot', None)
@@ -345,9 +434,15 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
 
         if corr_energy is None:
             try:
-                mymp = mp.MP2(mf)
-                mymp.max_memory = 14330
-                res = mymp.run()
+                # fallback to MP2 attempt (same as above) if previous failed
+                if pyscf_frozen_arg == 'set_frozen':
+                    mymp = mp.MP2(mf)
+                    mymp.set_frozen()
+                    res = mymp.run()
+                else:
+                    mymp = mp.MP2(mf, frozen=pyscf_frozen_arg) if pyscf_frozen_arg is not None else mp.MP2(mf)
+                    mymp.max_memory = 14330
+                    res = mymp.run()
                 mp2_total = getattr(res, 'e_tot', None)
                 if mp2_total is None:
                     mp2_total = getattr(mymp, 'e_tot', None)
@@ -374,22 +469,18 @@ def _compute_cbs_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_
 
 
 def compute_cbs_energy_from_xyz_cached(xyz_string: str, method: str, a_corr: float, b_hf: float, bs1: str, bs2: str,
-                                       spin: int):
-    return _compute_cbs_from_xyz_cached(xyz_string, method, a_corr, b_hf, bs1, bs2, int(spin))
+                                       spin: int, frozen_token):
+    """
+    Thin wrapper exposing normalized frozen_token to cached function.
+    """
+    return _compute_cbs_from_xyz_cached(xyz_string, method, a_corr, b_hf, bs1, bs2, int(spin), frozen_token)
 
 
 # ---- HELPER FUNCTION: Compute PySCF energies with separated CCSD and (T) ----
-def compute_pyscf_energies(atoms, coords, bs1, bs2, method, spin, pyscf_threads):
+def compute_pyscf_energies(atoms, coords, bs1, bs2, method, spin, pyscf_threads, frozen_token):
     """
-    Compute PySCF energies for both basis sets:
-    - HF-SCF energy
-    - CCSD correlation energy (if method is CCSD(T))
-    - (T) triple correction (if method is CCSD(T))
-    - Total energy (HF + CCSD + (T))
-    - OR: MP2 correlation energy (if method is MP2)
-    - OR: Total energy (HF + MP2)
-
-    Returns dict with appropriate keys based on method
+    Compute PySCF energies for both basis sets with optional frozen handling.
+    Returns dict with appropriate keys based on method.
     """
     pyscf_data = {
         'hf_bs1': None, 'hf_bs2': None,
@@ -409,6 +500,7 @@ def compute_pyscf_energies(atoms, coords, bs1, bs2, method, spin, pyscf_threads)
 
     try:
         xyz_str = xyz_to_pyscf_string(atoms, coords)
+        pyscf_frozen_arg = frozen_token_to_pyscf_arg(frozen_token)
 
         for idx, basis in enumerate((bs1, bs2)):
             basis_key_hf = 'hf_bs1' if idx == 0 else 'hf_bs2'
@@ -435,7 +527,11 @@ def compute_pyscf_energies(atoms, coords, bs1, bs2, method, spin, pyscf_threads)
                 basis_key_total = 'total_bs1' if idx == 0 else 'total_bs2'
 
                 try:
-                    mycc = cc.CCSD(mf)
+                    if pyscf_frozen_arg == 'set_frozen':
+                        mycc = cc.CCSD(mf)
+                        mycc.set_frozen()
+                    else:
+                        mycc = cc.CCSD(mf, frozen=pyscf_frozen_arg) if pyscf_frozen_arg is not None else cc.CCSD(mf)
                     mycc.conv_tol = 1e-7
                     mycc.max_cycle = 100
                     mycc.kernel()
@@ -456,7 +552,7 @@ def compute_pyscf_energies(atoms, coords, bs1, bs2, method, spin, pyscf_threads)
                     # Total = HF + CCSD + (T)
                     total_e = scf_e + ccsd_corr + triples_corr
                     pyscf_data[basis_key_total] = float(total_e)
-                except Exception as e:
+                except Exception:
                     pyscf_data[basis_key_ccsd] = None
                     pyscf_data[basis_key_triples] = None
                     pyscf_data[basis_key_total] = None
@@ -466,9 +562,14 @@ def compute_pyscf_energies(atoms, coords, bs1, bs2, method, spin, pyscf_threads)
                 basis_key_total = 'total_bs1' if idx == 0 else 'total_bs2'
 
                 try:
-                    mymp = mp.MP2(mf)
-                    mymp.max_memory = 14330
-                    res = mymp.run()
+                    if pyscf_frozen_arg == 'set_frozen':
+                        mymp = mp.MP2(mf)
+                        mymp.set_frozen()
+                        res = mymp.run()
+                    else:
+                        mymp = mp.MP2(mf, frozen=pyscf_frozen_arg) if pyscf_frozen_arg is not None else mp.MP2(mf)
+                        mymp.max_memory = 14330
+                        res = mymp.run()
                     mp2_total = getattr(res, 'e_tot', None)
                     if mp2_total is None:
                         mp2_total = getattr(mymp, 'e_tot', None)
@@ -486,6 +587,7 @@ def compute_pyscf_energies(atoms, coords, bs1, bs2, method, spin, pyscf_threads)
                     pyscf_data[basis_key_total] = None
 
     except Exception as e:
+        # keep quiet and return whatever we have
         pass
 
     return pyscf_data
@@ -517,12 +619,6 @@ def parabolic_minimum_3pt(x, y):
 def write_cycle_energies_with_pyscf(outputs_dir, prefix, history, basis1, basis2, method):
     """
     Write cycle energies to CSV with detailed PySCF breakdown.
-
-    For CCSD(T):
-    - HF, CCSD correlation, (T) correction, Total for each basis
-
-    For MP2:
-    - HF, MP2 correlation, Total for each basis
     """
     csv_file = outputs_dir / f"{prefix}_cycles_with_pyscf.csv"
 
@@ -597,24 +693,10 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                       x1=X1_DEFAULT, x2=X2_DEFAULT, x1_hf=X1HF_DEFAULT, x2_hf=X2HF_DEFAULT, beta=BETA_DEFAULT,
                       basis_pair=None, spin: int = 0, debug: bool = False, energy_accept_tol: float | None = None,
                       workers: int = 1, outputs_dir: Path | None = None, base_name: str = "geometry",
-                      energy_crit: float = ENERGY_CRIT, cut: float = CUT):
+                      energy_crit: float = ENERGY_CRIT, cut: float = CUT, frozen_raw=None):
     """
-    ALL-PER-CYCLE OPTIMIZATION STRATEGY
-    ====================================
-
-    For each optimization cycle:
-      1. Evaluate ALL internal coordinates (3-point sampling + parabolic fit)
-      2. For EACH internal:
-         - If predicted energy improves beyond threshold:
-           * Apply the change to get new coordinates
-           * Validate by calculating actual CBS energy
-           * If confirmed: keep the new geometry
-           * If not confirmed: try next internal
-      3. Regenerate internal coordinates (accounts for coupling)
-      4. Reduce displacement factor for next cycle
-
-    This allows multiple coordinate updates per cycle (unlike single-best),
-    but validates each one independently.
+    ALL-PER-CYCLE OPTIMIZATION with optional `frozen_raw` parameter.
+    `frozen_raw` can be any of the user formats accepted by normalize_frozen_param().
     """
     ENERGY_ACCEPT_TOL = 1e-6 if energy_accept_tol is None else float(energy_accept_tol)  # Ha
     MIN_CURVATURE = 1e-10
@@ -671,10 +753,14 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
     except Exception:
         pass
 
+    # normalize frozen param once and pass the token around (hashable)
+    frozen_token = normalize_frozen_param(frozen_raw)
+
     for cycle in range(1, maxcycle + 1):
         cur_xyz = xyz_to_pyscf_string(atoms, current_coords)
         try:
-            current_energy = compute_cbs_energy_from_xyz_cached(cur_xyz, method, a_corr, b_hf, bs1, bs2, spin)
+            current_energy = compute_cbs_energy_from_xyz_cached(cur_xyz, method, a_corr, b_hf, bs1, bs2, spin,
+                                                                frozen_token)
         except Exception as e:
             raise RuntimeError(f"CBS evaluation at cycle start failed: {e}")
 
@@ -723,7 +809,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                     else:
                         new_coords = current_coords.copy()
                     xyzs = xyz_to_pyscf_string(atoms, new_coords)
-                    E = compute_cbs_energy_from_xyz_cached(xyzs, method, a_corr, b_hf, bs1, bs2, spin)
+                    E = compute_cbs_energy_from_xyz_cached(xyzs, method, a_corr, b_hf, bs1, bs2, spin, frozen_token)
                     es.append(float(E))
                     coords_list.append(new_coords)
                 except Exception:
@@ -768,7 +854,8 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                         coords_at_pred = current_coords.copy()
 
                     xyz_pred = xyz_to_pyscf_string(atoms, coords_at_pred)
-                    E_pred_true = compute_cbs_energy_from_xyz_cached(xyz_pred, method, a_corr, b_hf, bs1, bs2, spin)
+                    E_pred_true = compute_cbs_energy_from_xyz_cached(xyz_pred, method, a_corr, b_hf, bs1, bs2, spin,
+                                                                    frozen_token)
                     deltaE_pred_true = current_energy - float(E_pred_true)
                 except Exception:
                     E_pred_true = float('inf')
@@ -828,7 +915,7 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
                 try:
                     cur_xyz_after = xyz_to_pyscf_string(atoms, current_coords)
                     actual_E_after = compute_cbs_energy_from_xyz_cached(cur_xyz_after, method, a_corr, b_hf, bs1, bs2,
-                                                                        spin)
+                                                                        spin, frozen_token)
                 except Exception:
                     actual_E_after = float('inf')
 
@@ -840,8 +927,8 @@ def optimize_from_xyz(atoms, coords, method=DEFAULT_METHOD, maxcycle=MAXCYCLE_DE
         else:
             print(f"  No acceptable candidates this cycle.")
 
-        # Calculate PySCF energies for CSV logging
-        pyscf_data = compute_pyscf_energies(atoms, current_coords, bs1, bs2, method, spin, PYSCF_THREADS)
+        # Calculate PySCF energies for CSV logging (honors frozen_token)
+        pyscf_data = compute_pyscf_energies(atoms, current_coords, bs1, bs2, method, spin, PYSCF_THREADS, frozen_token)
 
         if method.upper().startswith('CCSD'):
             history.append({
@@ -926,6 +1013,9 @@ def run_optimization(params: dict, outputs_dir: Path):
     energy_crit = float(params.get("energy_crit", ENERGY_CRIT))
     cut = float(params.get("cut", CUT))
 
+    # new: frozen param from user/config
+    frozen_raw = params.get("frozen", None)
+
     atoms, coords0, comment = read_xyz(input_xyz)
     print(f"Loaded {len(atoms)} atoms from {input_xyz}")
     print("Building redundant internal coordinates (geometry-derived fallback)...")
@@ -947,7 +1037,8 @@ def run_optimization(params: dict, outputs_dir: Path):
         outputs_dir=outputs_dir,
         base_name=Path(input_xyz).stem,
         energy_crit=energy_crit,
-        cut=cut
+        cut=cut,
+        frozen_raw=frozen_raw
     )
 
     base = Path(input_xyz).stem
@@ -1022,6 +1113,7 @@ if __name__ == "__main__":
     p.add_argument("--workers", type=int, default=1, help="Number of parallel internal evaluators (default 1)")
     p.add_argument("--energy-crit", type=float, default=ENERGY_CRIT,help="Cycle convergence energy (Ha). Default: %(default)s")
     p.add_argument("--cut", type=float, default=CUT,help="Per-cycle displacement shrink factor (multiply displacement by this each cycle). Default: %(default)s")
+    p.add_argument("--frozen", type=str, default=None, help="Frozen core option. Examples: '2', '[0,1]', '0,1,16', 'set_frozen' (auto). See docs.")
     args = p.parse_args()
 
     params = {
@@ -1039,7 +1131,8 @@ if __name__ == "__main__":
         "energy_accept_tol": args.energy_accept_tol,
         "workers": args.workers,
         "energy_crit": args.energy_crit,
-        "cut": args.cut
+        "cut": args.cut,
+        "frozen": args.frozen
     }
     out = Path(args.out)
     result = run_optimization(params, out)
