@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
 """
-L-BFGS-B-based optimizer module (full implementation, 3-point fit + verbose status).
+L-BFGS-B CBS optimizer (internals + L-BFGS) with full parameter parity with the
+ALL-PER-CYCLE variant: accepts 'method', 'maxcycle', 'fac', 'cut', 'workers',
+'energy_accept_tol', 'energy_crit', 'frozen', etc.
 
-This module implements the L-BFGS-B optimization pathway using redundant
-internal coordinates and CBS-extrapolated energies (PySCF). It exposes a
-programmatic API:
-
-    run_optimization(params: dict, outputs_dir: pathlib.Path) -> dict
-
-Notes / differences from previous variant:
- - Includes a 3-point parabolic helper (parabolic_minimum_3pt) (keeps available
-   for downstream uses and diagnostics).
- - Callback prints detailed status per optimization step: CBS energy plus the
-   underlying SCF / correlation components returned by compute_cbs_energy.
- - PySCF verbosity is controlled by CONFIG["PYSCF_VERBOSE"] and will be honored
-   by the SCF / correlation calls (so you will see PySCF text if enabled).
+Behavior:
+ - Optimization strategy: L-BFGS-B on redundant internal coordinates (3-point helper
+   retained for diagnostics).
+ - Correlation methods: CCSD(T) preferred if method startswith "CCSD", otherwise MP2.
+ - Frozen core: supports integer, explicit list, or 'set_frozen' / 'auto' token.
+ - workers: used to evaluate small/large basis concurrently.
 """
 from pathlib import Path
 import argparse
 import math
 import sys
+import re
 from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Optional, Tuple
 
 import numpy as np
 from scipy.optimize import minimize
@@ -34,7 +32,7 @@ except Exception as e:
 from pycbs.writer import write_cycle_energies, write_final_xyz
 
 # ---------------------
-# CONFIGURATION
+# CONFIGURATION (defaults)
 # ---------------------
 CONFIG = {
     # Basis sets: smaller first, larger second
@@ -57,7 +55,7 @@ CONFIG = {
     "LSQRMAXITER": 200,
 
     # Optimization (L-BFGS-B) options
-    "ENERGY_TOL": 1e-8,  # Hartree stopping criterion for CBS energy change
+    "ENERGY_TOL": 1e-8,  # Hartree stopping criterion for CBS energy change (ftol)
     "X_TOL": 1e-4,  # step tolerance for internal coordinates
     "LBFGSB_MAXITER": 200,
     "BOND_MIN_FACTOR": 0.5,  # lower bound for bond length relative to initial
@@ -67,11 +65,63 @@ CONFIG = {
 # module-level default spin (can be set via _update_config_from_params)
 DEFAULT_SPIN = 0
 
-# ensure PySCF threads reflect config
+# reflect config threads
 lib.num_threads(CONFIG["PYSCF_NTHREADS"])
 
 # ---------------------
-# Utility geometry functions
+# Frozen parsing helpers (normalize to hashable token)
+# ---------------------
+def normalize_frozen_param(frozen_raw) -> Optional[Tuple]:
+    """
+    Normalize `frozen` param into a hashable tuple token for caching.
+    Accepts None, int, [ints], or strings like "2", "0,1", "[0,1]", "set_frozen", "auto".
+    Returns: None | ('set_frozen',) | ('int', n) | ('list', i0,i1,...)
+    """
+    if frozen_raw is None:
+        return None
+    if isinstance(frozen_raw, int):
+        return ('int', int(frozen_raw))
+    if isinstance(frozen_raw, (list, tuple)):
+        try:
+            ints = tuple(int(x) for x in frozen_raw)
+        except Exception:
+            raise ValueError("If passing a list for 'frozen' it must contain integer indices.")
+        if len(ints) == 0:
+            return None
+        return ('list',) + ints
+    if isinstance(frozen_raw, str):
+        s = frozen_raw.strip()
+        low = s.lower()
+        if low in ('set_frozen', 'setfrozen', 'auto', 'autodetect'):
+            return ('set_frozen',)
+        tokens = re.findall(r'-?\d+', s)
+        if tokens:
+            ints = tuple(int(t) for t in tokens)
+            if len(ints) == 1:
+                return ('int', ints[0])
+            return ('list',) + ints
+        try:
+            n = int(s)
+            return ('int', n)
+        except Exception:
+            raise ValueError(f"Unrecognized frozen value: {frozen_raw!r}. Expected integer, list, or 'set_frozen'.")
+    raise ValueError(f"Unsupported frozen param type: {type(frozen_raw)}")
+
+
+def frozen_token_to_pyscf_arg(frozen_token):
+    """Convert normalized token into PySCF arg or 'set_frozen' marker."""
+    if frozen_token is None:
+        return None
+    if frozen_token[0] == 'set_frozen':
+        return 'set_frozen'
+    if frozen_token[0] == 'int':
+        return int(frozen_token[1])
+    if frozen_token[0] == 'list':
+        return [int(x) for x in frozen_token[1:]]
+    return None
+
+# ---------------------
+# Geometry helpers (unchanged)
 # ---------------------
 def read_xyz(filename):
     with open(filename) as fh:
@@ -231,10 +281,6 @@ def internal_to_cartesian(initial_cart, internals, target_values, lsq_opts=None)
 # 3-point parabolic helper (robust)
 # ---------------------
 def parabolic_minimum_3pt(x, y):
-    """
-    Fit quadratic using three points (x0,x1,x2) and return x_min, y_min.
-    If fit fails, return the sampled best.
-    """
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
     if x.size != 3 or y.size != 3:
@@ -264,11 +310,9 @@ def cbs_compose(corr_small, corr_big, scf_small, scf_big, cfg=CONFIG):
     X2_HF = cfg["X2_HF"]
     BETA = cfg["BETA_HF"]
 
-    # correlation extrapolation coefficient using power -3
     a_corr = (X1 ** 3) / (X2 ** 3 - X1 ** 3)
     E_corr_cbs = corr_big + a_corr * (corr_big - corr_small)
 
-    # HF prefactor b_hf as used in the SQM path:
     denom = math.exp(BETA * X2_HF) - math.exp(BETA * X1_HF)
     if abs(denom) < 1e-16:
         raise ZeroDivisionError("HF CBS denominator too small")
@@ -281,9 +325,13 @@ def cbs_compose(corr_small, corr_big, scf_small, scf_big, cfg=CONFIG):
 
 
 # ---------------------
-# Energy evaluation with PySCF (returns scf_energy, corr_energy)
+# Energy evaluation with PySCF (supports frozen_token and method preference)
 # ---------------------
-def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd(t)", "mp2")):
+def compute_scf_and_correlation(symbols, coords, basis, frozen_token=None, method_preference=("ccsd(t)", "mp2")):
+    """
+    Evaluate SCF + correlation for a given basis. frozen_token normalized token.
+    method_preference is a tuple of method names in order of preference (strings).
+    """
     nat = len(symbols)
     mol = gto.Mole()
     mol.verbose = CONFIG["PYSCF_VERBOSE"]
@@ -294,9 +342,7 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
     mol.spin = int(DEFAULT_SPIN)
     mol.build()
 
-    # resources
     mol.max_memory = CONFIG["PYSCF_MAX_MEMORY"]
-    # PySCF prints to stdout according to mol.verbose / mf.verbose
     mf = scf.RHF(mol)
     mf.conv_tol = 1e-8
     mf.verbose = CONFIG["PYSCF_VERBOSE"]
@@ -308,9 +354,16 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
 
     corr_e = None
     last_err = None
-    if "ccsd(t)" in method_preference:
+    pyscf_frozen_arg = frozen_token_to_pyscf_arg(frozen_token)
+
+    # CCSD(T) branch first if requested
+    if "ccsd(t)" in [m.lower() for m in method_preference]:
         try:
-            mycc = cc.CCSD(mf)
+            if pyscf_frozen_arg == 'set_frozen':
+                mycc = cc.CCSD(mf)
+                mycc.set_frozen()
+            else:
+                mycc = cc.CCSD(mf, frozen=pyscf_frozen_arg) if pyscf_frozen_arg is not None else cc.CCSD(mf)
             mycc.conv_tol = 1e-7
             mycc.max_cycle = 200
             mycc.verbose = CONFIG["PYSCF_VERBOSE"]
@@ -327,16 +380,22 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
             last_err = e
             corr_e = None
 
-    if corr_e is None and "mp2" in method_preference:
+    # MP2 fallback / preference
+    if corr_e is None and "mp2" in [m.lower() for m in method_preference]:
         try:
-            mp2 = mp.MP2(mf)
-            mp2.verbose = CONFIG["PYSCF_VERBOSE"]
-            res = mp2.kernel()
+            if pyscf_frozen_arg == 'set_frozen':
+                mymp = mp.MP2(mf)
+                mymp.set_frozen()
+                res = mymp.run()
+            else:
+                mymp = mp.MP2(mf, frozen=pyscf_frozen_arg) if pyscf_frozen_arg is not None else mp.MP2(mf)
+                mymp.verbose = CONFIG["PYSCF_VERBOSE"]
+                res = mymp.run()
             mp2_corr = None
             if hasattr(res, "e_corr"):
                 mp2_corr = float(res.e_corr)
-            elif hasattr(mp2, "e_corr"):
-                mp2_corr = float(mp2.e_corr)
+            elif hasattr(mymp, "e_corr"):
+                mp2_corr = float(mymp.e_corr)
             elif hasattr(res, "e_tot"):
                 mp2_corr = float(res.e_tot - scf_e)
             else:
@@ -349,34 +408,36 @@ def compute_scf_and_correlation(symbols, coords, basis, method_preference=("ccsd
             corr_e = None
 
     if corr_e is None:
-        raise RuntimeError("No correlation energy available for basis {} (last error: {})".format(basis, last_err))
+        raise RuntimeError(f"No correlation energy available for basis {basis} (last error: {last_err})")
 
-    # Return (scf_total, correlation_energy) where correlation_energy is the correlation portion
     return float(scf_e), float(corr_e)
 
 
 # ---------------------
-# High-level CBS energy: evaluate molecule at two basis sets and return CBS energy
+# High-level CBS energy: can run bs1/bs2 concurrently with workers
 # ---------------------
-def compute_cbs_energy(symbols, coords, basis_pair=None, cfg=CONFIG):
+def compute_cbs_energy(symbols, coords, basis_pair=None, cfg=CONFIG, frozen_token=None, method_preference=("ccsd(t)", "mp2"), workers: int = 1):
     if basis_pair is None:
         basis_pair = cfg["BASIS_SETS"]
     bs1, bs2 = basis_pair
 
-    scf1, corr1 = compute_scf_and_correlation(symbols, coords, bs1)
-    scf2, corr2 = compute_scf_and_correlation(symbols, coords, bs2)
+    if workers is not None and int(workers) > 1:
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            fut1 = ex.submit(compute_scf_and_correlation, symbols, coords, bs1, frozen_token, method_preference)
+            fut2 = ex.submit(compute_scf_and_correlation, symbols, coords, bs2, frozen_token, method_preference)
+            scf1, corr1 = fut1.result()
+            scf2, corr2 = fut2.result()
+    else:
+        scf1, corr1 = compute_scf_and_correlation(symbols, coords, bs1, frozen_token, method_preference)
+        scf2, corr2 = compute_scf_and_correlation(symbols, coords, bs2, frozen_token, method_preference)
 
     E_cbs, E_hf_cbs, E_corr_cbs = cbs_compose(corr1, corr2, scf1, scf2, cfg=cfg)
-    debug = {
-        "scf1": scf1, "scf2": scf2,
-        "corr1": corr1, "corr2": corr2,
-        "E_hf_cbs": E_hf_cbs, "E_corr_cbs": E_corr_cbs
-    }
+    debug = {"scf1": scf1, "scf2": scf2, "corr1": corr1, "corr2": corr2, "E_hf_cbs": E_hf_cbs, "E_corr_cbs": E_corr_cbs}
     return E_cbs, E_hf_cbs, E_corr_cbs, debug
 
 
 # ---------------------
-# Caching wrapper for energy evaluations (keyed by rounded internal coordinates)
+# Caching wrapper (keyed by internals + frozen_token + method)
 # ---------------------
 class EnergyCache:
     def __init__(self, symbols, internals, coords0, rounding=8):
@@ -386,24 +447,29 @@ class EnergyCache:
         self.rounding = rounding
         self._cache = {}
 
-    def _key_from_internals(self, internal_vector):
-        return tuple([round(float(x), self.rounding) for x in internal_vector])
+    def _key_from_internals(self, internal_vector, frozen_token, method_name, basis_pair):
+        base_key = tuple([round(float(x), self.rounding) for x in internal_vector])
+        return (base_key, frozen_token, str(method_name), tuple(basis_pair))
 
-    def evaluate(self, internal_vector, basis_pair=None):
-        k = self._key_from_internals(internal_vector)
+    def evaluate(self, internal_vector, basis_pair=None, frozen_token=None, method_name="CCSD(T)", workers: int = 1):
+        k = self._key_from_internals(internal_vector, frozen_token, method_name, basis_pair or CONFIG["BASIS_SETS"])
         if k in self._cache:
             return self._cache[k]
         cart = internal_to_cartesian(self.coords0, self.internals, internal_vector)
-        E_cbs, E_hf_cbs, E_corr_cbs, debug = compute_cbs_energy(self.symbols, cart, basis_pair)
+        method_pref = ("ccsd(t)", "mp2") if str(method_name).upper().startswith("CCSD") else ("mp2",)
+        E_cbs, E_hf_cbs, E_corr_cbs, debug = compute_cbs_energy(self.symbols, cart, basis_pair, cfg=CONFIG,
+                                                                 frozen_token=frozen_token,
+                                                                 method_preference=method_pref,
+                                                                 workers=workers)
         res = {"E_cbs": E_cbs, "E_hf_cbs": E_hf_cbs, "E_corr_cbs": E_corr_cbs, "cart": cart, "debug": debug}
         self._cache[k] = res
         return res
 
 
 # ---------------------
-# Optimization driver (collecting history)
+# Optimization driver (L-BFGS-B) that accepts the same params as previous script
 # ---------------------
-def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
+def optimize_geometry(symbols, coords0, basis_pair=None, options=None, frozen_token=None, method_name="CCSD(T)", workers: int = 1, energy_accept_tol: Optional[float] = None, debug: bool = False):
     if options is None:
         options = {}
     cfg = CONFIG
@@ -427,29 +493,27 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
 
     def callback(xk):
         try:
-            res = energy_cache.evaluate(xk, basis_pair=basis_pair)
+            res = energy_cache.evaluate(xk, basis_pair=basis_pair, frozen_token=frozen_token, method_name=method_name, workers=workers)
             E = res["E_cbs"]
             last["count"] += 1
-            # Detailed printout: CBS + SCF/corr components
             dbg = res.get("debug", {})
-            scf1 = dbg.get("scf1")
-            scf2 = dbg.get("scf2")
-            corr1 = dbg.get("corr1")
-            corr2 = dbg.get("corr2")
-            E_hf_cbs = dbg.get("E_hf_cbs")
-            E_corr_cbs = dbg.get("E_corr_cbs")
+            scf1 = dbg.get("scf1"); scf2 = dbg.get("scf2")
+            corr1 = dbg.get("corr1"); corr2 = dbg.get("corr2")
+            E_hf_cbs = dbg.get("E_hf_cbs"); E_corr_cbs = dbg.get("E_corr_cbs")
             print(f"[opt step {last['count']}] E_cbs = {E:.10f} Ha  (E_hf_cbs={E_hf_cbs:.10f}, E_corr_cbs={E_corr_cbs:.10f})")
             if scf1 is not None:
                 print(f"    scf (small) = {scf1:.10f}, scf (big) = {scf2:.10f}")
             if corr1 is not None:
                 print(f"    corr (small) = {corr1:.10f}, corr (big) = {corr2:.10f}")
             history.append({'cycle': last["count"], 'energy': float(E)})
-            # print a short internals summary (min/max)
             xi = np.array(xk, dtype=float)
             print(f"    internals (n={len(xi)}): min={xi.min():.6e}, max={xi.max():.6e}, rms={np.sqrt(np.mean(xi**2)):.6e}")
-            # optionally print cartesian RMS displacement from initial guess for diagnostics
             rms_cart = np.sqrt(np.mean((res["cart"].reshape(-1) - np.array(coords0).reshape(-1))**2))
             print(f"    cart RMS from initial: {rms_cart:.6e} Å")
+            if energy_accept_tol is not None and last["E"] is not None:
+                # extra sanity check (not native to L-BFGS-B): print if last step improved less than threshold
+                ediff = last["E"] - E
+                print(f"    ΔE (prev - current) = {ediff:.4e} Ha (energy_accept_tol={energy_accept_tol})")
             last["E"] = E
         except Exception as e:
             print(f"[callback] evaluation failed: {e}", file=sys.stderr)
@@ -457,14 +521,14 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
     x0 = np.array(values0, dtype=float)
     # initial energy entry
     try:
-        E0 = energy_cache.evaluate(x0, basis_pair=basis_pair)["E_cbs"]
+        E0 = energy_cache.evaluate(x0, basis_pair=basis_pair, frozen_token=frozen_token, method_name=method_name, workers=workers)["E_cbs"]
         history.append({'cycle': 0, 'energy': float(E0)})
         print(f"[init] E_cbs (initial) = {E0:.10f} Ha")
     except Exception as e:
         print("[init] initial energy eval failed:", e, file=sys.stderr)
 
     opt_res = minimize(
-        lambda x: energy_cache.evaluate(x, basis_pair=basis_pair)["E_cbs"],
+        lambda x: energy_cache.evaluate(x, basis_pair=basis_pair, frozen_token=frozen_token, method_name=method_name, workers=workers)["E_cbs"],
         x0,
         method="L-BFGS-B",
         bounds=bounds,
@@ -479,7 +543,7 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
     )
 
     x_opt = opt_res.x
-    final = energy_cache.evaluate(x_opt, basis_pair=basis_pair)
+    final = energy_cache.evaluate(x_opt, basis_pair=basis_pair, frozen_token=frozen_token, method_name=method_name, workers=workers)
     final_cart = final["cart"]
     result = {
         "opt_result": opt_res,
@@ -496,63 +560,103 @@ def optimize_geometry(symbols, coords0, basis_pair=None, options=None):
 
 
 # ---------------------
-# Helper to update CONFIG from params
+# Helper to update CONFIG from params (now supports all params requested)
 # ---------------------
 def _update_config_from_params(params):
-    # params keys: X1, X2, X1hf, X2hf, beta, basis1, basis2, pyscf_threads, pyscf_max_memory, spin, pyscf_verbose
     global DEFAULT_SPIN
     if params is None:
         return
     try:
-        if "X1" in params:
+        if "X1" in params and params["X1"] is not None:
             CONFIG["X1_CORR"] = float(params["X1"])
-        if "X2" in params:
+        if "X2" in params and params["X2"] is not None:
             CONFIG["X2_CORR"] = float(params["X2"])
-        if "X1hf" in params:
+        if "X1hf" in params and params["X1hf"] is not None:
             CONFIG["X1_HF"] = float(params["X1hf"])
-        if "X2hf" in params:
+        if "X2hf" in params and params["X2hf"] is not None:
             CONFIG["X2_HF"] = float(params["X2hf"])
-        if "beta" in params:
+        if "beta" in params and params["beta"] is not None:
             CONFIG["BETA_HF"] = float(params["beta"])
-        if "pyscf_threads" in params:
+        if "pyscf_threads" in params and params["pyscf_threads"] is not None:
             nt = int(params["pyscf_threads"])
             CONFIG["PYSCF_NTHREADS"] = nt
             lib.num_threads(nt)
-        if "pyscf_max_memory" in params:
+        if "pyscf_max_memory" in params and params["pyscf_max_memory"] is not None:
             CONFIG["PYSCF_MAX_MEMORY"] = int(params["pyscf_max_memory"])
-        if "pyscf_verbose" in params:
+        if "pyscf_verbose" in params and params["pyscf_verbose"] is not None:
             CONFIG["PYSCF_VERBOSE"] = int(params["pyscf_verbose"])
-        # basis sets overrides
         if params.get("basis1") and params.get("basis2"):
             CONFIG["BASIS_SETS"] = (params["basis1"], params["basis2"])
+
+        # map maxcycle to LBFGSB_MAXITER
+        if "maxcycle" in params and params["maxcycle"] is not None:
+            CONFIG["LBFGSB_MAXITER"] = int(params["maxcycle"])
+        # map energy_crit and energy_accept_tol to ENERGY_TOL if provided (user controls both)
+        if "energy_crit" in params and params["energy_crit"] is not None:
+            try:
+                CONFIG["ENERGY_TOL"] = float(params["energy_crit"])
+            except Exception:
+                pass
+        if "energy_accept_tol" in params and params["energy_accept_tol"] is not None:
+            try:
+                # keep as separate param as well; it's used as extra check in callback
+                params["_energy_accept_tol_internal"] = float(params["energy_accept_tol"])
+            except Exception:
+                pass
+        # keep fac / cut in params for API parity (not used by L-BFGS internals)
         # spin override
-        if "spin" in params:
+        if "spin" in params and params["spin"] is not None:
             DEFAULT_SPIN = int(params["spin"])
     except Exception:
-        # non-fatal; ignore invalid values (opt_cli should normalize)
         pass
 
 
 # ---------------------
-# Programmatic API
+# Programmatic API (accepts full param set)
 # ---------------------
 def run_optimization(params: dict, outputs_dir: Path):
     """
-    params: dict normalized by opt_cli.prepare_options_from_params(...)
-    outputs_dir: Path where outputs must be stored (PyCBS-OUTPUTS)
-    Returns: dict with keys 'history', 'final_energy', 'final_cart', 'symbols', 'outputs'
+    params: dict expected keys (a superset of):
+        input_xyz, method, X1, X2, X1hf, X2hf, beta, maxcycle, fac, spin,
+        debug, energy_accept_tol, workers, energy_crit, cut, frozen, basis1, basis2, pyscf_threads,...
+    outputs_dir: Path where outputs must be stored
     """
     outputs_dir = Path(outputs_dir)
     outputs_dir.mkdir(parents=True, exist_ok=True)
 
     _update_config_from_params(params)
 
-    input_xyz = params.get("input_xyz")
+    input_xyz = params.get("input_xyz") or params.get("input") or params.get("geometry")
     if not input_xyz:
         raise ValueError("params must include 'input_xyz' (path to input XYZ)")
     symbols, coords0 = read_xyz(input_xyz)
 
-    # determine basis pair (params can override)
+    # normalize frozen param
+    frozen_raw = params.get("frozen", None)
+    try:
+        frozen_token = normalize_frozen_param(frozen_raw)
+    except Exception as e:
+        raise ValueError(f"Invalid frozen parameter: {e}")
+
+    # method selection
+    method = params.get("method", "CCSD(T)")
+    method_name = str(method)
+
+    # workers for concurrent basis evaluation
+    workers = int(params.get("workers", 1) or 1)
+
+    # energy_accept_tol (optional extra check used in callback)
+    energy_accept_tol = params.get("energy_accept_tol", None)
+    if energy_accept_tol is not None:
+        try:
+            energy_accept_tol = float(energy_accept_tol)
+        except Exception:
+            energy_accept_tol = None
+
+    # debug flag
+    debug = bool(params.get("debug", False))
+
+    # basis pair override
     if params.get("basis1") and params.get("basis2"):
         basis_pair = (params["basis1"], params["basis2"])
     else:
@@ -560,7 +664,13 @@ def run_optimization(params: dict, outputs_dir: Path):
 
     print("Starting L-BFGS-B optimization with basis pair:", basis_pair)
     print(f"PySCF verbosity = {CONFIG['PYSCF_VERBOSE']}, threads = {CONFIG['PYSCF_NTHREADS']}, max mem = {CONFIG['PYSCF_MAX_MEMORY']} MB")
-    res = optimize_geometry(symbols, coords0, basis_pair=basis_pair)
+    if frozen_token is None:
+        print("Frozen core: none (all electrons correlated)")
+    else:
+        print("Frozen core token:", frozen_token)
+    print("Method:", method_name, "workers:", workers, "debug:", debug)
+
+    res = optimize_geometry(symbols, coords0, basis_pair=basis_pair, frozen_token=frozen_token, method_name=method_name, workers=workers, energy_accept_tol=energy_accept_tol, debug=debug)
 
     final_cart = res["final_cart"]
     final_energy = float(res["final_energy"])
@@ -576,46 +686,64 @@ def run_optimization(params: dict, outputs_dir: Path):
 
 
 # ---------------------
-# CLI entrypoint (backwards compatible)
+# CLI entrypoint exposing same args as previous script (compat)
 # ---------------------
 def _cli_main():
     parser = argparse.ArgumentParser(description="L-BFGS-B CBS geometry optimizer (internals + L-BFGS).")
-    parser.add_argument("input_xyz", help="Input XYZ file")
-    parser.add_argument("--output", "-o", default="opt_out.xyz", help="Output optimized XYZ")
-    parser.add_argument("--basis1", default=None, help="Smaller basis set override")
-    parser.add_argument("--basis2", default=None, help="Larger basis set override")
-    parser.add_argument("--X1", type=float, default=None)
-    parser.add_argument("--X2", type=float, default=None)
-    parser.add_argument("--X1hf", type=float, default=None)
-    parser.add_argument("--X2hf", type=float, default=None)
+    parser.add_argument("-i", "--input", required=True, help="Input XYZ file")
+    parser.add_argument("-o", "--out", default="PyCBS-OUTPUTS", help="Outputs directory")
+    parser.add_argument("--method", default="CCSD(T)")
+    parser.add_argument("--maxcycle", type=int, default=CONFIG["LBFGSB_MAXITER"])
+    parser.add_argument("--fac", type=float, default=0.05, help="(API parity; not used by L-BFGS internals)")
+    parser.add_argument("--x1", type=float, default=None)
+    parser.add_argument("--x2", type=float, default=None)
+    parser.add_argument("--x1hf", type=float, default=None)
+    parser.add_argument("--x2hf", type=float, default=None)
     parser.add_argument("--beta", type=float, default=None)
     parser.add_argument("--spin", type=int, default=0)
+    parser.add_argument("--debug", action="store_true", help="Enable verbose diagnostics")
+    parser.add_argument("--energy_accept_tol", type=float, default=None, help="Per-move acceptance energy (Ha). Used as optional diagnostic check.")
+    parser.add_argument("--workers", type=int, default=1, help="Number of workers for concurrent basis evaluations (default 1)")
+    parser.add_argument("--energy_crit", type=float, default=CONFIG["ENERGY_TOL"], help="Cycle convergence energy (Ha). Mapped to ftol for L-BFGS-B.")
+    parser.add_argument("--cut", type=float, default=0.75, help="(API parity; not used by L-BFGS internals)")
+    parser.add_argument("--frozen", type=str, default=None, help="Frozen core option. Examples: '2', '[0,1]', '0,1,16', 'set_frozen' (auto).")
+    parser.add_argument("--basis1", default=None, help="Smaller basis override")
+    parser.add_argument("--basis2", default=None, help="Larger basis override")
     parser.add_argument("--pyscf_threads", type=int, default=None, help="Set PySCF thread count")
     parser.add_argument("--pyscf_max_memory", type=int, default=None, help="Set PySCF max memory (MB)")
     parser.add_argument("--pyscf_verbose", type=int, default=None, help="PySCF verbosity (0=quiet, >0 verbose)")
     args = parser.parse_args()
 
     params = {
-        "input_xyz": args.input_xyz,
+        "input_xyz": args.input,
+        "method": args.method,
+        "X1": args.x1,
+        "X2": args.x2,
+        "X1hf": args.x1hf,
+        "X2hf": args.x2hf,
+        "beta": args.beta,
+        "maxcycle": args.maxcycle,
+        "fac": args.fac,
+        "spin": args.spin,
+        "debug": args.debug,
+        "energy_accept_tol": args.energy_accept_tol,
+        "workers": args.workers,
+        "energy_crit": args.energy_crit,
+        "cut": args.cut,
+        "frozen": args.frozen,
         "basis1": args.basis1,
         "basis2": args.basis2,
-        "X1": args.X1,
-        "X2": args.X2,
-        "X1hf": args.X1hf,
-        "X2hf": args.X2hf,
-        "beta": args.beta,
-        "spin": args.spin,
         "pyscf_threads": args.pyscf_threads,
         "pyscf_max_memory": args.pyscf_max_memory,
-        "pyscf_verbose": args.pyscf_verbose,
+        "pyscf_verbose": args.pyscf_verbose
     }
-    outputs_dir = Path.cwd() / "PyCBS-OUTPUTS"
+    outputs_dir = Path(args.out)
     result = run_optimization(params, outputs_dir)
     # also write the final single-file xyz from this CLI flag
-    write_xyz(args.output, result["symbols"], result["final_cart"],
+    write_xyz(Path.cwd() / "optimized.xyz", result["symbols"], result["final_cart"],
               comment=f"CBS opt energy {result['final_energy']:.10f} Ha")
     print("Optimization finished. Final CBS energy (Ha):", result["final_energy"])
-    print("Wrote optimized geometry to:", args.output)
+    print("Wrote optimized geometry to:", Path.cwd() / "optimized.xyz")
     print("Cycle energies and final XYZ written to:", outputs_dir)
 
 
