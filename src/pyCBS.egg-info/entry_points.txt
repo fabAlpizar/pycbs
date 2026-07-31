@@ -1,0 +1,3 @@
+[console_scripts]
+pycbs = pycbs.cli:main
+pycbs-opt = pycbs.opt_cli:main

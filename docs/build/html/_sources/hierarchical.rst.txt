@@ -1,0 +1,90 @@
+Hierarchical Numbers
+====================
+
+.. _hierarchical_numbers:
+
+Overview
+--------
+
+For numerical stability and improved extrapolation performance,
+the program uses optimized hierarchical numbers associated with
+each basis set.
+
+These values are used internally in the Hartree–Fock and correlation
+energy extrapolation models and are recommended for production use.
+
+Hartree–Fock Hierarchical Numbers
+---------------------------------
+
+Recommended optimized exponents for HF extrapolations:
+
+.. code-block:: text
+
+   STO-2G     → 1.00
+   STO-3G     → 1.50
+   MINI       → 1.73
+   MINI-s     → 1.77
+   MIDI       → 1.82
+   MIDI!      → 1.84
+   3-21G      → 1.85
+   3-21++G    → 1.87
+   STO-6G     → 2.02
+   3-21GSP    → 2.07
+   4-22GSP    → 2.35
+   4-31G      → 2.37
+
+   VDZ        → 3.02
+   AVDZ       → 3.12
+   d-AVDZ     → 3.14
+
+   VTZ        → 3.64
+   AVTZ       → 3.73
+   d-AVTZ     → 3.76
+
+   VQZ        → 4.28
+   AVQZ       → 4.41
+   d-AVQZ     → 4.44
+
+   V5Z        → 5.14
+   AV5Z       → 5.34
+   d-AV5Z     → 5.38
+
+   V6Z        → 5.88
+   AV6Z       → 6.23
+
+   V7T        → 6.43
+
+
+Correlation Energy Hierarchical Numbers
+----------------------------------------
+
+Recommended optimized exponents for correlation energy extrapolations:
+
+.. code-block:: text
+
+   STO-2G     → 1.327
+   STO-3G     → 1.334
+   MINI       → 1.313
+   MINI-s     → 1.324
+   MIDI       → 1.495
+   MIDI!      → 1.679
+
+   3-21G      → 1.491
+   3-21++G    → 1.515
+   STO-6G     → 1.336
+   4-31G      → 1.501
+
+   VDZ        → 1.852
+   AVDZ       → 1.954
+
+   VTZ        → 2.639
+   AVTZ       → 2.812
+
+   VQZ        → 3.616
+   AVQZ       → 3.858
+
+   V5Z        → 4.687
+   AV5Z       → 4.979
+
+   V6Z        → 5.780
+

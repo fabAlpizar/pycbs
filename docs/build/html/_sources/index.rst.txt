@@ -10,8 +10,8 @@ pyCBS: Python Complete Basis Set Tools
    :align: center
    :width: 200px
 
-**pyCBS** is a high-performance Python package designed to perform Complete Basis Set extrapolations accros several schemes. 
-It also provides a novel geometrical optimization implementation via de Succesive Quadratic Minimization (SQM) or the gradient based L-BFGS-B method, in which you obtain both CBS-optimized geometry and energy .
+**pyCBS** is a high-performance Python package designed to perform Complete Basis Set (CBS) extrapolations accros several schemes. 
+
 
 Features
 ========
@@ -20,33 +20,20 @@ Features
 
 **1. Extrapolation**
 
-Support for multiple Complete Basis Set (CBS) extrapolation schemes,
-organized by energy component.
+The software provides full support for multiple CBS extrapolation schemes, which are systematically organized by energy component. To achieve high-precision energy limits, the calculations are divided into two primary contributions:
 
-1.1 Hartree–Fock schemes
+- Hartree-Fock (HF) Energy Schemes: Includes specialized formulations for the mean-field energy convergence, featuring methods by Jensen, Klopper, Feller, Truhlar and Varandas.
 
-- Jensen
-- Klopper
-- Feller
-- Truhlar
-- HF-E
+- Correlation Energy Schemes: Dedicated to capturing electron correlation effects through advanced models such as Truhlar, Huh-Lee, Bakowies, Okoshi-Atsumi-Nakai, Halkier-Helgaker, Martin and Varandas.
 
-1.2 Correlation energy schemes
-
-- Truhlar
-- Huh–Lee
-- Bakowies
-- OANc
-- Halkier–Helgaker
-- Martin
-- USPE
-- USTE
 
 
 **2. Optimization**
 
-- L-BFGS-B
-- SQM
+The program features robust geometry and structural optimization capabilities. Users can utilize advanced mathematical minimization and electronic structure refinement schemes, including:
+
+- L-BFGS-B gradient-based optimization
+- Successive Quadratic Minimization (SQM)
 
 
 .. toctree::

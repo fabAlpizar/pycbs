@@ -1,0 +1,222 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="y" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Basis Sets &mdash; pyCBS 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=26611e44"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Hierarchical Numbers" href="hierarchical.html" />
+    <link rel="prev" title="Theoretical Background" href="TC.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            pyCBS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory &amp; Computation</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="TC.html">Theoretical Background</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Basis Sets</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#supported-basis-sets">Supported Basis Sets</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#subminimal-basis-sets">Subminimal Basis Sets</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#pople-basis-sets">Pople Basis Sets</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#huzinaga-basis-set">Huzinaga Basis set</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#minimal-basis-set">Minimal Basis set</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#double-zeta-correlation-consistent-dunning-type-basis-set">Double-zeta Correlation-Consistent Dunning-type Basis set</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#extended-basis-set">Extended Basis set</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#correlation-consistent-dunning-type-basis-set">Correlation-Consistent Dunning-type Basis set</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#f12-optimized-basis-sets">F12-Optimized Basis Sets</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="hierarchical.html">Hierarchical Numbers</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Setting up the Config File</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="extrapolations.html">Extrapolation Schemes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optimization.html">Geometrical optimization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Analyze the Results</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="outputs.html">Output Analysis Report</a></li>
+<li class="toctree-l1"><a class="reference internal" href="opto.html">Output Files Overview</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Academic Record</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="citing.html">Citing pyCBS</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">pyCBS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Basis Sets</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/basis.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="basis-sets">
+<h1>Basis Sets<a class="headerlink" href="#basis-sets" title="Link to this heading"></a></h1>
+<section id="overview">
+<span id="id1"></span><h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The program supports the following Gaussian basis sets.
+All names are case-insensitive and correspond to the internal
+hierarchical number definitions used for extrapolation.</p>
+</section>
+<section id="supported-basis-sets">
+<h2>Supported Basis Sets<a class="headerlink" href="#supported-basis-sets" title="Link to this heading"></a></h2>
+<section id="subminimal-basis-sets">
+<h3>Subminimal Basis Sets<a class="headerlink" href="#subminimal-basis-sets" title="Link to this heading"></a></h3>
+<section id="pople-basis-sets">
+<h4>Pople Basis Sets<a class="headerlink" href="#pople-basis-sets" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>STO-2G</p></li>
+<li><p>STO-3G</p></li>
+<li><p>STO-6G</p></li>
+<li><p>3-21G</p></li>
+<li><p>3-21++G</p></li>
+<li><p>3-21GSP</p></li>
+<li><p>4-22GSP</p></li>
+<li><p>4-31G</p></li>
+</ul>
+</section>
+<section id="huzinaga-basis-set">
+<h4>Huzinaga Basis set<a class="headerlink" href="#huzinaga-basis-set" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>MINI</p></li>
+<li><p>MINI-s</p></li>
+<li><p>MIDI</p></li>
+<li><p>MIDI!</p></li>
+</ul>
+</section>
+</section>
+<section id="minimal-basis-set">
+<h3>Minimal Basis set<a class="headerlink" href="#minimal-basis-set" title="Link to this heading"></a></h3>
+<section id="double-zeta-correlation-consistent-dunning-type-basis-set">
+<h4>Double-zeta Correlation-Consistent Dunning-type Basis set<a class="headerlink" href="#double-zeta-correlation-consistent-dunning-type-basis-set" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>VDZ  (cc-pVDZ)</p></li>
+<li><p>AVDZ (aug-cc-pVDZ)</p></li>
+<li><p>d-AVDZ (d-aug-cc-pVDZ)</p></li>
+</ul>
+</section>
+</section>
+<section id="extended-basis-set">
+<h3>Extended Basis set<a class="headerlink" href="#extended-basis-set" title="Link to this heading"></a></h3>
+<section id="correlation-consistent-dunning-type-basis-set">
+<h4>Correlation-Consistent Dunning-type Basis set<a class="headerlink" href="#correlation-consistent-dunning-type-basis-set" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>VTZ  (cc-pVTZ)</p></li>
+<li><p>AVTZ (aug-cc-pVTZ)</p></li>
+<li><p>d-AVTZ (d-aug-cc-pVTZ)</p></li>
+<li><p>VQZ  (cc-pVQZ)</p></li>
+<li><p>AVQZ (aug-cc-pVQZ)</p></li>
+<li><p>d-AVQZ (d-aug-cc-pVQZ)</p></li>
+<li><p>V5Z  (cc-pV5Z)</p></li>
+<li><p>AV5Z (aug-cc-pV5Z)</p></li>
+<li><p>d-AV5Z (d-aug-cc-pV5Z)</p></li>
+<li><p>V6Z  (cc-pV6Z)</p></li>
+<li><p>AV6Z (aug-cc-pV6Z)</p></li>
+<li><p>V7T  (cc-pV7Z)</p></li>
+</ul>
+</section>
+<section id="f12-optimized-basis-sets">
+<h4>F12-Optimized Basis Sets<a class="headerlink" href="#f12-optimized-basis-sets" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>VDZ-F12  (cc-pVDZ-F12-OptRI)</p></li>
+<li><p>VTZ-F12  (cc-pVTZ-F12-OptRI)</p></li>
+<li><p>VQZ-F12  (cc-pVQZ-F12-OptRI)</p></li>
+</ul>
+</section>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="TC.html" class="btn btn-neutral float-left" title="Theoretical Background" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="hierarchical.html" class="btn btn-neutral float-right" title="Hierarchical Numbers" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Fabio J. Delgado-Alpízar; Alberto Guerra-Barroso; Antonio J.C. Varandas.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

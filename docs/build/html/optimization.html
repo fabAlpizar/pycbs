@@ -8,14 +8,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Geometrical optimization &mdash; pyCBS 1.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
 
   
       <script src="_static/jquery.js?v=5d32c60e"></script>
       <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
       <script src="_static/documentation_options.js?v=26611e44"></script>
-      <script src="_static/doctools.js?v=9bcbadda"></script>
-      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -61,6 +61,13 @@
 <li class="toctree-l3"><a class="reference internal" href="#sqm">SQM</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="#frozen-core-option">Frozen-core option</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#usage-notes">Usage notes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#examples">Examples</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#automatic-core-detection">Automatic core detection</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#remarks">Remarks</a></li>
 </ul>
 </li>
 </ul>
@@ -155,11 +162,98 @@ updates to molecular geometries.</p>
 <span class="na">debug</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">False</span><span class="w">                  </span><span class="c1">; Print detailed per-cycle information, default: False</span>
 <span class="na">output_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">./results</span><span class="w">         </span><span class="c1">; Directory to store cycle geometries and CSV, default: ./results</span>
 <span class="na">energy_accept_tol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1e-6</span><span class="w">       </span><span class="c1">; Minimum energy improvement to accept step, default: 1e-6</span>
-<span class="na">geom_rebuild</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">True</span><span class="w">             </span><span class="c1">; Regenerate internal coordinates each cycle, default: True</span>
-<span class="na">label_internals</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">True</span><span class="w">          </span><span class="c1">; Include human-readable labels for bonds/angles/dihedrals, default: True</span>
 </pre></div>
 </div>
 </section>
+</section>
+<section id="frozen-core-option">
+<h2>Frozen-core option<a class="headerlink" href="#frozen-core-option" title="Link to this heading"></a></h2>
+<p>By default, MP2  and CCSD(T) calculations correlate all electrons in all available orbitals. To
+reduce computational cost while preserving chemically relevant correlation, this
+package supports a frozen-core approximation following the same conventions used
+in PySCF.</p>
+<p>Freezing core orbitals is often a reliable approximation because core electrons
+usually contribute very little to correlation energy differences. Therefore,
+excluding them from the correlation treatment significantly reduces computational
+time while maintaining good accuracy for most chemical applications.</p>
+<section id="usage-notes">
+<h3>Usage notes<a class="headerlink" href="#usage-notes" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>The <code class="docutils literal notranslate"><span class="pre">frozen</span></code> keyword accepts either:</p>
+<ul>
+<li><p>an integer <code class="docutils literal notranslate"><span class="pre">n</span></code> — freezes the <code class="docutils literal notranslate"><span class="pre">n</span></code> lowest-energy occupied orbitals
+(typically core orbitals).</p></li>
+<li><p>a list of <strong>0-based orbital indices</strong> to freeze specific orbitals, allowing
+fine control over which occupied or virtual orbitals are excluded from the
+correlation calculation.</p></li>
+</ul>
+</li>
+<li><p>Orbital indexing follows the standard <strong>0-based indexing</strong> convention used in Python.</p></li>
+</ul>
+</section>
+<section id="examples">
+<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h3>
+<p>It is shown the MP2 example but it works as well with CCSD(T) method.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># freeze 2 core orbitals</span>
+<span class="n">mymp</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">MP2</span><span class="p">(</span><span class="n">mf</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+
+<span class="c1"># freeze specific orbitals using indices</span>
+<span class="n">mymp</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">MP2</span><span class="p">(</span><span class="n">mf</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+
+<span class="c1"># freeze 2 core orbitals and 3 virtual orbitals</span>
+<span class="n">mymp</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">MP2</span><span class="p">(</span><span class="n">mf</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">16</span><span class="p">,</span><span class="mi">17</span><span class="p">,</span><span class="mi">18</span><span class="p">])</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="automatic-core-detection">
+<h3>Automatic core detection<a class="headerlink" href="#automatic-core-detection" title="Link to this heading"></a></h3>
+<p>The number of orbitals to freeze can also be determined automatically using
+PySCF's internal rule:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mymp</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">MP2</span><span class="p">(</span><span class="n">mf</span><span class="p">)</span><span class="o">.</span><span class="n">set_frozen</span><span class="p">()</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">set_frozen()</span></code> method automatically freezes the core orbitals based on
+the total number of core electrons for each atom in the molecule. The current
+rule follows the same convention used by the ORCA quantum chemistry program.</p>
+<p>When the <code class="docutils literal notranslate"><span class="pre">frozen</span></code> option is provided in the configuration file, the value is
+passed directly to the correlated electronic structure calculation
+(MP2 or CCSD(T)). Therefore, the behavior is identical to the native PySCF
+implementation.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">frozen</span></code> is not specified, all orbitals are correlated by default.</p>
+</section>
+</section>
+<section id="remarks">
+<h2>Remarks<a class="headerlink" href="#remarks" title="Link to this heading"></a></h2>
+<p>We strongly recommend using a <strong>specific and descriptive filename</strong> for the
+input <code class="docutils literal notranslate"><span class="pre">.xyz</span></code> geometry used in the optimization.</p>
+<p>The program automatically generates output filenames by taking the base name
+of the input file and appending the optimizer used in the calculation
+(<code class="docutils literal notranslate"><span class="pre">sqm</span></code> or <code class="docutils literal notranslate"><span class="pre">lbfgs</span></code>). For example:</p>
+<ul>
+<li><p>Input geometry:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">molecule_opt</span><span class="o">.</span><span class="n">xyz</span>
+</pre></div>
+</div>
+</li>
+<li><p>Output files:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">molecule_lbfgs_final_opt</span><span class="o">.</span><span class="n">xyz</span>
+<span class="n">molecule_sqm_final_opt</span><span class="o">.</span><span class="n">xyz</span>
+<span class="n">molecule_lbfgs_cycles_energies</span><span class="o">.</span><span class="n">csv</span>
+<span class="n">molecule_sqm_cycles_energies</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<p>Because of this behavior, using clear and unique input filenames helps avoid
+confusion or accidental overwriting when running multiple optimizations.</p>
+<p>A recommended naming convention is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="n">system</span><span class="o">&gt;</span><span class="n">_</span><span class="o">&lt;</span><span class="n">method</span><span class="o">&gt;.</span><span class="n">xyz</span>
+</pre></div>
+</div>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ethanol_ccsdt</span><span class="o">.</span><span class="n">xyz</span>
+</pre></div>
+</div>
 </section>
 </section>
 
@@ -174,7 +268,7 @@ updates to molecular geometries.</p>
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2026, Fabio J. Delgado-Alpizar; Alberto Guerra-Barroso; Antonio J.C. Varandas.</p>
+    <p>&#169; Copyright 2026, Fabio J. Delgado-Alpízar; Alberto Guerra-Barroso; Antonio J.C. Varandas.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
