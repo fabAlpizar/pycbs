@@ -20,6 +20,7 @@
 
 # Documentation 
 
+To understand how pyCBS works, refer to our [Documentation](https://fabalpizar.github.io/pycbs/).
 # Official Paper
 
 ## Features
