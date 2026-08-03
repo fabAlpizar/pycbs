@@ -22,7 +22,7 @@
 
 To understand how pyCBS works, refer to our [Documentation](https://fabalpizar.github.io/pycbs/).
 # Official Paper
-
+The archived release of **pyCBS** is available on Zenodo: **https://doi.org/10.5281/zenodo.21767417**
 ## Features
 
 - Perform CBS extrapolations for energy and geometry.
@@ -32,7 +32,7 @@ To understand how pyCBS works, refer to our [Documentation](https://fabalpizar.g
 - Compatible with PySCF for reliable quantum chemistry calculations.
 - Easy to extend with additional basis sets or methods.
 
-The archived release of **pyCBS** is available on Zenodo: **https://doi.org/10.5281/zenodo.21767417**
+
 
 ## Installation
 
