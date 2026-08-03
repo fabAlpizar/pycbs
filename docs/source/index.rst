@@ -6,7 +6,7 @@
 pyCBS: Python Complete Basis Set Tools
 =====================================
 
-.. image:: _static/logo_pycbs.jpeg
+.. image:: _static/pyCBS.png
    :align: center
    :width: 200px
 
@@ -56,14 +56,6 @@ The program features robust geometry and structural optimization capabilities. U
 
    extrapolations
    optimization
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Analyze the Results
-
-   outputs
-   opto
-
 
 .. toctree::
    :maxdepth: 1
