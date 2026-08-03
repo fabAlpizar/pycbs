@@ -1,0 +1,286 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="y" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Geometrical optimization &mdash; pyCBS 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=26611e44"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Citing pyCBS" href="citing.html" />
+    <link rel="prev" title="Extrapolation Schemes" href="extrapolations.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            pyCBS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory &amp; Computation</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="TC.html">Theoretical Background</a></li>
+<li class="toctree-l1"><a class="reference internal" href="basis.html">Basis Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hierarchical.html">Hierarchical Numbers</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Setting up the Config File</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="extrapolations.html">Extrapolation Schemes</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Geometrical optimization</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#gradient-based">Gradient based</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#sqm">SQM</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#frozen-core-option">Frozen-core option</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#usage-notes">Usage notes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#examples">Examples</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#automatic-core-detection">Automatic core detection</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#remarks">Remarks</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Academic Record</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="citing.html">Citing pyCBS</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">pyCBS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Geometrical optimization</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/optimization.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="geometrical-optimization">
+<h1>Geometrical optimization<a class="headerlink" href="#geometrical-optimization" title="Link to this heading"></a></h1>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>This package provides a high-level Python implementation for geometry optimization
+using Complete Basis Set (CBS) extrapolation with PySCF. It supports <strong>CCSD(T)</strong> and
+<strong>MP2</strong> methods, generates redundant internal coordinates (RICs), evaluates
+all internal coordinates per optimization cycle, and applies energy-validated
+updates to molecular geometries.</p>
+<section id="gradient-based">
+<h3>Gradient based<a class="headerlink" href="#gradient-based" title="Link to this heading"></a></h3>
+<div class="highlight-ini notranslate"><div class="highlight"><pre><span></span><span class="k">[optimization3]</span>
+<span class="na">optimization</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">True</span><span class="w">            </span><span class="c1">; Enable optimization (True/False), default: True</span>
+<span class="na">input_xyz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">path/to/xyz/file</span><span class="w">   </span><span class="c1">; Path to input XYZ geometry file, no default</span>
+<span class="na">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">CCSD(T)</span><span class="w">               </span><span class="c1">; Method for energy evaluation (&#39;CCSD(T)&#39; or &#39;MP2&#39;), default: CCSD(T)</span>
+<span class="na">optimizer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">L-BFGS-B</span><span class="w">           </span><span class="c1">; Optimization algorithm (&#39;L-BFGS-B&#39;, &#39;sqm&#39;), default: L-BFGS-B</span>
+<span class="na">basis1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvdz</span><span class="w">               </span><span class="c1">; First basis set for CBS extrapolation, default: cc-pvdz</span>
+<span class="na">basis2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvtz</span><span class="w">               </span><span class="c1">; Second basis set for CBS extrapolation, default: cc-pvtz</span>
+<span class="na">spin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0</span><span class="w">                       </span><span class="c1">; Spin multiplicity (0=singlet, 1=doublet, etc.), default: 0</span>
+<span class="na">x1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1.852</span><span class="w">                     </span><span class="c1">; CBS extrapolation coefficient a_corr or first basis distance, default: 1.852</span>
+<span class="na">x2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2.639</span><span class="w">                     </span><span class="c1">; CBS extrapolation coefficient b_hf or second basis distance, default: 2.639</span>
+<span class="na">x1hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.02</span><span class="w">                    </span><span class="c1">; HF exponential factor for basis1, default: 3.02</span>
+<span class="na">x2hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.64</span><span class="w">                    </span><span class="c1">; HF exponential factor for basis2, default: 3.64</span>
+<span class="na">beta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1.0</span><span class="w">                     </span><span class="c1">; HF exponential scaling factor, default: 1.0</span>
+<span class="na">maxcycle</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">100</span><span class="w">                 </span><span class="c1">; Maximum number of optimization cycles, default: 100</span>
+<span class="na">fac_mult</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0.05</span><span class="w">                </span><span class="c1">; Displacement factor multiplier for internal coordinates, default: 0.05</span>
+<span class="na">energy_crit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1e-8</span><span class="w">             </span><span class="c1">; Energy convergence criterion in Hartree, default: 1e-8</span>
+<span class="na">cut</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0.75</span><span class="w">                     </span><span class="c1">; Per-cycle reduction factor for displacement, default: 0.75</span>
+<span class="na">workers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1</span><span class="w">                    </span><span class="c1">; Number of parallel threads for PySCF evaluations, default: 1</span>
+<span class="na">debug</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">False</span><span class="w">                  </span><span class="c1">; Print detailed per-cycle information, default: False</span>
+<span class="na">output_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">./results</span><span class="w">         </span><span class="c1">; Directory to store cycle geometries and CSV, default: ./results</span>
+</pre></div>
+</div>
+</section>
+<section id="sqm">
+<h3>SQM<a class="headerlink" href="#sqm" title="Link to this heading"></a></h3>
+<div class="highlight-ini notranslate"><div class="highlight"><pre><span></span><span class="k">[optimization3]</span>
+<span class="na">optimization</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">True</span><span class="w">            </span><span class="c1">; Enable optimization (True/False), default: True</span>
+<span class="na">input_xyz</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">path/to/xyz/file</span><span class="w">   </span><span class="c1">; Path to input XYZ geometry file, no default</span>
+<span class="na">method</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">CCSD(T)</span><span class="w">               </span><span class="c1">; Method for energy evaluation (&#39;CCSD(T)&#39; or &#39;MP2&#39;), default: CCSD(T)</span>
+<span class="na">optimizer</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">sqm</span><span class="w">                </span><span class="c1">; Optimization algorithm (&#39;sqm&#39; for internal coordinates), default: sqm</span>
+<span class="na">basis1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvdz</span><span class="w">               </span><span class="c1">; First basis set for CBS extrapolation, default: cc-pvdz</span>
+<span class="na">basis2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">cc-pvtz</span><span class="w">               </span><span class="c1">; Second basis set for CBS extrapolation, default: cc-pvtz</span>
+<span class="na">spin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0</span><span class="w">                       </span><span class="c1">; Spin multiplicity (0=singlet, 1=doublet, etc.), default: 0</span>
+<span class="na">x1</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1.852</span><span class="w">                     </span><span class="c1">; CBS extrapolation coefficient a_corr or first basis distance, default: 1.852</span>
+<span class="na">x2</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">2.639</span><span class="w">                     </span><span class="c1">; CBS extrapolation coefficient b_hf or second basis distance, default: 2.639</span>
+<span class="na">x1hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.02</span><span class="w">                    </span><span class="c1">; HF exponential factor for basis1, default: 3.02</span>
+<span class="na">x2hf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">3.64</span><span class="w">                    </span><span class="c1">; HF exponential factor for basis2, default: 3.64</span>
+<span class="na">beta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1.0</span><span class="w">                     </span><span class="c1">; HF exponential scaling factor, default: 1.0</span>
+<span class="na">maxcycle</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">100</span><span class="w">                 </span><span class="c1">; Maximum number of optimization cycles, default: 100</span>
+<span class="na">fac_mult</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0.05</span><span class="w">                </span><span class="c1">; Displacement factor multiplier for internal coordinates, default: 0.05</span>
+<span class="na">energy_crit</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1e-8</span><span class="w">             </span><span class="c1">; Energy convergence criterion in Hartree, default: 1e-8</span>
+<span class="na">cut</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">0.75</span><span class="w">                     </span><span class="c1">; Per-cycle reduction factor for displacement, default: 0.75</span>
+<span class="na">workers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1</span><span class="w">                    </span><span class="c1">; Number of parallel threads for PySCF evaluations, default: 1</span>
+<span class="na">debug</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">False</span><span class="w">                  </span><span class="c1">; Print detailed per-cycle information, default: False</span>
+<span class="na">output_dir</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">./results</span><span class="w">         </span><span class="c1">; Directory to store cycle geometries and CSV, default: ./results</span>
+<span class="na">energy_accept_tol</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">1e-6</span><span class="w">       </span><span class="c1">; Minimum energy improvement to accept step, default: 1e-6</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="frozen-core-option">
+<h2>Frozen-core option<a class="headerlink" href="#frozen-core-option" title="Link to this heading"></a></h2>
+<p>By default, MP2  and CCSD(T) calculations correlate all electrons in all available orbitals. To
+reduce computational cost while preserving chemically relevant correlation, this
+package supports a frozen-core approximation following the same conventions used
+in PySCF.</p>
+<p>Freezing core orbitals is often a reliable approximation because core electrons
+usually contribute very little to correlation energy differences. Therefore,
+excluding them from the correlation treatment significantly reduces computational
+time while maintaining good accuracy for most chemical applications.</p>
+<section id="usage-notes">
+<h3>Usage notes<a class="headerlink" href="#usage-notes" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>The <code class="docutils literal notranslate"><span class="pre">frozen</span></code> keyword accepts either:</p>
+<ul>
+<li><p>an integer <code class="docutils literal notranslate"><span class="pre">n</span></code> — freezes the <code class="docutils literal notranslate"><span class="pre">n</span></code> lowest-energy occupied orbitals
+(typically core orbitals).</p></li>
+<li><p>a list of <strong>0-based orbital indices</strong> to freeze specific orbitals, allowing
+fine control over which occupied or virtual orbitals are excluded from the
+correlation calculation.</p></li>
+</ul>
+</li>
+<li><p>Orbital indexing follows the standard <strong>0-based indexing</strong> convention used in Python.</p></li>
+</ul>
+</section>
+<section id="examples">
+<h3>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h3>
+<p>It is shown the MP2 example but it works as well with CCSD(T) method.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># freeze 2 core orbitals</span>
+<span class="n">mymp</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">MP2</span><span class="p">(</span><span class="n">mf</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+
+<span class="c1"># freeze specific orbitals using indices</span>
+<span class="n">mymp</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">MP2</span><span class="p">(</span><span class="n">mf</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+
+<span class="c1"># freeze 2 core orbitals and 3 virtual orbitals</span>
+<span class="n">mymp</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">MP2</span><span class="p">(</span><span class="n">mf</span><span class="p">,</span> <span class="n">frozen</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">16</span><span class="p">,</span><span class="mi">17</span><span class="p">,</span><span class="mi">18</span><span class="p">])</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="automatic-core-detection">
+<h3>Automatic core detection<a class="headerlink" href="#automatic-core-detection" title="Link to this heading"></a></h3>
+<p>The number of orbitals to freeze can also be determined automatically using
+PySCF's internal rule:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mymp</span> <span class="o">=</span> <span class="n">mp</span><span class="o">.</span><span class="n">MP2</span><span class="p">(</span><span class="n">mf</span><span class="p">)</span><span class="o">.</span><span class="n">set_frozen</span><span class="p">()</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>The <code class="docutils literal notranslate"><span class="pre">set_frozen()</span></code> method automatically freezes the core orbitals based on
+the total number of core electrons for each atom in the molecule. The current
+rule follows the same convention used by the ORCA quantum chemistry program.</p>
+<p>When the <code class="docutils literal notranslate"><span class="pre">frozen</span></code> option is provided in the configuration file, the value is
+passed directly to the correlated electronic structure calculation
+(MP2 or CCSD(T)). Therefore, the behavior is identical to the native PySCF
+implementation.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">frozen</span></code> is not specified, all orbitals are correlated by default.</p>
+</section>
+</section>
+<section id="remarks">
+<h2>Remarks<a class="headerlink" href="#remarks" title="Link to this heading"></a></h2>
+<p>We strongly recommend using a <strong>specific and descriptive filename</strong> for the
+input <code class="docutils literal notranslate"><span class="pre">.xyz</span></code> geometry used in the optimization.</p>
+<p>The program automatically generates output filenames by taking the base name
+of the input file and appending the optimizer used in the calculation
+(<code class="docutils literal notranslate"><span class="pre">sqm</span></code> or <code class="docutils literal notranslate"><span class="pre">lbfgs</span></code>). For example:</p>
+<ul>
+<li><p>Input geometry:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">molecule_opt</span><span class="o">.</span><span class="n">xyz</span>
+</pre></div>
+</div>
+</li>
+<li><p>Output files:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">molecule_lbfgs_final_opt</span><span class="o">.</span><span class="n">xyz</span>
+<span class="n">molecule_sqm_final_opt</span><span class="o">.</span><span class="n">xyz</span>
+<span class="n">molecule_lbfgs_cycles_energies</span><span class="o">.</span><span class="n">csv</span>
+<span class="n">molecule_sqm_cycles_energies</span><span class="o">.</span><span class="n">csv</span>
+</pre></div>
+</div>
+</li>
+</ul>
+<p>Because of this behavior, using clear and unique input filenames helps avoid
+confusion or accidental overwriting when running multiple optimizations.</p>
+<p>A recommended naming convention is:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="o">&lt;</span><span class="n">system</span><span class="o">&gt;</span><span class="n">_</span><span class="o">&lt;</span><span class="n">method</span><span class="o">&gt;.</span><span class="n">xyz</span>
+</pre></div>
+</div>
+<p>Example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">ethanol_ccsdt</span><span class="o">.</span><span class="n">xyz</span>
+</pre></div>
+</div>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="extrapolations.html" class="btn btn-neutral float-left" title="Extrapolation Schemes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="citing.html" class="btn btn-neutral float-right" title="Citing pyCBS" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Fabio J. Delgado-Alpízar; Alberto Guerra-Barroso; Antonio J.C. Varandas.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,333 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="y" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Theoretical Background &mdash; pyCBS 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=26611e44"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+      <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Basis Sets" href="basis.html" />
+    <link rel="prev" title="Installation" href="installation.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            pyCBS
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Getting Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Theory &amp; Computation</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Theoretical Background</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#energy-partitioning">Energy Partitioning</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#hartreefock-convergence">Hartree–Fock Convergence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#correlation-energy-convergence">Correlation Energy Convergence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#hierarchical-numbers">Hierarchical Numbers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cbs-for-molecular-properties">CBS for Molecular Properties</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#cbs-geometry-optimization">CBS Geometry Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#practical-recommendations">Practical Recommendations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#error-sources">Error Sources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#limitations">Limitations</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="basis.html">Basis Sets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="hierarchical.html">Hierarchical Numbers</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Setting up the Config File</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="extrapolations.html">Extrapolation Schemes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="optimization.html">Geometrical optimization</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Academic Record</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="citing.html">Citing pyCBS</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">pyCBS</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Theoretical Background</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/TC.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="theoretical-background">
+<h1>Theoretical Background<a class="headerlink" href="#theoretical-background" title="Link to this heading"></a></h1>
+<section id="overview">
+<span id="id1"></span><h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>This section summarizes the theoretical framework underlying CBS
+extrapolation and CBS-driven geometry optimization as implemented in PyCBS.</p>
+<p>The objective is to model basis-set convergence using physically motivated asymptotic laws
+and to obtain reliable CBS-limit estimates for energies, molecular properties, and geometries with
+controlled computational cost.</p>
+</section>
+<section id="energy-partitioning">
+<h2>Energy Partitioning<a class="headerlink" href="#energy-partitioning" title="Link to this heading"></a></h2>
+<p>CBS extrapolation is performed by separating the total electronic energy into
+Hartree-Fock (HF) and correlation components:</p>
+<div class="math notranslate nohighlight">
+\[E_{CBS} = E_{CBS}^{\mathrm{HF}} + E_{CBS}^{\mathrm{cor}}\]</div>
+<p>Because these components exhibit distinct convergence behaviors with respect to
+basis-set cardinal number <span class="math notranslate nohighlight">\(X\)</span>, they are extrapolated independently.</p>
+</section>
+<section id="hartreefock-convergence">
+<h2>Hartree–Fock Convergence<a class="headerlink" href="#hartreefock-convergence" title="Link to this heading"></a></h2>
+<p>HF energies converge exponentially toward the CBS limit:</p>
+<div class="math notranslate nohighlight">
+\[E_{CBS}^{\mathrm{HF}} = E_\infty^{\mathrm{HF}} + B e^{-\alpha X}\]</div>
+<p>Exponential models provide superior stability compared to inverse-power forms
+for the mean-field component.</p>
+<p>Optimized exponential variants generally provide improved numerical stability
+and reduced systematic bias.</p>
+<p>The equations for the selected CBS extrapolation schemes are presented below.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Scheme</p></th>
+<th class="head"><p>Equation</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Klopper</p></td>
+<td><div class="math notranslate nohighlight">
+\[E_{CBS}^{HF} = \dfrac{E^{HF}_{X_j}e^{\alpha\sqrt{X_i}}-E^{HF}_{X_i}e^{\alpha\sqrt{X_j}}}{e^{\alpha\sqrt{X_i}}-e^{\alpha\sqrt{X_j}}}\]</div>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Feller</p></td>
+<td><div class="math notranslate nohighlight">
+\[E^{HF}_{CBS} = \dfrac{E_{X_{i}}^{HF}e^{\alpha X_{i}} - E_{X_{j}}^{HF}e^{\alpha X_{j}}}{e^{\alpha X_{i}} - e^{\alpha X_{j}}}\]</div>
+</td>
+</tr>
+<tr class="row-even"><td><p>Truhlar</p></td>
+<td><div class="math notranslate nohighlight">
+\[E^{HF}_{CBS} = \frac{E^{HF}_{X_j}X^{-\alpha}_i-E^{HF}_{X_i}X^{-\alpha}_j}{X^{-\alpha}_i-X^{-\alpha}_j}\]</div>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Jensen</p></td>
+<td><div class="math notranslate nohighlight">
+\[E^{HF}_{CBS} =\frac{E_{X_j}^{HF}(X_i+1)e^{\alpha\sqrt{X_i}}-E_{X_i}^{HF}(X_j+1)e^{\alpha\sqrt{X_j}}}{(X_i+1)e^{\sqrt{X_i}}-(X_j+1)e^{\sqrt{X_j}}}\]</div>
+</td>
+</tr>
+<tr class="row-even"><td><p>Varandas</p></td>
+<td><div class="math notranslate nohighlight">
+\[E^{HF}_{CBS} = \dfrac{E_{\tilde{X}_i}e^{\beta \tilde{X}_i} - E_{\tilde{X}_j}e^{\beta \tilde{X}_j}}{e^{\beta\tilde{X}_i} - e^{\beta\tilde{X}_j}}\]</div>
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="correlation-energy-convergence">
+<h2>Correlation Energy Convergence<a class="headerlink" href="#correlation-energy-convergence" title="Link to this heading"></a></h2>
+<p>Correlation energies follow an inverse power-law asymptotic behavior:</p>
+<div class="math notranslate nohighlight">
+\[E_{cor}^{\mathrm{cor}} = E_\infty^{\mathrm{cor}} + \frac{A}{X^\beta}\]</div>
+<p>For large <span class="math notranslate nohighlight">\(X\)</span>, the dominant term approaches <span class="math notranslate nohighlight">\(X^{-3}\)</span>.</p>
+<p>The program includes multiple inverse-power and unified extrapolation schemes
+designed to improve robustness when high-cardinality basis sets are not available.</p>
+<p>The equations for the selected CBS extrapolation schemes are presented below.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Scheme</p></th>
+<th class="head"><p>Equation</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Halkier-Helgaker</p></td>
+<td><div class="math notranslate nohighlight">
+\[E^{cor}_{CBS} = \dfrac{E_{X_{i}}^{cor}X_i^{3} - E_{X_{j}}^{cor}X_j^{3}}{X_i^{3} - X_j^{3}}\]</div>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Martin</p></td>
+<td><div class="math notranslate nohighlight">
+\[E^{cor}_{CBS} = \frac{E^{cor}_{X_j}(X_i+\frac{1}{2})^{-\beta}-E^{cor}_{X_i}(X_j+\frac{1}{2})^{-\beta}}{(X_i+\frac{1}{2})^{-\beta}-(X_j+\frac{1}{2})^{-\beta}}\]</div>
+</td>
+</tr>
+<tr class="row-even"><td><p>Truhlar</p></td>
+<td><div class="math notranslate nohighlight">
+\[E^{cor}_{CBS} = \frac{E^{cor}_{X_j}X^{-\beta}_i-E^{cor}_{X_i}X^{-\beta}_j}{X^{-\beta}_i-X^{-\beta}_j}\]</div>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Huh-Lee</p></td>
+<td><div class="math notranslate nohighlight">
+\[E^{cor}_{CBS} = \frac{E^{cor}_{X_j}(X_i+\beta)^{-3}-E^{cor}_{X_i}(X_j+\beta)^{-3}}{(X_i+\beta)^{-3}-(X_j+\beta)^{-3}}\]</div>
+</td>
+</tr>
+<tr class="row-even"><td><p>Bakowies</p></td>
+<td><div class="math notranslate nohighlight">
+\[E^{cor}_{CBS} = \frac{E^{cor}_{X_j}(X_i+1)^{-\beta}-E^{cor}_{X_i}(X_j+1)^{-\beta}}{(X_i+1)^{-\beta}-(X_j+1)^{-\beta}}\]</div>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Okoshi-Atsumi-Nakai</p></td>
+<td><div class="math notranslate nohighlight">
+\[E^{cor}_{CBS} = \frac{3^3E^{cor}_{X_j}-\beta^3E^{cor}_{X_i}}{3^3-\beta^3}\]</div>
+</td>
+</tr>
+<tr class="row-even"><td><p>Varandas (USTE)</p></td>
+<td><div class="math notranslate nohighlight">
+\[E^{\mathrm{cor}}_{\mathrm{CBS}} = E^{\mathrm{cor}}_{\tilde{X}_j} + \frac{\tilde{X}_i^3}{\tilde{X}_j^3 - \tilde{X}_i^3} \left( E^{\mathrm{cor}}_{\tilde{X}_j} - E^{\mathrm{cor}}_{\tilde{X}_i} \right)\]</div>
+</td>
+</tr>
+<tr class="row-odd"><td><p>Varandas (USPE)</p></td>
+<td><div class="math notranslate nohighlight">
+\[E_\infty^{\mathrm{cor}} = E_{\tilde{X}}^{\mathrm{cor}} + \frac{a[1 + \kappa(\tilde{X})]\,E_{\tilde{X}}^{\mathrm{tot}}}{\tilde{X}^3}\]</div>
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="hierarchical-numbers">
+<h2>Hierarchical Numbers<a class="headerlink" href="#hierarchical-numbers" title="Link to this heading"></a></h2>
+<p>Instead of raw cardinal numbers (2, 3, 4, 5),
+optimized hierarchical (effective) numbers may be employed:</p>
+<div class="math notranslate nohighlight">
+\[X \rightarrow \tilde{X}\]</div>
+<p>This reparameterization improves linearity in inverse-power fits and enhances
+extrapolation stability.</p>
+<p>Hierarchical mappings should remain consistent across extrapolation schemes
+unless explicitly re-optimized.</p>
+</section>
+<section id="cbs-for-molecular-properties">
+<h2>CBS for Molecular Properties<a class="headerlink" href="#cbs-for-molecular-properties" title="Link to this heading"></a></h2>
+<p>Molecular properties such as polarizabilities and vibrational frequencies may be partitioned
+analogously:</p>
+<div class="math notranslate nohighlight">
+\[\zeta = \zeta^{\mathrm{HF}} + \zeta^{\mathrm{cor}}\]</div>
+<p>Assuming similar convergence trends as energies, inverse-power extrapolation
+can be applied to the correlation contribution. Deviations from strict
+asymptotic behavior should be evaluated carefully.</p>
+</section>
+<section id="cbs-geometry-optimization">
+<h2>CBS Geometry Optimization<a class="headerlink" href="#cbs-geometry-optimization" title="Link to this heading"></a></h2>
+<p>Geometry optimization at the CBS limit is performed directly on the extrapolated
+energy surface.</p>
+<p>Two strategies are supported:</p>
+<ul class="simple">
+<li><p>Successive Quadratic Minimization (SQM)</p></li>
+<li><p>L-BFGS-B gradient-based optimization</p></li>
+</ul>
+<p>At each optimization step:</p>
+<ol class="arabic simple">
+<li><p>Energies are computed at two basis levels.</p></li>
+<li><p>HF and correlation components are extrapolated.</p></li>
+<li><p>The CBS total energy is used as the objective function.</p></li>
+</ol>
+<p>This ensures structural refinement on a consistent CBS surface.</p>
+</section>
+<section id="practical-recommendations">
+<h2>Practical Recommendations<a class="headerlink" href="#practical-recommendations" title="Link to this heading"></a></h2>
+<p>For most applications, the best accuracy-to-cost ratio is obtained with
+MP2-based extrapolations:</p>
+<ul class="simple">
+<li><p>MP2/VDZ–VTZ</p></li>
+<li><p>MP2/VTZ–VQZ</p></li>
+</ul>
+<p>These combinations provide robust CBS estimates with moderate computational cost.</p>
+<p>For higher precision, especially in thermochemistry or structural benchmarks,
+CCSD(T)-based extrapolation is recommended.</p>
+<p>Although CCSD(T) provides superior accuracy, its computational scaling
+limits applicability to small and medium-sized systems.</p>
+</section>
+<section id="error-sources">
+<h2>Error Sources<a class="headerlink" href="#error-sources" title="Link to this heading"></a></h2>
+<p>CBS extrapolation errors may arise from:</p>
+<ul class="simple">
+<li><p>Incomplete asymptotic regime (small basis sets)</p></li>
+<li><p>Imbalance between HF and correlation treatment</p></li>
+<li><p>Numerical instability in nonlinear fitting</p></li>
+<li><p>Inadequate treatment of higher-order correlation</p></li>
+</ul>
+<p>Verification of monotonic convergence prior to extrapolation is strongly advised.</p>
+</section>
+<section id="limitations">
+<h2>Limitations<a class="headerlink" href="#limitations" title="Link to this heading"></a></h2>
+<p>CBS extrapolation assumes smooth and monotonic convergence with increasing
+basis size.</p>
+<p>It may become unreliable for:</p>
+<ul class="simple">
+<li><p>Strong multireference systems</p></li>
+<li><p>Inconsistent basis families</p></li>
+<li><p>Very small basis sets</p></li>
+<li><p>Explicitly correlated (F12) methods without adapted modeling</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="installation.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="basis.html" class="btn btn-neutral float-right" title="Basis Sets" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026, Fabio J. Delgado-Alpízar; Alberto Guerra-Barroso; Antonio J.C. Varandas.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

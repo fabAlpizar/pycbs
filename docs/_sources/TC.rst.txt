@@ -1,0 +1,209 @@
+Theoretical Background
+======================
+
+.. _theoretical_background:
+
+Overview
+--------
+
+This section summarizes the theoretical framework underlying CBS
+extrapolation and CBS-driven geometry optimization as implemented in PyCBS.
+
+The objective is to model basis-set convergence using physically motivated asymptotic laws
+and to obtain reliable CBS-limit estimates for energies, molecular properties, and geometries with
+controlled computational cost.
+
+
+Energy Partitioning
+-------------------
+
+CBS extrapolation is performed by separating the total electronic energy into
+Hartree-Fock (HF) and correlation components:
+
+.. math::
+
+   E_{CBS} = E_{CBS}^{\mathrm{HF}} + E_{CBS}^{\mathrm{cor}}
+
+Because these components exhibit distinct convergence behaviors with respect to
+basis-set cardinal number :math:`X`, they are extrapolated independently.
+
+
+Hartree–Fock Convergence
+------------------------
+
+HF energies converge exponentially toward the CBS limit:
+
+.. math::
+
+   E_{CBS}^{\mathrm{HF}} = E_\infty^{\mathrm{HF}} + B e^{-\alpha X}
+
+Exponential models provide superior stability compared to inverse-power forms
+for the mean-field component.
+
+Optimized exponential variants generally provide improved numerical stability
+and reduced systematic bias.
+
+The equations for the selected CBS extrapolation schemes are presented below.
+
++----------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+| Scheme               | Equation                                                                                                                                            |
++======================+=====================================================================================================================================================+
+| Klopper              | .. math::                                                                                                                                           |
+|                      |    E_{CBS}^{HF} = \dfrac{E^{HF}_{X_j}e^{\alpha\sqrt{X_i}}-E^{HF}_{X_i}e^{\alpha\sqrt{X_j}}}{e^{\alpha\sqrt{X_i}}-e^{\alpha\sqrt{X_j}}}              |
++----------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+| Feller               | .. math::                                                                                                                                           |
+|                      |    E^{HF}_{CBS} = \dfrac{E_{X_{i}}^{HF}e^{\alpha X_{i}} - E_{X_{j}}^{HF}e^{\alpha X_{j}}}{e^{\alpha X_{i}} - e^{\alpha X_{j}}}                      |
++----------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+| Truhlar              | .. math::                                                                                                                                           |
+|                      |    E^{HF}_{CBS} = \frac{E^{HF}_{X_j}X^{-\alpha}_i-E^{HF}_{X_i}X^{-\alpha}_j}{X^{-\alpha}_i-X^{-\alpha}_j}                                           |                                                                                                         
++----------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+| Jensen               | .. math::                                                                                                                                           |
+|                      |    E^{HF}_{CBS} =\frac{E_{X_j}^{HF}(X_i+1)e^{\alpha\sqrt{X_i}}-E_{X_i}^{HF}(X_j+1)e^{\alpha\sqrt{X_j}}}{(X_i+1)e^{\sqrt{X_i}}-(X_j+1)e^{\sqrt{X_j}}}|                                                                                                         
++----------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+| Varandas             | .. math::                                                                                                                                           |
+|                      |    E^{HF}_{CBS} = \dfrac{E_{\tilde{X}_i}e^{\beta \tilde{X}_i} - E_{\tilde{X}_j}e^{\beta \tilde{X}_j}}{e^{\beta\tilde{X}_i} - e^{\beta\tilde{X}_j}}  |                                                                                                         
++----------------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+
+
+
+
+Correlation Energy Convergence
+------------------------------
+
+Correlation energies follow an inverse power-law asymptotic behavior:
+
+.. math::
+
+   E_{cor}^{\mathrm{cor}} = E_\infty^{\mathrm{cor}} + \frac{A}{X^\beta}
+
+For large :math:`X`, the dominant term approaches :math:`X^{-3}`.
+
+The program includes multiple inverse-power and unified extrapolation schemes
+designed to improve robustness when high-cardinality basis sets are not available.
+
+The equations for the selected CBS extrapolation schemes are presented below.
+
++----------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Scheme               | Equation                                                                                                                                                                                                 |
++======================+==========================================================================================================================================================================================================+
+| Halkier-Helgaker     | .. math::                                                                                                                                                                                                |
+|                      |    E^{cor}_{CBS} = \dfrac{E_{X_{i}}^{cor}X_i^{3} - E_{X_{j}}^{cor}X_j^{3}}{X_i^{3} - X_j^{3}}                                                                                                            |
++----------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Martin               | .. math::                                                                                                                                                                                                |
+|                      |    E^{cor}_{CBS} = \frac{E^{cor}_{X_j}(X_i+\frac{1}{2})^{-\beta}-E^{cor}_{X_i}(X_j+\frac{1}{2})^{-\beta}}{(X_i+\frac{1}{2})^{-\beta}-(X_j+\frac{1}{2})^{-\beta}}                                         |
++----------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Truhlar              | .. math::                                                                                                                                                                                                |
+|                      |    E^{cor}_{CBS} = \frac{E^{cor}_{X_j}X^{-\beta}_i-E^{cor}_{X_i}X^{-\beta}_j}{X^{-\beta}_i-X^{-\beta}_j}                                                                                                 |                                                                                                         
++----------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Huh-Lee              | .. math::                                                                                                                                                                                                |
+|                      |    E^{cor}_{CBS} = \frac{E^{cor}_{X_j}(X_i+\beta)^{-3}-E^{cor}_{X_i}(X_j+\beta)^{-3}}{(X_i+\beta)^{-3}-(X_j+\beta)^{-3}}                                                                                 |                                                                                                         
++----------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Bakowies             | .. math::                                                                                                                                                                                                |
+|                      |    E^{cor}_{CBS} = \frac{E^{cor}_{X_j}(X_i+1)^{-\beta}-E^{cor}_{X_i}(X_j+1)^{-\beta}}{(X_i+1)^{-\beta}-(X_j+1)^{-\beta}}                                                                                 |                                                                                                         
++----------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Okoshi-Atsumi-Nakai  | .. math::                                                                                                                                                                                                |
+|                      |    E^{cor}_{CBS} = \frac{3^3E^{cor}_{X_j}-\beta^3E^{cor}_{X_i}}{3^3-\beta^3}                                                                                                                             |                                                                                                         
++----------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Varandas (USTE)      | .. math::                                                                                                                                                                                                |
+|                      |    E^{\mathrm{cor}}_{\mathrm{CBS}} = E^{\mathrm{cor}}_{\tilde{X}_j} + \frac{\tilde{X}_i^3}{\tilde{X}_j^3 - \tilde{X}_i^3} \left( E^{\mathrm{cor}}_{\tilde{X}_j} - E^{\mathrm{cor}}_{\tilde{X}_i} \right) |                                                                                                         
++----------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| Varandas (USPE)      | .. math::                                                                                                                                                                                                |
+|                      |    E_\infty^{\mathrm{cor}} = E_{\tilde{X}}^{\mathrm{cor}} + \frac{a[1 + \kappa(\tilde{X})]\,E_{\tilde{X}}^{\mathrm{tot}}}{\tilde{X}^3}                                                                   |                                                                                                         
++----------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+
+Hierarchical Numbers
+--------------------
+
+Instead of raw cardinal numbers (2, 3, 4, 5),
+optimized hierarchical (effective) numbers may be employed:
+
+.. math::
+
+   X \rightarrow \tilde{X}
+
+This reparameterization improves linearity in inverse-power fits and enhances
+extrapolation stability.
+
+Hierarchical mappings should remain consistent across extrapolation schemes
+unless explicitly re-optimized.
+
+
+CBS for Molecular Properties
+----------------------------
+
+Molecular properties such as polarizabilities and vibrational frequencies may be partitioned
+analogously:
+
+.. math::
+
+   \zeta = \zeta^{\mathrm{HF}} + \zeta^{\mathrm{cor}}
+
+Assuming similar convergence trends as energies, inverse-power extrapolation
+can be applied to the correlation contribution. Deviations from strict
+asymptotic behavior should be evaluated carefully.
+
+
+CBS Geometry Optimization
+-------------------------
+
+Geometry optimization at the CBS limit is performed directly on the extrapolated
+energy surface.
+
+Two strategies are supported:
+
+- Successive Quadratic Minimization (SQM)
+- L-BFGS-B gradient-based optimization
+
+At each optimization step:
+
+1. Energies are computed at two basis levels.
+2. HF and correlation components are extrapolated.
+3. The CBS total energy is used as the objective function.
+
+This ensures structural refinement on a consistent CBS surface.
+
+
+Practical Recommendations
+-------------------------
+
+For most applications, the best accuracy-to-cost ratio is obtained with
+MP2-based extrapolations:
+
+- MP2/VDZ–VTZ
+- MP2/VTZ–VQZ
+
+These combinations provide robust CBS estimates with moderate computational cost.
+
+For higher precision, especially in thermochemistry or structural benchmarks,
+CCSD(T)-based extrapolation is recommended.
+
+Although CCSD(T) provides superior accuracy, its computational scaling
+limits applicability to small and medium-sized systems.
+
+
+Error Sources
+-------------
+
+CBS extrapolation errors may arise from:
+
+- Incomplete asymptotic regime (small basis sets)
+- Imbalance between HF and correlation treatment
+- Numerical instability in nonlinear fitting
+- Inadequate treatment of higher-order correlation
+
+Verification of monotonic convergence prior to extrapolation is strongly advised.
+
+
+Limitations
+-----------
+
+CBS extrapolation assumes smooth and monotonic convergence with increasing
+basis size.
+
+It may become unreliable for:
+
+- Strong multireference systems
+- Inconsistent basis families
+- Very small basis sets
+- Explicitly correlated (F12) methods without adapted modeling
+
